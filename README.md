@@ -1,7 +1,16 @@
-# Tauri + React + Typescript
+# UniBot
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+**UniBot** 是一个为机器人开发者设计的调试平台，支持多种主流机器人协议（OneBot v11/v12, Milky），内置了一个功能完整的类 QQ 虚拟服务端与模拟客户端。
 
-## Recommended IDE Setup
+## 核心特性
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+* **多协议集成**：原生支持 OneBot v11/v12 及 Milky 协议。
+* **虚拟服务端**：内置完整的 IM 业务逻辑（消息流、群组管理、权限系统、文件模拟）。
+* **模拟客户端视角**：提供 UI 交互窗口，用户可以登录虚拟账号直接与机器人对话。
+* **全链路审计**：实时拦截、记录并展示所有原始协议报文，支持监控全局。
+* **完全本地化**：基于 SQLite 与 JSON 的双轨存储，所有数据流经本地，无需联网，隐私安全。
+* **极致性能**：基于 Rust + Tauri 开发，内存占用极低，运行流畅无压力。
+
+## 开源协议
+
+本项目采用 [MIT License](LICENSE) 开源。
