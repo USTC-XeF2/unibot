@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "unibot",
-        "width": 800,
-        "height": 600
+        "title": "UniBot",
+        "width": 1024,
+        "height": 768,
+        "minWidth": 800,
+        "minHeight": 600,
+        "decorations": false
       }
     ],
     "security": {
