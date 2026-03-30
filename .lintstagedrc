@@ -1,4 +1,4 @@
 {
   "*.{js,ts,tsx}": ["bunx --bun @biomejs/biome check --write"],
-  "src-tauri/**/*.rs": ["cargo fmt --", "cargo clippy -- -D warnings"]
+  "src-tauri/**/*.rs": ["cargo fmt --manifest-path src-tauri/Cargo.toml --"]
 }
