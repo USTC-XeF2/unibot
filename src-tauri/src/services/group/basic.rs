@@ -116,13 +116,7 @@ impl GroupService {
         core.require_user_context(user_id)?;
         core.require_user_context(target_user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::validation(format!("operator {} is not in group {}", user_id, group_id))
-            })?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(
@@ -176,24 +170,8 @@ impl GroupService {
         core.require_user_context(user_id)?;
         core.require_user_context(target_user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!("operator {} is not in group {}", user_id, group_id))
-            })?;
-
-        let target = self
-            .repo
-            .get_group_member(group_id, target_user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!(
-                    "target user {} is not in group {}",
-                    target_user_id, group_id
-                ))
-            })?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
+        let target = self.ensure_group_member(group_id, target_user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(
@@ -254,13 +232,7 @@ impl GroupService {
     ) -> AppResult<GroupWholeMuteState> {
         core.require_user_context(user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!("operator {} is not in group {}", user_id, group_id))
-            })?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(

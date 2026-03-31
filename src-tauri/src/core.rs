@@ -5,10 +5,8 @@ use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::{
-    error::AppError,
-    models::{InternalEvent, UserProfile},
-};
+use crate::error::{AppError, AppResult};
+use crate::models::{InternalEvent, UserProfile};
 
 pub const DEFAULT_EVENT_BUS_CAPACITY: usize = 256;
 
@@ -69,7 +67,7 @@ impl CoreContainer {
         }
     }
 
-    pub fn register_user(&self, profile: UserProfile) -> Result<UserContext, AppError> {
+    pub fn register_user(&self, profile: UserProfile) -> AppResult<UserContext> {
         let context = UserContext::new(profile);
         let user_id = context.profile.user_id;
         let mut users = self.users.write().expect("users lock poisoned");
@@ -107,7 +105,7 @@ impl CoreContainer {
             .collect()
     }
 
-    pub fn require_user_context(&self, user_id: u64) -> Result<UserContext, AppError> {
+    pub fn require_user_context(&self, user_id: u64) -> AppResult<UserContext> {
         self.user_context(user_id)
             .ok_or_else(|| AppError::not_found(format!("user {} is not registered", user_id)))
     }
@@ -117,7 +115,7 @@ impl CoreContainer {
         app: tauri::AppHandle,
         user_id: u64,
         nickname_hint: Option<String>,
-    ) -> Result<bool, AppError> {
+    ) -> AppResult<bool> {
         if user_id == 0 {
             return Err(AppError::validation("invalid user id"));
         }

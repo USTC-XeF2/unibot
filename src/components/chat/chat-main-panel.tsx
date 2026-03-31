@@ -642,7 +642,7 @@ function ChatMainPanel({
         userId: currentUserId,
         groupId: selectedConversation.source.group_id,
         targetUserId,
-        role: makeAdmin ? "admin" : "member",
+        isAdmin: makeAdmin,
       });
       await refreshGroupMembers();
       setChatError(null);

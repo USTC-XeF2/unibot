@@ -55,11 +55,7 @@ impl GroupService {
 
                 core.require_user_context(target_user_id)?;
 
-                let initiator_member = self
-                    .repo
-                    .get_group_member(group_id, user_id)
-                    .await?
-                    .ok_or_else(|| AppError::validation("initiator is not a group member"))?;
+                let initiator_member = self.ensure_group_member(group_id, user_id).await?;
 
                 if matches!(initiator_member.role, GroupRole::Member) {
                     return Err(AppError::validation("only owner/admin can invite users"));
@@ -145,11 +141,7 @@ impl GroupService {
 
         match current.request_type {
             GroupRequestType::Join => {
-                let operator_member = self
-                    .repo
-                    .get_group_member(current.group_id, user_id)
-                    .await?
-                    .ok_or_else(|| AppError::validation("operator is not in group"))?;
+                let operator_member = self.ensure_group_member(current.group_id, user_id).await?;
                 if matches!(operator_member.role, GroupRole::Member) {
                     return Err(AppError::validation(
                         "only owner/admin can handle join requests",

@@ -21,16 +21,8 @@ impl GroupService {
         core.require_user_context(user_id)?;
         core.require_user_context(target_user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("operator is not in group"))?;
-        let target = self
-            .repo
-            .get_group_member(group_id, target_user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("target user is not in group"))?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
+        let target = self.ensure_group_member(group_id, target_user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation("only owner/admin can kick members"));
@@ -65,32 +57,27 @@ impl GroupService {
         user_id: u64,
         group_id: u64,
         target_user_id: u64,
-        role: GroupRole,
+        is_admin: bool,
     ) -> AppResult<GroupMemberProfile> {
         core.require_user_context(user_id)?;
         core.require_user_context(target_user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("operator is not in group"))?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
         if !matches!(operator.role, GroupRole::Owner) {
             return Err(AppError::validation("only owner can change admin role"));
         }
 
-        let target = self
-            .repo
-            .get_group_member(group_id, target_user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("target user is not in group"))?;
+        let target = self.ensure_group_member(group_id, target_user_id).await?;
 
         if matches!(target.role, GroupRole::Owner) {
             return Err(AppError::validation("cannot change owner role"));
         }
-        if matches!(role, GroupRole::Owner) {
-            return Err(AppError::validation("cannot assign owner role"));
-        }
+
+        let role = if is_admin {
+            GroupRole::Admin
+        } else {
+            GroupRole::Member
+        };
 
         let updated = self
             .repo
@@ -121,11 +108,7 @@ impl GroupService {
         core.require_user_context(user_id)?;
         core.require_user_context(target_user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("operator is not in group"))?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
         if !matches!(operator.role, GroupRole::Owner) {
             return Err(AppError::validation(
                 "only owner can set group member title",
@@ -158,11 +141,7 @@ impl GroupService {
     ) -> AppResult<GroupProfile> {
         core.require_user_context(user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("operator is not in group"))?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation("only owner/admin can rename group"));
         }
@@ -186,11 +165,7 @@ impl GroupService {
     ) -> AppResult<()> {
         core.require_user_context(user_id)?;
 
-        let member = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| AppError::validation("user is not in group"))?;
+        let member = self.ensure_group_member(group_id, user_id).await?;
 
         if matches!(member.role, GroupRole::Owner) {
             return Err(AppError::validation(

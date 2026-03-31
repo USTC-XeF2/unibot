@@ -1,9 +1,8 @@
-use crate::{
-    commands::IntoCommandResult,
-    core::CoreContainer,
-    models::{GroupProfile, UserProfile},
-    services::ServiceHub,
-};
+use crate::core::CoreContainer;
+use crate::models::{GroupProfile, UserProfile};
+use crate::services::ServiceHub;
+
+use super::super::IntoCommandResult;
 
 #[tauri::command]
 pub async fn update_user_profile(

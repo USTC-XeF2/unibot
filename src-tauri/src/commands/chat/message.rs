@@ -1,6 +1,7 @@
 use crate::core::CoreContainer;
-use crate::models::MessageSegment;
-use crate::models::{MessageEntity, MessageReactionEntity, MessageSource, PokeEntity};
+use crate::models::{
+    MessageEntity, MessageReactionEntity, MessageSegment, MessageSource, PokeEntity,
+};
 use crate::services::{SendMessageResult, ServiceHub};
 
 use super::super::IntoCommandResult;

@@ -17,15 +17,8 @@ impl GroupService {
         core.require_user_context(announcement.sender_user_id)?;
 
         let sender = self
-            .repo
-            .get_group_member(announcement.group_id, announcement.sender_user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!(
-                    "sender {} is not in group {}",
-                    announcement.sender_user_id, announcement.group_id
-                ))
-            })?;
+            .ensure_group_member(announcement.group_id, announcement.sender_user_id)
+            .await?;
         if matches!(sender.role, GroupRole::Member) {
             return Err(AppError::validation(
                 "only owner/admin can publish group announcements",
@@ -69,15 +62,8 @@ impl GroupService {
     ) -> AppResult<GroupFolderEntity> {
         core.require_user_context(folder.creator_user_id)?;
 
-        self.repo
-            .get_group_member(folder.group_id, folder.creator_user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!(
-                    "creator {} is not in group {}",
-                    folder.creator_user_id, folder.group_id
-                ))
-            })?;
+        self.ensure_group_member(folder.group_id, folder.creator_user_id)
+            .await?;
 
         self.repo.upsert_group_folder(&folder).await?;
 
@@ -116,15 +102,8 @@ impl GroupService {
     ) -> AppResult<GroupFileEntity> {
         core.require_user_context(file.uploader_user_id)?;
 
-        self.repo
-            .get_group_member(file.group_id, file.uploader_user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!(
-                    "uploader {} is not in group {}",
-                    file.uploader_user_id, file.group_id
-                ))
-            })?;
+        self.ensure_group_member(file.group_id, file.uploader_user_id)
+            .await?;
 
         self.repo.upsert_group_file(&file).await?;
 
@@ -166,13 +145,7 @@ impl GroupService {
     ) -> AppResult<GroupEssenceMessageEntity> {
         core.require_user_context(user_id)?;
 
-        let operator = self
-            .repo
-            .get_group_member(group_id, user_id)
-            .await?
-            .ok_or_else(|| {
-                AppError::not_found(format!("operator {} is not in group {}", user_id, group_id))
-            })?;
+        let operator = self.ensure_group_member(group_id, user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(

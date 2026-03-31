@@ -1,8 +1,8 @@
 use crate::core::CoreContainer;
 use crate::models::{
     GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity, GroupFolderEntity,
-    GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType, GroupRole,
-    GroupWholeMuteState, RequestState,
+    GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType, GroupWholeMuteState,
+    RequestState,
 };
 use crate::services::{MuteGroupMemberResult, ServiceHub};
 
@@ -178,11 +178,11 @@ pub async fn set_group_member_role(
     user_id: u64,
     group_id: u64,
     target_user_id: u64,
-    role: GroupRole,
+    is_admin: bool,
 ) -> Result<GroupMemberProfile, String> {
     services
         .group
-        .set_group_member_role(&core, user_id, group_id, target_user_id, role)
+        .set_group_member_role(&core, user_id, group_id, target_user_id, is_admin)
         .await
         .into_command_result()
 }
