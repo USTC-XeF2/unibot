@@ -6,8 +6,9 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { getFaceById } from "@/lib/face-library";
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, MessageSegment } from "@/types/chat";
 import type { GroupRole } from "@/types/group";
 
 export type ChatContextAction = {
@@ -16,6 +17,11 @@ export type ChatContextAction = {
   variant?: "default" | "destructive";
   separatorBefore?: boolean;
   onSelect: () => void;
+};
+
+type ChatMessageContentProps = {
+  content: MessageSegment[];
+  className?: string;
 };
 
 type ChatMessageItemProps = {
@@ -31,17 +37,15 @@ type ChatMessageItemProps = {
   messageActions: ChatContextAction[];
 };
 
-function extractMessageText(message: ChatMessage): string {
-  const parts = message.content
-    .map((segment) => {
-      if (segment.type === "Text") {
-        return segment.data?.text ?? "";
-      }
-      return `[${segment.type}]`;
-    })
-    .filter(Boolean);
-
-  return parts.join("") || "[空消息]";
+function renderFallbackSegment(label: string, key: string) {
+  return (
+    <span
+      key={key}
+      className="mx-0.5 inline-flex items-center rounded-md border bg-muted/40 px-1.5 py-0.5 text-[12px] text-muted-foreground leading-none"
+    >
+      {label}
+    </span>
+  );
 }
 
 function formatMessageTime(ts: number): string {
@@ -76,6 +80,65 @@ function formatMessageTime(ts: number): string {
   return `${datePart} ${timePart}`;
 }
 
+function ChatMessageContent({ content, className }: ChatMessageContentProps) {
+  return (
+    <div
+      className={cn(
+        "wrap-break-word select-text whitespace-pre-wrap text-sm leading-relaxed",
+        className,
+      )}
+    >
+      {content.map((segment, index) => {
+        const key = `${segment.type}-${index}`;
+
+        switch (segment.type) {
+          case "Text":
+            return <span key={key}>{segment.data.text}</span>;
+          case "At":
+            return (
+              <span
+                key={key}
+                className="mx-0.5 inline-flex items-center rounded-md bg-sky-500/10 px-1.5 py-0.5 font-medium text-[13px] text-sky-700 dark:text-sky-300"
+              >
+                @{segment.data.target}
+              </span>
+            );
+          case "Face": {
+            const face = getFaceById(segment.data.id);
+            if (!face) {
+              return renderFallbackSegment("[表情]", key);
+            }
+
+            return (
+              <span
+                key={key}
+                title={face.label}
+                className="mx-0.5 inline-flex items-center justify-center align-[-0.25em]"
+              >
+                <img
+                  src={face.src}
+                  alt={face.label}
+                  className="size-4.5 object-contain"
+                  draggable={false}
+                />
+              </span>
+            );
+          }
+          case "Image":
+            return renderFallbackSegment("[图片]", key);
+          case "Reply":
+            return renderFallbackSegment(
+              `[回复:${segment.data.message_id}]`,
+              key,
+            );
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
+}
+
 function ChatMessageItem({
   isSelf,
   avatarUrl,
@@ -88,7 +151,6 @@ function ChatMessageItem({
   avatarActions,
   messageActions,
 }: ChatMessageItemProps) {
-  const messageText = extractMessageText(message);
   const messageTime = formatMessageTime(message.created_at);
   const roleLabel =
     senderRole === "owner" ? "群主" : senderRole === "admin" ? "管理员" : null;
@@ -176,9 +238,7 @@ function ChatMessageItem({
                 isSelf && "ml-auto",
               )}
             >
-              <p className="wrap-break-word select-text whitespace-pre-wrap">
-                {messageText}
-              </p>
+              <ChatMessageContent content={message.content} />
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>

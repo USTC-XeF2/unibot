@@ -1,12 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { File, Image, Send, Smile } from "lucide-react";
+import { File, Image, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import ChatComposer, {
+  type ChatComposerHandle,
+} from "@/components/chat/chat-composer";
 import ChatMessageItem, {
   type ChatContextAction,
 } from "@/components/chat/chat-message-item";
+import FacePicker from "@/components/chat/face-picker";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   invalidateMessageHistoryQuery,
   invalidatePokeHistoryQuery,
@@ -14,17 +17,21 @@ import {
   useMessageHistoryQuery,
   usePokeHistoryQuery,
 } from "@/lib/chat-query";
+import type { FaceDefinition } from "@/lib/face-library";
 import {
   invalidateGroupEventHistoryQuery,
   useGroupEventHistoryQuery,
 } from "@/lib/groups-query";
+import {
+  messageSegmentsToPlainText,
+  parseDraftToMessageSegments,
+} from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import type {
   ChatMessage,
   ChatPoke,
   GroupEvent,
   InternalEventPayload,
-  MessageSegment,
   MessageSource,
 } from "@/types/chat";
 import type { GroupMemberProfile, GroupRole } from "@/types/group";
@@ -64,19 +71,6 @@ type ChatTimelineItem =
       groupEvent: GroupEvent;
     };
 
-function messageTextFromContent(message: ChatMessage): string {
-  const parts = message.content
-    .map((segment) => {
-      if (segment.type === "Text") {
-        return segment.data?.text ?? "";
-      }
-      return `[${segment.type}]`;
-    })
-    .filter(Boolean);
-
-  return parts.join("") || "[空消息]";
-}
-
 function formatNoticeUntilTime(ts: number): string {
   const date = new Date(ts * 1000);
   const now = new Date();
@@ -108,6 +102,7 @@ function ChatMainPanel({
   users,
 }: ChatMainPanelProps) {
   const messageListRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<ChatComposerHandle | null>(null);
   const shouldScrollToBottomRef = useRef(false);
   const stickToBottomRef = useRef(true);
   const lastConversationKeyRef = useRef<string | null>(null);
@@ -439,32 +434,13 @@ function ChatMainPanel({
     return !!currentUserMuteUntil && currentUserMuteUntil > currentUnixTime;
   }, [currentUnixTime, currentUserMuteUntil, selectedConversation]);
 
-  const parseDraftToSegments = (text: string): MessageSegment[] => {
-    const segments: MessageSegment[] = [];
-    const mentionRegex = /\[@([^\]]+):(\d+)\]/g;
-    let lastIndex = 0;
-    let match = mentionRegex.exec(text);
-
-    while (match) {
-      const mentionStart = match.index;
-      if (mentionStart > lastIndex) {
-        const plain = text.slice(lastIndex, mentionStart);
-        if (plain) {
-          segments.push({ type: "Text", data: { text: plain } });
-        }
-      }
-
-      segments.push({ type: "At", data: { target: Number(match[2]) } });
-      lastIndex = mentionRegex.lastIndex;
-      match = mentionRegex.exec(text);
+  const handleSelectFace = (face: FaceDefinition) => {
+    if (composerRef.current) {
+      composerRef.current.insertFace(face);
+      return;
     }
 
-    const tail = text.slice(lastIndex);
-    if (tail) {
-      segments.push({ type: "Text", data: { text: tail } });
-    }
-
-    return segments.length > 0 ? segments : [{ type: "Text", data: { text } }];
+    setDraft((previous) => `${previous}[${face.label}]`);
   };
 
   const handleSendMessage = async () => {
@@ -476,17 +452,15 @@ function ChatMainPanel({
       return;
     }
 
-    const text = draft.trim();
-    if (!text) {
+    if (!draft.trim()) {
       return;
     }
 
     setSendLoading(true);
     try {
-      const content =
-        selectedConversation.source.scene === "group"
-          ? parseDraftToSegments(text)
-          : [{ type: "Text", data: { text } }];
+      const content = parseDraftToMessageSegments(draft, {
+        allowMentions: selectedConversation.source.scene === "group",
+      });
 
       await invoke("send_message", {
         userId: currentUserId,
@@ -520,7 +494,13 @@ function ChatMainPanel({
 
   const handleQuoteMessage = (senderDisplayName: string, text: string) => {
     const quote = `> ${senderDisplayName}: ${text}\n`;
-    setDraft((prev) => `${quote}${prev}`);
+    setDraft((prev) => {
+      const nextDraft = `${quote}${prev}`;
+      requestAnimationFrame(() => {
+        composerRef.current?.moveCaretToEnd();
+      });
+      return nextDraft;
+    });
   };
 
   const handleRecallMessage = async (messageId: number) => {
@@ -560,6 +540,11 @@ function ChatMainPanel({
     if (selectedConversation.source.scene !== "group") {
       return;
     }
+    if (composerRef.current) {
+      composerRef.current.insertMention(targetName, targetUserId);
+      return;
+    }
+
     setDraft((prev) => `${prev}[@${targetName}:${targetUserId}] `);
   };
 
@@ -906,7 +891,7 @@ function ChatMainPanel({
               key: "copy",
               label: "复制",
               onSelect: () =>
-                handleCopyMessage(messageTextFromContent(message)),
+                handleCopyMessage(messageSegmentsToPlainText(message.content)),
             },
             {
               key: "quote",
@@ -914,7 +899,7 @@ function ChatMainPanel({
               onSelect: () =>
                 handleQuoteMessage(
                   senderDisplayName,
-                  messageTextFromContent(message),
+                  messageSegmentsToPlainText(message.content),
                 ),
             },
           ];
@@ -960,9 +945,7 @@ function ChatMainPanel({
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="icon-sm" title="表情">
-              <Smile className="size-4" />
-            </Button>
+            <FacePicker onSelectFace={handleSelectFace} />
             <Button type="button" variant="ghost" size="icon-sm" title="图片">
               <Image className="size-4" />
             </Button>
@@ -980,21 +963,15 @@ function ChatMainPanel({
           </Button>
         </div>
 
-        <div className="w-full">
-          <Textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-            className="h-28 max-h-28 min-h-28 w-full resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-            disabled={sendLoading}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                handleSendMessage();
-              }
-            }}
-          />
-        </div>
+        <ChatComposer
+          ref={composerRef}
+          draft={draft}
+          onDraftChange={setDraft}
+          allowMentions={selectedConversation.source.scene === "group"}
+          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          disabled={sendLoading}
+          onSubmit={handleSendMessage}
+        />
       </footer>
     </section>
   );
