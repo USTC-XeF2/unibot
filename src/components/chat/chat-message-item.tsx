@@ -22,6 +22,8 @@ export type ChatContextAction = {
 type ChatMessageContentProps = {
   content: MessageSegment[];
   className?: string;
+  onAtClick: (target: number | "all") => void;
+  resolveMemberName: (userId: number) => string;
 };
 
 type ChatMessageItemProps = {
@@ -38,6 +40,8 @@ type ChatMessageItemProps = {
     summary: string;
     missing?: boolean;
   } | null;
+  onAtClick: (target: number | "all") => void;
+  resolveMemberName: (userId: number) => string;
   avatarActions: ChatContextAction[];
   messageActions: ChatContextAction[];
 };
@@ -85,7 +89,12 @@ function formatMessageTime(ts: number): string {
   return `${datePart} ${timePart}`;
 }
 
-function ChatMessageContent({ content, className }: ChatMessageContentProps) {
+function ChatMessageContent({
+  content,
+  className,
+  onAtClick,
+  resolveMemberName,
+}: ChatMessageContentProps) {
   return (
     <div
       className={cn(
@@ -101,12 +110,25 @@ function ChatMessageContent({ content, className }: ChatMessageContentProps) {
             return <span key={key}>{segment.data.text}</span>;
           case "At":
             return (
-              <span
+              <button
                 key={key}
-                className="mx-0.5 inline-flex items-center rounded-md bg-sky-500/10 px-1.5 py-0.5 font-medium text-[13px] text-sky-700 dark:text-sky-300"
+                type="button"
+                className="cursor-pointer text-sky-600 dark:text-sky-300"
+                onClick={() => onAtClick(segment.data.target)}
               >
-                @{segment.data.target}
-              </span>
+                @{resolveMemberName(segment.data.target)}
+              </button>
+            );
+          case "AtAll":
+            return (
+              <button
+                key={key}
+                type="button"
+                className="cursor-pointer text-sky-600 dark:text-sky-300"
+                onClick={() => onAtClick("all")}
+              >
+                @全体成员
+              </button>
             );
           case "Face": {
             const face = getFaceById(segment.data.id);
@@ -149,6 +171,8 @@ function ChatMessageItem({
   showSenderName,
   message,
   quotedMessagePreview,
+  onAtClick,
+  resolveMemberName,
   avatarActions,
   messageActions,
 }: ChatMessageItemProps) {
@@ -251,7 +275,11 @@ function ChatMessageItem({
                   </p>
                 </div>
               ) : null}
-              <ChatMessageContent content={message.content} />
+              <ChatMessageContent
+                content={message.content}
+                onAtClick={onAtClick}
+                resolveMemberName={resolveMemberName}
+              />
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>

@@ -6,23 +6,48 @@ import {
 import Document from "@tiptap/extension-document";
 import Hardbreak from "@tiptap/extension-hard-break";
 import Link from "@tiptap/extension-link";
+import Mention, { type MentionNodeAttrs } from "@tiptap/extension-mention";
 import Paragraph from "@tiptap/extension-paragraph";
 import Placeholder from "@tiptap/extension-placeholder";
 import Text from "@tiptap/extension-text";
 import { Dropcursor, TrailingNode, UndoRedo } from "@tiptap/extensions";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, ReactRenderer, useEditor } from "@tiptap/react";
+import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import * as React from "react";
 import { useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import tippy, { type Instance } from "tippy.js";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import type { FaceDefinition } from "@/lib/face-library";
 import { getFaceById } from "@/lib/face-library";
 import { cn } from "@/lib/utils";
 import type { MessageSegment } from "@/types/chat";
 
+export interface MentionableUser {
+  id: number | "all";
+  name: string;
+  avatar?: string;
+}
+
+export type MentionSupportLevel = "none" | "user" | "all";
+
+const MENTION_ALL_MEMBER: MentionableUser = {
+  id: "all",
+  name: "全体成员",
+};
+
 type ChatComposerProps = {
   segments: MessageSegment[];
   onSegmentsChange: (segments: MessageSegment[]) => void;
   disabled?: boolean;
-  allowMentions: boolean;
+  mentionSupport: MentionSupportLevel;
+  mentionableMembers: MentionableUser[];
   placeholder: string;
   className?: string;
   onSubmit: () => void;
@@ -32,7 +57,7 @@ export type ChatComposerHandle = {
   focus: () => void;
   moveCaretToEnd: () => void;
   insertFace: (face: FaceDefinition) => void;
-  insertMention: (label: string, userId: number) => void;
+  insertMention: (target: number | "all") => void;
 };
 
 const Face = TiptapNode.create({
@@ -101,14 +126,46 @@ function inlineContentFromText(text: string): JSONContent[] {
 
 function messageSegmentsToEditorContent(
   segments: MessageSegment[],
+  mentionableMembers: MentionableUser[],
 ): JSONContent {
+  const mentionLabelById = new Map<number, string>(
+    mentionableMembers
+      .filter(
+        (member): member is MentionableUser & { id: number } =>
+          typeof member.id === "number",
+      )
+      .map((member) => [member.id, member.name]),
+  );
+
   const content = segments.flatMap((segment) => {
     if (segment.type === "Text") {
       return inlineContentFromText(segment.data.text);
     }
 
     if (segment.type === "At") {
-      return inlineContentFromText(`@${segment.data.target}`);
+      return [
+        {
+          type: "mention",
+          attrs: {
+            id: String(segment.data.target),
+            label:
+              mentionLabelById.get(segment.data.target) ??
+              String(segment.data.target),
+          },
+        },
+      ];
+    }
+
+    if (segment.type === "AtAll") {
+      return [
+        {
+          type: "mention",
+          attrs: {
+            id: "all",
+            label: MENTION_ALL_MEMBER.name,
+          },
+        },
+      ];
     }
 
     if (segment.type === "Face") {
@@ -155,7 +212,7 @@ function pushTextSegment(segments: MessageSegment[], text: string) {
 function appendSegmentsFromNode(
   node: JSONContent,
   segments: MessageSegment[],
-  allowMentions: boolean,
+  mentionSupport: MentionSupportLevel,
 ) {
   if (node.type === "text") {
     pushTextSegment(segments, (node.text ?? "").replace(/\u00A0/g, " "));
@@ -180,18 +237,38 @@ function appendSegmentsFromNode(
     return;
   }
 
+  if (node.type === "mention") {
+    const mentionId = String(node.attrs?.id ?? "");
+    if (mentionId === "all" && mentionSupport === "all") {
+      segments.push({ type: "AtAll" });
+      return;
+    }
+
+    const userId = Number(mentionId);
+    if (mentionSupport !== "none" && Number.isInteger(userId) && userId > 0) {
+      segments.push({ type: "At", data: { target: userId } });
+      return;
+    }
+
+    const fallbackLabel = String(node.attrs?.label ?? mentionId);
+    if (fallbackLabel) {
+      pushTextSegment(segments, `@${fallbackLabel}`);
+    }
+    return;
+  }
+
   if (!node.content?.length) {
     return;
   }
 
   for (const child of node.content) {
-    appendSegmentsFromNode(child, segments, allowMentions);
+    appendSegmentsFromNode(child, segments, mentionSupport);
   }
 }
 
 function editorContentToSegments(
   content: JSONContent,
-  allowMentions: boolean,
+  mentionSupport: MentionSupportLevel,
 ): MessageSegment[] {
   if (!content.content?.length) {
     return [];
@@ -199,7 +276,7 @@ function editorContentToSegments(
 
   const segments: MessageSegment[] = [];
   for (const node of content.content) {
-    appendSegmentsFromNode(node, segments, allowMentions);
+    appendSegmentsFromNode(node, segments, mentionSupport);
   }
 
   const lastSegment = segments[segments.length - 1];
@@ -216,13 +293,45 @@ function areSegmentsEqual(next: MessageSegment[], previous: MessageSegment[]) {
   return JSON.stringify(next) === JSON.stringify(previous);
 }
 
+function MentionList(
+  props: SuggestionProps<MentionableUser, MentionNodeAttrs>,
+) {
+  return (
+    <Command className="w-48 border shadow-md">
+      <CommandList>
+        <CommandEmpty>未找到用户</CommandEmpty>
+        <CommandGroup>
+          {props.items.map((item) => (
+            <CommandItem
+              key={item.id}
+              onSelect={() =>
+                props.command({ id: String(item.id), label: item.name })
+              }
+              className="gap-2"
+            >
+              {item.id !== "all" && (
+                <Avatar size="sm">
+                  <AvatarImage src={item.avatar} alt={item.name} />
+                  <AvatarFallback>{item.name.slice(0, 1)}</AvatarFallback>
+                </Avatar>
+              )}
+              <span>{item.name}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
+}
+
 const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
   (
     {
       segments,
       onSegmentsChange,
       disabled = false,
-      allowMentions,
+      mentionSupport,
+      mentionableMembers,
       placeholder,
       className,
       onSubmit,
@@ -232,14 +341,85 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
     const onSegmentsChangeRef = useRef(onSegmentsChange);
     const onSubmitRef = useRef(onSubmit);
     const isApplyingExternalUpdateRef = useRef(false);
-    const allowMentionsRef = useRef(allowMentions);
+    const mentionSupportRef = useRef(mentionSupport);
+    const mentionCandidatesRef = useRef<MentionableUser[]>([]);
 
     onSegmentsChangeRef.current = onSegmentsChange;
     onSubmitRef.current = onSubmit;
 
+    const mentionCandidates = useMemo(() => {
+      if (mentionSupport === "none") {
+        return [];
+      }
+
+      if (mentionSupport === "all") {
+        return [MENTION_ALL_MEMBER, ...mentionableMembers];
+      }
+
+      return mentionableMembers;
+    }, [mentionSupport, mentionableMembers]);
+
+    mentionCandidatesRef.current = mentionCandidates;
+
+    const mentionSuggestion: Omit<
+      SuggestionOptions<MentionableUser, MentionNodeAttrs>,
+      "editor"
+    > = {
+      allow: () => mentionSupportRef.current !== "none",
+      items: ({ query }) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        if (!normalizedQuery) {
+          return mentionCandidatesRef.current;
+        }
+
+        return mentionCandidatesRef.current.filter((member) =>
+          member.name.toLowerCase().includes(normalizedQuery),
+        );
+      },
+
+      render: () => {
+        let component: ReactRenderer;
+        let popup: Instance[];
+
+        return {
+          onStart: (props) => {
+            component = new ReactRenderer(MentionList, {
+              props,
+              editor: props.editor,
+            });
+
+            if (!props.clientRect) return;
+
+            popup = tippy("body", {
+              getReferenceClientRect: props.clientRect as () => DOMRect,
+              appendTo: () => document.body,
+              content: component.element,
+              showOnCreate: true,
+              interactive: true,
+              trigger: "manual",
+              placement: "top-start",
+            });
+          },
+
+          onUpdate(props) {
+            component.updateProps(props);
+            if (!props.clientRect) return;
+            popup[0].setProps({
+              getReferenceClientRect: props.clientRect as () => DOMRect,
+            });
+          },
+
+          onExit() {
+            popup[0].destroy();
+            component.destroy();
+          },
+        };
+      },
+    };
+
     const content = useMemo(
-      () => messageSegmentsToEditorContent(segments),
-      [segments],
+      () => messageSegmentsToEditorContent(segments, mentionableMembers),
+      [segments, mentionableMembers],
     );
 
     const editor = useEditor({
@@ -257,6 +437,12 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
         }),
         Link,
         Face,
+        Mention.configure({
+          HTMLAttributes: {
+            class: "text-sky-600 dark:text-sky-300",
+          },
+          suggestion: mentionSuggestion,
+        }),
       ],
       content,
       immediatelyRender: false,
@@ -315,7 +501,7 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
         onSegmentsChangeRef.current(
           editorContentToSegments(
             nextEditor.getJSON(),
-            allowMentionsRef.current,
+            mentionSupportRef.current,
           ),
         );
       },
@@ -334,13 +520,14 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
         return;
       }
 
-      const allowMentionsChanged = allowMentionsRef.current !== allowMentions;
-      allowMentionsRef.current = allowMentions;
+      const mentionSupportChanged =
+        mentionSupportRef.current !== mentionSupport;
+      mentionSupportRef.current = mentionSupport;
 
       if (
-        !allowMentionsChanged &&
+        !mentionSupportChanged &&
         areSegmentsEqual(
-          editorContentToSegments(editor.getJSON(), allowMentions),
+          editorContentToSegments(editor.getJSON(), mentionSupport),
           segments,
         )
       ) {
@@ -348,13 +535,16 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
       }
 
       isApplyingExternalUpdateRef.current = true;
-      editor.commands.setContent(messageSegmentsToEditorContent(segments), {
-        emitUpdate: false,
-      });
+      editor.commands.setContent(
+        messageSegmentsToEditorContent(segments, mentionableMembers),
+        {
+          emitUpdate: false,
+        },
+      );
       queueMicrotask(() => {
         isApplyingExternalUpdateRef.current = false;
       });
-    }, [allowMentions, segments, editor]);
+    }, [mentionSupport, mentionableMembers, segments, editor]);
 
     useImperativeHandle(
       ref,
@@ -378,15 +568,51 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
             })
             .run();
         },
-        insertMention(label, _userId) {
+        insertMention(target) {
+          if (mentionSupportRef.current === "none") {
+            return;
+          }
+
+          if (target === "all") {
+            if (mentionSupportRef.current !== "all") {
+              return;
+            }
+
+            editor
+              ?.chain()
+              .focus()
+              .insertContent([
+                {
+                  type: "mention",
+                  attrs: {
+                    id: "all",
+                    label: MENTION_ALL_MEMBER.name,
+                  },
+                },
+                { type: "text", text: " " },
+              ])
+              .run();
+            return;
+          }
+
+          const targetMember = mentionCandidatesRef.current.find(
+            (member): member is MentionableUser & { id: number } =>
+              typeof member.id === "number" && member.id === target,
+          );
+          const label = targetMember?.name ?? String(target);
+
           editor
             ?.chain()
             .focus()
             .insertContent([
               {
-                type: "text",
-                text: `@${label} `,
+                type: "mention",
+                attrs: {
+                  id: String(target),
+                  label,
+                },
               },
+              { type: "text", text: " " },
             ])
             .run();
         },

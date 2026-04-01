@@ -4,6 +4,7 @@ import { File, Image, Send, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ChatComposer, {
   type ChatComposerHandle,
+  type MentionableUser,
 } from "@/components/chat/chat-composer";
 import ChatMessageItem, {
   type ChatContextAction,
@@ -456,6 +457,30 @@ function ChatMainPanel({
     return !!currentUserMuteUntil && currentUserMuteUntil > currentUnixTime;
   }, [currentUnixTime, currentUserMuteUntil, selectedConversation]);
 
+  const mentionableMembers = useMemo<MentionableUser[]>(() => {
+    if (selectedSource.scene !== "group") return [];
+    return Object.values(groupMembersById)
+      .filter((m) => m.user_id !== currentUserId)
+      .map((member) => {
+        const user = users.find((u) => u.user_id === member.user_id);
+        const name =
+          groupMemberCards[member.user_id] ||
+          user?.nickname ||
+          `用户 ${member.user_id}`;
+        return {
+          id: member.user_id,
+          name,
+          avatar: user?.avatar,
+        };
+      });
+  }, [
+    selectedSource.scene,
+    groupMembersById,
+    users,
+    groupMemberCards,
+    currentUserId,
+  ]);
+
   const handleSelectFace = (face: FaceDefinition) => {
     composerRef.current?.insertFace(face);
   };
@@ -522,6 +547,13 @@ function ChatMainPanel({
     });
     requestAnimationFrame(() => {
       composerRef.current?.focus();
+
+      if (
+        selectedConversation.source.scene === "group" &&
+        message.sender_user_id !== currentUserId
+      ) {
+        composerRef.current?.insertMention(message.sender_user_id);
+      }
     });
   };
 
@@ -558,12 +590,12 @@ function ChatMainPanel({
     }
   };
 
-  const handleAtUser = (targetUserId: number, targetName: string) => {
+  const handleAtUser = (targetUserId: number) => {
     if (selectedConversation.source.scene !== "group") {
       return;
     }
 
-    composerRef.current?.insertMention(targetName, targetUserId);
+    composerRef.current?.insertMention(targetUserId);
   };
 
   const refreshGroupMembers = async () => {
@@ -876,8 +908,7 @@ function ChatMainPanel({
             avatarActions.push({
               key: "at",
               label: "@ TA",
-              onSelect: () =>
-                handleAtUser(message.sender_user_id, senderDisplayName),
+              onSelect: () => handleAtUser(message.sender_user_id),
             });
           }
 
@@ -983,6 +1014,10 @@ function ChatMainPanel({
               showSenderName={selectedConversation.source.scene === "group"}
               message={message}
               quotedMessagePreview={quotedMessagePreview}
+              onAtClick={(t) => composerRef.current?.insertMention(t)}
+              resolveMemberName={(id) =>
+                mentionableMembers.find((m) => m.id === id)?.name ?? String(id)
+              }
               avatarActions={avatarActions}
               messageActions={messageActions}
             />
@@ -1051,7 +1086,14 @@ function ChatMainPanel({
           ref={composerRef}
           segments={composerSegments}
           onSegmentsChange={setComposerSegments}
-          allowMentions={selectedConversation.source.scene === "group"}
+          mentionSupport={
+            selectedConversation.source.scene === "group"
+              ? myGroupRole === "owner" || myGroupRole === "admin"
+                ? "all"
+                : "user"
+              : "none"
+          }
+          mentionableMembers={mentionableMembers}
           placeholder="输入消息，Enter 发送，Shift+Enter 换行"
           disabled={sendLoading}
           onSubmit={handleSendMessage}

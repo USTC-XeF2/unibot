@@ -6,6 +6,7 @@ export type MessageSegment =
   | { type: "Text"; data: { text: string } }
   | { type: "Image"; data: { file: string; url: string } }
   | { type: "At"; data: { target: number } }
+  | { type: "AtAll" }
   | { type: "Face"; data: { id: string } };
 
 export type RequestState = "pending" | "accepted" | "rejected" | "ignored";
