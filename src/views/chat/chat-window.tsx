@@ -35,6 +35,7 @@ import {
   useFriendsQuery,
 } from "@/lib/friendships-query";
 import { invalidateGroupsQuery, useUserGroupsQuery } from "@/lib/groups-query";
+import { messageSegmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
   invalidateFriendRequestsQuery,
@@ -43,11 +44,7 @@ import {
   useManageableGroupRequestsQuery,
 } from "@/lib/request-query";
 import { invalidateUsersQuery, useUsersQuery } from "@/lib/users-query";
-import type {
-  ChatMessage,
-  InternalEventPayload,
-  MessageSource,
-} from "@/types/chat";
+import type { InternalEventPayload, MessageSource } from "@/types/chat";
 import type { GroupMemberProfile, GroupRole } from "@/types/group";
 
 type ConversationItem = {
@@ -63,23 +60,6 @@ type ConversationSnapshot = {
   lastMessage: string;
   lastAt: number;
 };
-
-function extractMessageText(message: ChatMessage | null): string {
-  if (!message) {
-    return "";
-  }
-
-  const parts = message.content
-    .map((segment) => {
-      if (segment.type === "Text") {
-        return segment.data?.text ?? "";
-      }
-      return `[${segment.type}]`;
-    })
-    .filter(Boolean);
-
-  return parts.join("") || "[空消息]";
-}
 
 function formatMessageTime(ts: number): string {
   if (!ts) {
@@ -333,7 +313,9 @@ function ChatWindowView() {
         return [
           conversation.key,
           {
-            lastMessage: extractMessageText(latestMessage),
+            lastMessage: latestMessage
+              ? messageSegmentsToPlainText(latestMessage.content)
+              : "",
             lastAt: latestMessage?.created_at ?? 0,
           },
         ] as const;
