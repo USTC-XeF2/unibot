@@ -3,6 +3,7 @@ pub mod repo;
 
 pub use db_pool::init_sqlite_pool;
 pub use repo::{
-    GroupRepo, InteractionRepo, MessageRecord, MessageRepo, NewFriendRequestRecord,
-    NewGroupRequestRecord, NewMessageReactionRecord, NewMessageRecord, NewPokeRecord, UserRepo,
+    GroupEventRecord, GroupRepo, InteractionRepo, MessageRecord, MessageRepo,
+    NewFriendRequestRecord, NewGroupEventRecord, NewGroupRequestRecord, NewMessageReactionRecord,
+    NewMessageRecord, NewPokeRecord, UserRepo,
 };

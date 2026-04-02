@@ -1,6 +1,8 @@
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
-use crate::models::{GroupRequestEntity, GroupRequestType, GroupRole, InternalEvent, RequestState};
+use crate::models::{
+    GroupEventPayload, GroupRequestEntity, GroupRequestType, GroupRole, InternalEvent, RequestState,
+};
 use crate::persistence::NewGroupRequestRecord;
 use crate::utils::{emit_to_group_members, emit_to_users, now_ts};
 
@@ -191,6 +193,39 @@ impl GroupService {
         emit_to_users(core, [handled.initiator_user_id], event.clone());
         if let Some(target_user_id) = handled.target_user_id {
             emit_to_users(core, [target_user_id], event);
+        }
+
+        if state == RequestState::Accepted {
+            let joined_user_id = match handled.request_type {
+                GroupRequestType::Join => handled.initiator_user_id,
+                GroupRequestType::Invite => handled.target_user_id.unwrap_or(0),
+            };
+            let event_time = handled.handled_at.unwrap_or_else(now_ts);
+
+            if joined_user_id != 0 {
+                self.save_group_event(
+                    handled.group_id,
+                    GroupEventPayload::MemberJoined {
+                        operator_user_id: user_id,
+                        joined_user_id,
+                    },
+                    event_time,
+                )
+                .await?;
+
+                emit_to_group_members(
+                    core,
+                    &self.repo,
+                    handled.group_id,
+                    InternalEvent::GroupMemberJoined {
+                        group_id: handled.group_id,
+                        operator_user_id: user_id,
+                        target_user_id: joined_user_id,
+                        time: event_time,
+                    },
+                )
+                .await;
+            }
         }
 
         Ok(handled)

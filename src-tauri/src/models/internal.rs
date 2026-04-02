@@ -90,6 +90,12 @@ pub enum InternalEvent {
         mute_until: Option<u64>,
         time: u64,
     },
+    GroupMemberJoined {
+        group_id: u64,
+        operator_user_id: u64,
+        target_user_id: u64,
+        time: u64,
+    },
     GroupMemberTitleUpdated {
         group_id: u64,
         operator_user_id: u64,

@@ -214,3 +214,30 @@ pub struct GroupEssenceMessageEntity {
     pub is_set: bool,
     pub created_at: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GroupEventPayload {
+    MemberJoined {
+        operator_user_id: u64,
+        joined_user_id: u64,
+    },
+    MemberMuted {
+        operator_user_id: u64,
+        target_user_id: u64,
+        mute_until: Option<u64>,
+    },
+    EssenceSet {
+        message_id: i64,
+        sender_user_id: u64,
+        operator_user_id: u64,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GroupEventEntity {
+    pub event_id: i64,
+    pub group_id: u64,
+    pub payload: GroupEventPayload,
+    pub created_at: u64,
+}

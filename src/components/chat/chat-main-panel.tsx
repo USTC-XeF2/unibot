@@ -14,10 +14,15 @@ import {
   useMessageHistoryQuery,
   usePokeHistoryQuery,
 } from "@/lib/chat-query";
+import {
+  invalidateGroupEventHistoryQuery,
+  useGroupEventHistoryQuery,
+} from "@/lib/groups-query";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import type {
   ChatMessage,
   ChatPoke,
+  GroupEvent,
   InternalEventPayload,
   MessageSegment,
   MessageSource,
@@ -53,15 +58,10 @@ type ChatTimelineItem =
       poke: ChatPoke;
     }
   | {
-      kind: "notice";
+      kind: "group_event";
       key: string;
       createdAt: number;
-      notice: {
-        kind: "group_member_muted";
-        operatorUserId: number;
-        targetUserId: number;
-        muteUntil: number | null;
-      };
+      groupEvent: GroupEvent;
     };
 
 function messageTextFromContent(message: ChatMessage): string {
@@ -123,9 +123,6 @@ function ChatMainPanel({
   const [currentUnixTime, setCurrentUnixTime] = useState(
     Math.floor(Date.now() / 1000),
   );
-  const [liveNotices, setLiveNotices] = useState<
-    Extract<ChatTimelineItem, { kind: "notice" }>[]
-  >([]);
 
   const messagesQuery = useMessageHistoryQuery(
     currentUserId,
@@ -137,6 +134,14 @@ function ChatMainPanel({
     selectedConversation.source,
     100,
   );
+  const groupEventsQuery = useGroupEventHistoryQuery(
+    currentUserId,
+    selectedConversation.source.scene === "group"
+      ? selectedConversation.source.group_id
+      : 0,
+    100,
+    selectedConversation.source.scene === "group",
+  );
   const messages = useMemo<ChatMessage[]>(() => {
     const history = messagesQuery.data ?? [];
     return [...history].reverse();
@@ -145,6 +150,10 @@ function ChatMainPanel({
     const history = pokesQuery.data ?? [];
     return [...history].reverse();
   }, [pokesQuery.data]);
+  const groupEvents = useMemo<GroupEvent[]>(() => {
+    const history = groupEventsQuery.data ?? [];
+    return [...history].reverse();
+  }, [groupEventsQuery.data]);
   const timeline = useMemo<ChatTimelineItem[]>(() => {
     const items: ChatTimelineItem[] = [
       ...messages.map((message) => ({
@@ -161,7 +170,12 @@ function ChatMainPanel({
         senderUserId: poke.sender_user_id,
         poke,
       })),
-      ...liveNotices,
+      ...groupEvents.map((groupEvent) => ({
+        kind: "group_event" as const,
+        key: `group-event-${groupEvent.event_id}-${groupEvent.created_at}`,
+        createdAt: groupEvent.created_at,
+        groupEvent,
+      })),
     ];
 
     items.sort((a, b) => {
@@ -172,12 +186,14 @@ function ChatMainPanel({
     });
 
     return items;
-  }, [liveNotices, messages, pokes]);
+  }, [groupEvents, messages, pokes]);
   const queryError = messagesQuery.error
     ? String(messagesQuery.error)
     : pokesQuery.error
       ? String(pokesQuery.error)
-      : null;
+      : groupEventsQuery.error
+        ? String(groupEventsQuery.error)
+        : null;
 
   const conversationKey =
     selectedConversation.source.scene === "group"
@@ -189,13 +205,6 @@ function ChatMainPanel({
     lastConversationKeyRef.current = conversationKey;
     shouldScrollToBottomRef.current = true;
   }
-
-  useEffect(() => {
-    if (!conversationKey) {
-      return;
-    }
-    setLiveNotices([]);
-  }, [conversationKey]);
 
   const updateStickToBottomState = () => {
     const list = messageListRef.current;
@@ -280,31 +289,14 @@ function ChatMainPanel({
               },
             };
           });
-
-          setLiveNotices((previous) => {
-            const item: Extract<ChatTimelineItem, { kind: "notice" }> = {
-              kind: "notice",
-              key: `muted-${payload.group_id}-${payload.operator_user_id}-${payload.target_user_id}-${payload.time}`,
-              createdAt: payload.time,
-              notice: {
-                kind: "group_member_muted",
-                operatorUserId: payload.operator_user_id,
-                targetUserId: payload.target_user_id,
-                muteUntil: payload.mute_until,
-              },
-            };
-            if (previous.some((current) => current.key === item.key)) {
-              return previous;
-            }
-            return [...previous, item];
-          });
         }
 
         if (
           selectedSource.scene === "group" &&
           ((payload.kind === "notice" &&
             payload.notice_type === "admin_change") ||
-            payload.kind === "group_member_title_updated")
+            payload.kind === "group_member_title_updated" ||
+            payload.kind === "group_member_joined")
         ) {
           void (async () => {
             try {
@@ -340,6 +332,12 @@ function ChatMainPanel({
 
         invalidateMessageHistoryQuery(currentUserId, selectedSource);
         invalidatePokeHistoryQuery(currentUserId, selectedSource);
+        if (selectedSource.scene === "group") {
+          invalidateGroupEventHistoryQuery(
+            currentUserId,
+            selectedSource.group_id,
+          );
+        }
       });
     };
 
@@ -681,7 +679,7 @@ function ChatMainPanel({
         className="min-h-0 flex-1 space-y-2 overflow-auto bg-background/60 px-4 py-3"
       >
         {timeline.map((item) => {
-          if (item.kind === "notice") {
+          if (item.kind === "group_event") {
             const resolveName = (userId: number) => {
               const user = users.find((entry) => entry.user_id === userId);
               if (selectedConversation.source.scene === "group") {
@@ -695,30 +693,56 @@ function ChatMainPanel({
               return user?.nickname || `用户${userId}`;
             };
 
-            const operatorName = resolveName(item.notice.operatorUserId);
-            const targetName = resolveName(item.notice.targetUserId);
-            const muted =
-              item.notice.muteUntil !== null &&
-              item.notice.muteUntil > item.createdAt;
-            const durationSeconds = item.notice.muteUntil
-              ? Math.max(0, item.notice.muteUntil - item.createdAt)
-              : 0;
-            const durationText =
-              durationSeconds > 0
-                ? `${durationSeconds}秒`
-                : item.notice.muteUntil
-                  ? `至 ${formatNoticeUntilTime(item.notice.muteUntil)}`
-                  : "";
-            const noticeText = muted
-              ? `${targetName} 被 ${operatorName} 禁言 ${durationText}`.trim()
-              : `${targetName} 被 ${operatorName} 取消禁言`;
+            const { payload } = item.groupEvent;
+            let eventText = "";
+
+            if (payload.type === "member_joined") {
+              const joinedUserId = payload.joined_user_id;
+              eventText = joinedUserId
+                ? `${resolveName(joinedUserId)} 加入了群聊`
+                : "有新成员加入了群聊";
+            }
+
+            if (payload.type === "member_muted") {
+              const operatorUserId = payload.operator_user_id;
+              const targetUserId = payload.target_user_id;
+              const muteUntil = payload.mute_until;
+              const operatorName = operatorUserId
+                ? resolveName(operatorUserId)
+                : "管理员";
+              const targetName = targetUserId
+                ? resolveName(targetUserId)
+                : "成员";
+              const muted = muteUntil !== null && muteUntil > item.createdAt;
+              const durationSeconds = muteUntil
+                ? Math.max(0, muteUntil - item.createdAt)
+                : 0;
+              const durationText =
+                durationSeconds > 0
+                  ? `${durationSeconds}秒`
+                  : muteUntil
+                    ? `至 ${formatNoticeUntilTime(muteUntil)}`
+                    : "";
+              eventText = muted
+                ? `${targetName} 被 ${operatorName} 禁言 ${durationText}`.trim()
+                : `${targetName} 被 ${operatorName} 取消禁言`;
+            }
+
+            if (payload.type === "essence_set") {
+              const senderUserId = payload.sender_user_id;
+              eventText = `${resolveName(senderUserId)} 的消息被设为了精华消息`;
+            }
+
+            if (!eventText) {
+              return null;
+            }
 
             return (
               <p
                 key={item.key}
                 className="my-1 text-center text-[11px] text-muted-foreground"
               >
-                {noticeText}
+                {eventText}
               </p>
             );
           }

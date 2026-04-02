@@ -1,8 +1,8 @@
 use crate::core::CoreContainer;
 use crate::models::{
-    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity, GroupFolderEntity,
-    GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType, GroupWholeMuteState,
-    RequestState,
+    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity, GroupFileEntity,
+    GroupFolderEntity, GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType,
+    GroupWholeMuteState, RequestState,
 };
 use crate::services::{MuteGroupMemberResult, ServiceHub};
 
@@ -56,6 +56,20 @@ pub async fn list_group_members(
     services
         .group
         .list_group_members(user_id, group_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn list_group_event_history(
+    services: tauri::State<'_, ServiceHub>,
+    user_id: u64,
+    group_id: u64,
+    limit: Option<usize>,
+) -> Result<Vec<GroupEventEntity>, String> {
+    services
+        .group
+        .list_group_event_history(user_id, group_id, limit.unwrap_or(50))
         .await
         .into_command_result()
 }

@@ -391,6 +391,12 @@ function ChatWindowView() {
         if (source) {
           void invalidateMessageHistoryQuery(currentUserId, source);
           if (
+            payload.kind === "group_member_joined" &&
+            payload.target_user_id === currentUserId
+          ) {
+            void invalidateGroupsQuery();
+          }
+          if (
             payload.kind === "friend_request_created" ||
             payload.kind === "friend_request_handled" ||
             payload.kind === "group_request_created" ||

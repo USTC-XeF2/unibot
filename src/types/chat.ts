@@ -34,6 +34,32 @@ export type ChatPoke = {
   created_at: number;
 };
 
+export type GroupEventPayload =
+  | {
+      type: "member_joined";
+      operator_user_id: number;
+      joined_user_id: number;
+    }
+  | {
+      type: "member_muted";
+      operator_user_id: number;
+      target_user_id: number;
+      mute_until: number | null;
+    }
+  | {
+      type: "essence_set";
+      message_id: number;
+      sender_user_id: number;
+      operator_user_id: number;
+    };
+
+export type GroupEvent = {
+  event_id: number;
+  group_id: number;
+  payload: GroupEventPayload;
+  created_at: number;
+};
+
 export type InternalEventPayload =
   | {
       kind: "message";
@@ -109,6 +135,13 @@ export type InternalEventPayload =
       operator_user_id: number;
       target_user_id: number;
       mute_until: number | null;
+      time: number;
+    }
+  | {
+      kind: "group_member_joined";
+      group_id: number;
+      operator_user_id: number;
+      target_user_id: number;
       time: number;
     }
   | {

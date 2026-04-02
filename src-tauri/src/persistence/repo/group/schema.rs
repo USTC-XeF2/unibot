@@ -192,6 +192,22 @@ impl GroupRepo {
 
         sqlx::query(
             r#"
+            CREATE TABLE IF NOT EXISTS group_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                payload TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (group_id) REFERENCES groups(group_id)
+                    ON DELETE CASCADE
+                    ON UPDATE CASCADE
+            )
+            "#,
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            r#"
             CREATE INDEX IF NOT EXISTS idx_group_members_user
             ON group_members(user_id)
             "#,
@@ -282,6 +298,15 @@ impl GroupRepo {
 
         sqlx::query(
             r#"
+            CREATE INDEX IF NOT EXISTS idx_group_events_group_time
+            ON group_events(group_id, created_at)
+            "#,
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            r#"
             CREATE INDEX IF NOT EXISTS idx_group_files_group_uploaded
             ON group_files(group_id, uploaded_at)
             "#,
@@ -320,6 +345,26 @@ impl GroupRepo {
             r#"
             CREATE INDEX IF NOT EXISTS idx_group_essence_group_created
             ON group_essence_messages(group_id, created_at)
+            "#,
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            r#"
+            CREATE TRIGGER IF NOT EXISTS trg_groups_cleanup_interactions_after_delete
+            AFTER DELETE ON groups
+            FOR EACH ROW
+            BEGIN
+                DELETE FROM message_reactions
+                WHERE source_type = 'group' AND source_id = OLD.group_id;
+
+                DELETE FROM pokes
+                WHERE source_type = 'group' AND source_id = OLD.group_id;
+
+                DELETE FROM messages
+                WHERE source_type = 'group' AND source_id = OLD.group_id;
+            END;
             "#,
         )
         .execute(pool)

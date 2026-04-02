@@ -101,6 +101,7 @@ pub fn run() {
             group::upsert_group,
             group::upsert_group_member,
             group::list_group_members,
+            group::list_group_event_history,
             group::mute_group_member,
             group::set_group_whole_mute,
             group::get_group_whole_mute,

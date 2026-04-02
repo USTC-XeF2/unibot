@@ -4,9 +4,25 @@ use crate::models::GroupRequestType;
 
 mod basic;
 mod content;
+mod events;
 mod requests;
 mod schema;
 mod types;
+
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct GroupEventRecord {
+    pub id: i64,
+    pub group_id: u64,
+    pub payload: String,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewGroupEventRecord {
+    pub group_id: u64,
+    pub payload: String,
+    pub created_at: u64,
+}
 
 #[derive(Debug, Clone)]
 pub struct NewGroupRequestRecord {

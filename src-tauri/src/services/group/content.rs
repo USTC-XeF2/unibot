@@ -1,9 +1,10 @@
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity, GroupFolderEntity,
-    GroupRole, InternalEvent,
+    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity, GroupEventPayload,
+    GroupFileEntity, GroupFolderEntity, GroupRole, InternalEvent,
 };
+use crate::persistence::{GroupEventRecord, NewGroupEventRecord};
 use crate::utils::{emit_to_group_members, now_ts};
 
 use super::GroupService;
@@ -183,6 +184,19 @@ impl GroupService {
             )
             .await?;
 
+        if essence.is_set {
+            self.save_group_event(
+                group_id,
+                GroupEventPayload::EssenceSet {
+                    message_id: essence.message_id,
+                    sender_user_id: essence.sender_user_id,
+                    operator_user_id: essence.operator_user_id,
+                },
+                essence.created_at,
+            )
+            .await?;
+        }
+
         emit_to_group_members(
             core,
             &self.repo,
@@ -212,5 +226,50 @@ impl GroupService {
             .list_group_essence_messages(group_id)
             .await
             .map_err(Into::into)
+    }
+
+    pub async fn list_group_event_history(
+        &self,
+        user_id: u64,
+        group_id: u64,
+        limit: usize,
+    ) -> AppResult<Vec<GroupEventEntity>> {
+        self.ensure_group_member(group_id, user_id).await?;
+
+        let limit_i64 =
+            i64::try_from(limit).map_err(|_| AppError::validation("limit is too large"))?;
+
+        let rows = self.repo.list_group_events(group_id, limit_i64).await?;
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
+
+    pub(super) async fn save_group_event(
+        &self,
+        group_id: u64,
+        payload: GroupEventPayload,
+        created_at: u64,
+    ) -> AppResult<()> {
+        let payload_json = serde_json::to_string(&payload)?;
+        self.repo
+            .insert_group_event(NewGroupEventRecord {
+                group_id,
+                payload: payload_json,
+                created_at,
+            })
+            .await?;
+        Ok(())
+    }
+}
+
+impl TryFrom<GroupEventRecord> for GroupEventEntity {
+    type Error = AppError;
+
+    fn try_from(row: GroupEventRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            event_id: row.id,
+            group_id: row.group_id,
+            payload: serde_json::from_str(&row.payload)?,
+            created_at: row.created_at,
+        })
     }
 }

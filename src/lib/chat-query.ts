@@ -180,6 +180,7 @@ export function sourceFromInternalEvent(
   if (
     payload.kind === "group_request_created" ||
     payload.kind === "group_request_handled" ||
+    payload.kind === "group_member_joined" ||
     payload.kind === "group_member_muted" ||
     payload.kind === "group_member_title_updated" ||
     payload.kind === "group_whole_mute_updated" ||

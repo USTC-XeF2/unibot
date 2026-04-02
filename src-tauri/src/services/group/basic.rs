@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupMemberProfile, GroupProfile, GroupRole, GroupWholeMuteState, InternalEvent,
+    GroupEventPayload, GroupMemberProfile, GroupProfile, GroupRole, GroupWholeMuteState,
+    InternalEvent,
 };
 use crate::utils::{emit_to_group_members, now_ts};
 
@@ -128,18 +129,44 @@ impl GroupService {
             return Ok(member);
         }
 
+        let event_time = now_ts();
+
         let member = GroupMemberProfile {
             group_id,
             user_id: target_user_id,
             card: String::new(),
             title: String::new(),
             role: GroupRole::Member,
-            joined_at: now_ts(),
+            joined_at: event_time,
             last_sent_at: 0,
             mute_until: None,
         };
 
         self.repo.upsert_group_member(&member).await?;
+
+        self.save_group_event(
+            group_id,
+            GroupEventPayload::MemberJoined {
+                operator_user_id: user_id,
+                joined_user_id: target_user_id,
+            },
+            event_time,
+        )
+        .await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            group_id,
+            InternalEvent::GroupMemberJoined {
+                group_id,
+                operator_user_id: user_id,
+                target_user_id,
+                time: event_time,
+            },
+        )
+        .await;
+
         Ok(member)
     }
 
@@ -211,12 +238,25 @@ impl GroupService {
             mute_until: updated.mute_until,
         };
 
+        let event_time = now_ts();
+
+        self.save_group_event(
+            result.group_id,
+            GroupEventPayload::MemberMuted {
+                operator_user_id: user_id,
+                target_user_id: result.target_user_id,
+                mute_until: result.mute_until,
+            },
+            event_time,
+        )
+        .await?;
+
         let event = InternalEvent::GroupMemberMuted {
             group_id: result.group_id,
             operator_user_id: user_id,
             target_user_id: result.target_user_id,
             mute_until: result.mute_until,
-            time: now_ts(),
+            time: event_time,
         };
         emit_to_group_members(core, &self.repo, group_id, event).await;
 
