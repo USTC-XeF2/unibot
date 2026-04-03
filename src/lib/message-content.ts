@@ -9,8 +9,6 @@ export function messageSegmentsToPlainText(segments: MessageSegment[]) {
           return segment.data.text;
         case "At":
           return `@${segment.data.target}`;
-        case "Reply":
-          return `[回复:${segment.data.message_id}]`;
         case "Image":
           return "[图片]";
         case "Face": {

@@ -6,7 +6,6 @@ export type MessageSegment =
   | { type: "Text"; data: { text: string } }
   | { type: "Image"; data: { file: string; url: string } }
   | { type: "At"; data: { target: number } }
-  | { type: "Reply"; data: { message_id: number } }
   | { type: "Face"; data: { id: string } };
 
 export type RequestState = "pending" | "accepted" | "rejected" | "ignored";
@@ -18,10 +17,10 @@ export type ChatMessage = {
   sender_user_id: number;
   source: MessageSource;
   content: MessageSegment[];
+  quote_message_id: number | null;
   recall: {
     recalled: boolean;
     recalled_by_user_id?: number | null;
-    recalled_at?: number | null;
   };
   created_at: number;
 };

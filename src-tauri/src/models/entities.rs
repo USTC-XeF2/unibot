@@ -79,7 +79,6 @@ impl TryFrom<(&str, u64)> for MessageSource {
 pub struct MessageRecallInfo {
     pub recalled: bool,
     pub recalled_by_user_id: Option<u64>,
-    pub recalled_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -88,6 +87,7 @@ pub struct MessageEntity {
     pub sender_user_id: u64,
     pub source: MessageSource,
     pub content: Vec<MessageSegment>,
+    pub quote_message_id: Option<i64>,
     pub created_at: u64,
     pub recall: MessageRecallInfo,
 }

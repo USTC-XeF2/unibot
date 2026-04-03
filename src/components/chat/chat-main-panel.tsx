@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { File, Image, Send } from "lucide-react";
+import { File, Image, Send, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ChatComposer, {
   type ChatComposerHandle,
@@ -118,6 +118,10 @@ function ChatMainPanel({
   const [composerSegments, setComposerSegments] = useState<MessageSegment[]>(
     [],
   );
+  const [quotedMessage, setQuotedMessage] = useState<{
+    messageId: number;
+    summary: string;
+  } | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [groupMemberCards, setGroupMemberCards] = useState<
     Record<number, string>
@@ -404,6 +408,14 @@ function ChatMainPanel({
     };
   }, [currentUserId, selectedConversation]);
 
+  useEffect(() => {
+    if (!conversationKey) {
+      return;
+    }
+
+    setQuotedMessage(null);
+  }, [conversationKey]);
+
   const myGroupRole: GroupRole | null = useMemo(() => {
     if (selectedConversation.source.scene !== "group") {
       return null;
@@ -467,8 +479,10 @@ function ChatMainPanel({
         userId: currentUserId,
         source: selectedConversation.source,
         content: composerSegments,
+        quoteMessageId: quotedMessage?.messageId ?? null,
       });
       setComposerSegments([]);
+      setQuotedMessage(null);
       shouldScrollToBottomRef.current = true;
       await invalidateMessageHistoryQuery(
         currentUserId,
@@ -493,21 +507,21 @@ function ChatMainPanel({
     }
   };
 
-  const handleQuoteMessage = (senderDisplayName: string, text: string) => {
-    const quote = `> ${senderDisplayName}: ${text}\n`;
-    setComposerSegments((previous) => {
-      const quoteSegment: MessageSegment = {
-        type: "Text",
-        data: {
-          text: quote,
-        },
-      };
+  const handleQuoteMessage = (
+    message: ChatMessage,
+    senderDisplayName: string,
+  ) => {
+    const normalizedText = messageSegmentsToPlainText(message.content)
+      .trim()
+      .replace(/\s+/g, " ");
+    const summary = `${senderDisplayName}: ${normalizedText || "[空消息]"}`;
 
-      const nextSegments = [quoteSegment, ...previous];
-      requestAnimationFrame(() => {
-        composerRef.current?.moveCaretToEnd();
-      });
-      return nextSegments;
+    setQuotedMessage({
+      messageId: message.id,
+      summary,
+    });
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
     });
   };
 
@@ -775,6 +789,49 @@ function ChatMainPanel({
             selectedConversation.source.scene === "group"
               ? groupMemberCards[message.sender_user_id] || sender.nickname
               : sender.nickname;
+
+          const quotedMessagePreview = (() => {
+            const quoteMessageId = message.quote_message_id;
+            if (!quoteMessageId) {
+              return null;
+            }
+
+            const quotedMessage = messages.find(
+              (msg) => msg.id === quoteMessageId,
+            );
+            if (!quotedMessage) {
+              return {
+                senderDisplayName: "引用",
+                summary: "",
+                missing: true,
+              };
+            }
+
+            const quotedSender = users.find(
+              (user) => user.user_id === quotedMessage.sender_user_id,
+            );
+            const quotedSenderDisplayName =
+              selectedConversation.source.scene === "group"
+                ? groupMemberCards[quotedMessage.sender_user_id] ||
+                  quotedSender?.nickname ||
+                  `用户${quotedMessage.sender_user_id}`
+                : quotedSender?.nickname ||
+                  (quotedMessage.sender_user_id === currentUserId
+                    ? "你"
+                    : "对方");
+
+            if (quotedMessage.recall.recalled) {
+              return {
+                senderDisplayName: quotedSenderDisplayName,
+                summary: "[该消息已撤回]",
+              };
+            }
+
+            return {
+              senderDisplayName: quotedSenderDisplayName,
+              summary: messageSegmentsToPlainText(quotedMessage.content),
+            };
+          })();
           const senderGroupProfile = groupMembersById[message.sender_user_id];
           const targetRole = groupMembersById[message.sender_user_id]?.role;
           const canManageTargetByAdmin =
@@ -900,11 +957,7 @@ function ChatMainPanel({
             {
               key: "quote",
               label: "引用",
-              onSelect: () =>
-                handleQuoteMessage(
-                  senderDisplayName,
-                  messageSegmentsToPlainText(message.content),
-                ),
+              onSelect: () => handleQuoteMessage(message, senderDisplayName),
             },
           ];
 
@@ -929,6 +982,7 @@ function ChatMainPanel({
               senderTitle={senderGroupProfile?.title}
               showSenderName={selectedConversation.source.scene === "group"}
               message={message}
+              quotedMessagePreview={quotedMessagePreview}
               avatarActions={avatarActions}
               messageActions={messageActions}
             />
@@ -947,7 +1001,7 @@ function ChatMainPanel({
           </p>
         ) : null}
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             <FacePicker onSelectFace={handleSelectFace} />
             <Button type="button" variant="ghost" size="icon-sm" title="图片">
@@ -957,6 +1011,28 @@ function ChatMainPanel({
               <File className="size-4" />
             </Button>
           </div>
+
+          <div className="min-w-0 flex-1">
+            {quotedMessage ? (
+              <div className="flex items-center gap-2 rounded-md border border-border/80 bg-muted/40 px-2 py-1 text-xs">
+                <span className="shrink-0 text-muted-foreground">引用</span>
+                <span className="min-w-0 flex-1 truncate text-foreground/90">
+                  {quotedMessage.summary}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-5"
+                  title="取消引用"
+                  onClick={() => setQuotedMessage(null)}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
           <Button
             type="button"
             className="h-8 shrink-0 gap-1.5"

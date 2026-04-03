@@ -124,11 +124,7 @@ function messageSegmentsToEditorContent(
       ];
     }
 
-    if (segment.type === "Image") {
-      return inlineContentFromText("[图片]");
-    }
-
-    return inlineContentFromText(`[回复:${segment.data.message_id}]`);
+    return inlineContentFromText("[图片]");
   });
 
   return {

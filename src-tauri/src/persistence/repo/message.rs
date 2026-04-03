@@ -8,9 +8,9 @@ pub struct MessageRecord {
     pub source_type: String,
     pub source_id: u64,
     pub content_json: String,
+    pub quote_message_id: Option<i64>,
     pub is_recalled: bool,
     pub recalled_by_user_id: Option<u64>,
-    pub recalled_at: Option<u64>,
     pub created_at: u64,
 }
 
@@ -20,6 +20,7 @@ pub struct NewMessageRecord {
     pub source_type: String,
     pub source_id: u64,
     pub content_json: String,
+    pub quote_message_id: Option<i64>,
     pub created_at: u64,
 }
 
@@ -42,12 +43,15 @@ impl MessageRepo {
                 source_type TEXT NOT NULL,
                 source_id INTEGER NOT NULL,
                 content_json TEXT NOT NULL,
+                quote_message_id INTEGER,
                 is_recalled INTEGER NOT NULL DEFAULT 0,
                 recalled_by_user_id INTEGER,
-                recalled_at INTEGER,
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (sender_user_id) REFERENCES users(user_id)
                     ON DELETE CASCADE
+                    ON UPDATE CASCADE,
+                FOREIGN KEY (quote_message_id) REFERENCES messages(id)
+                    ON DELETE SET NULL
                     ON UPDATE CASCADE,
                 FOREIGN KEY (recalled_by_user_id) REFERENCES users(user_id)
                     ON DELETE SET NULL
@@ -79,7 +83,7 @@ impl MessageRepo {
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_messages_recalled
-            ON messages(is_recalled, recalled_at)
+            ON messages(is_recalled)
             "#,
         )
         .execute(pool)
@@ -94,15 +98,16 @@ impl MessageRepo {
     ) -> Result<MessageRecord, sqlx::Error> {
         sqlx::query_as::<_, MessageRecord>(
             r#"
-            INSERT INTO messages (sender_user_id, source_type, source_id, content_json, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            RETURNING id, sender_user_id, source_type, source_id, content_json, is_recalled, recalled_by_user_id, recalled_at, created_at
+            INSERT INTO messages (sender_user_id, source_type, source_id, content_json, quote_message_id, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            RETURNING id, sender_user_id, source_type, source_id, content_json, quote_message_id, is_recalled, recalled_by_user_id, created_at
             "#,
         )
         .bind(record.sender_user_id as i64)
         .bind(record.source_type)
         .bind(record.source_id as i64)
         .bind(record.content_json)
+        .bind(record.quote_message_id)
         .bind(record.created_at as i64)
         .fetch_one(&self.pool)
         .await
@@ -112,21 +117,18 @@ impl MessageRepo {
         &self,
         message_id: i64,
         recalled_by_user_id: u64,
-        recalled_at: u64,
     ) -> Result<Option<MessageRecord>, sqlx::Error> {
         let row = sqlx::query_as::<_, MessageRecord>(
             r#"
             UPDATE messages
             SET is_recalled = 1,
-                recalled_by_user_id = ?2,
-                recalled_at = ?3
+                recalled_by_user_id = ?2
             WHERE id = ?1 AND is_recalled = 0
-            RETURNING id, sender_user_id, source_type, source_id, content_json, is_recalled, recalled_by_user_id, recalled_at, created_at
+            RETURNING id, sender_user_id, source_type, source_id, content_json, quote_message_id, is_recalled, recalled_by_user_id, created_at
             "#,
         )
         .bind(message_id)
         .bind(recalled_by_user_id as i64)
-        .bind(recalled_at as i64)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -139,7 +141,7 @@ impl MessageRepo {
     ) -> Result<Option<MessageRecord>, sqlx::Error> {
         sqlx::query_as::<_, MessageRecord>(
             r#"
-            SELECT id, sender_user_id, source_type, source_id, content_json, is_recalled, recalled_by_user_id, recalled_at, created_at
+            SELECT id, sender_user_id, source_type, source_id, content_json, quote_message_id, is_recalled, recalled_by_user_id, created_at
             FROM messages
             WHERE id = ?1
             "#,
@@ -159,7 +161,7 @@ impl MessageRepo {
         if source_type == "private" {
             return sqlx::query_as::<_, MessageRecord>(
                 r#"
-                SELECT id, sender_user_id, source_type, source_id, content_json, is_recalled, recalled_by_user_id, recalled_at, created_at
+                SELECT id, sender_user_id, source_type, source_id, content_json, quote_message_id, is_recalled, recalled_by_user_id, created_at
                 FROM messages
                 WHERE source_type = 'private'
                   AND (
@@ -179,7 +181,7 @@ impl MessageRepo {
 
         sqlx::query_as::<_, MessageRecord>(
             r#"
-            SELECT id, sender_user_id, source_type, source_id, content_json, is_recalled, recalled_by_user_id, recalled_at, created_at
+            SELECT id, sender_user_id, source_type, source_id, content_json, quote_message_id, is_recalled, recalled_by_user_id, created_at
             FROM messages
             WHERE source_type = ?1 AND source_id = ?2
             ORDER BY created_at DESC

@@ -33,6 +33,11 @@ type ChatMessageItemProps = {
   senderTitle?: string;
   showSenderName: boolean;
   message: ChatMessage;
+  quotedMessagePreview?: {
+    senderDisplayName: string;
+    summary: string;
+    missing?: boolean;
+  } | null;
   avatarActions: ChatContextAction[];
   messageActions: ChatContextAction[];
 };
@@ -126,11 +131,6 @@ function ChatMessageContent({ content, className }: ChatMessageContentProps) {
           }
           case "Image":
             return renderFallbackSegment("[图片]", key);
-          case "Reply":
-            return renderFallbackSegment(
-              `[回复:${segment.data.message_id}]`,
-              key,
-            );
           default:
             return null;
         }
@@ -148,6 +148,7 @@ function ChatMessageItem({
   senderTitle,
   showSenderName,
   message,
+  quotedMessagePreview,
   avatarActions,
   messageActions,
 }: ChatMessageItemProps) {
@@ -238,6 +239,18 @@ function ChatMessageItem({
                 isSelf && "ml-auto",
               )}
             >
+              {quotedMessagePreview ? (
+                <div className="mb-2 rounded-md border border-border/70 bg-muted/40 px-2 py-1">
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {quotedMessagePreview.senderDisplayName}
+                  </p>
+                  <p className="truncate text-[12px] leading-4">
+                    {quotedMessagePreview.missing
+                      ? "[引用消息不可用]"
+                      : quotedMessagePreview.summary}
+                  </p>
+                </div>
+              ) : null}
               <ChatMessageContent content={message.content} />
             </div>
           </ContextMenuTrigger>

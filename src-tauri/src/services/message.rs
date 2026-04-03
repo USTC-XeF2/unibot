@@ -14,6 +14,7 @@ pub struct SendMessageResult {
     pub sender_user_id: u64,
     pub source: MessageSource,
     pub content: Vec<MessageSegment>,
+    pub quote_message_id: Option<i64>,
     pub recall: MessageRecallInfo,
     pub created_at: u64,
 }
@@ -35,6 +36,7 @@ impl MessageService {
         user_id: u64,
         source: MessageSource,
         content: Vec<MessageSegment>,
+        quote_message_id: Option<i64>,
     ) -> AppResult<SendMessageResult> {
         core.require_user_context(user_id)?;
 
@@ -79,6 +81,22 @@ impl MessageService {
                 .await?;
         }
 
+        if let Some(quoted_id) = quote_message_id {
+            let quoted_message =
+                self.repo
+                    .get_message_by_id(quoted_id)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::validation(format!("quoted message {} not found", quoted_id))
+                    })?;
+
+            if !message_in_same_session(&quoted_message, user_id, &source) {
+                return Err(AppError::validation(
+                    "quoted message is not in current conversation",
+                ));
+            }
+        }
+
         let content_json = serde_json::to_string(&content)?;
 
         let (source_type, source_id) = source.to_db_parts();
@@ -90,6 +108,7 @@ impl MessageService {
                 source_type: source_type.to_string(),
                 source_id,
                 content_json,
+                quote_message_id,
                 created_at: now,
             })
             .await?;
@@ -112,10 +131,10 @@ impl MessageService {
             sender_user_id: user_id,
             source,
             content,
+            quote_message_id,
             recall: MessageRecallInfo {
                 recalled: false,
                 recalled_by_user_id: None,
-                recalled_at: None,
             },
             created_at: now,
         })
@@ -180,10 +199,9 @@ impl MessageService {
             }
         }
 
-        let recalled_at = now_ts();
         let row = self
             .repo
-            .mark_message_recalled(message_id, user_id, recalled_at)
+            .mark_message_recalled(message_id, user_id)
             .await?
             .ok_or_else(|| AppError::conflict("message already recalled"))?;
 
@@ -203,7 +221,7 @@ impl MessageService {
                 message_id: entity.message_id,
                 source: entity.source.clone(),
                 recalled_by_user_id: user_id,
-                time: recalled_at,
+                time: now_ts(),
             },
         );
 
@@ -225,10 +243,10 @@ impl TryFrom<MessageRecord> for SendMessageResult {
             sender_user_id: row.sender_user_id,
             source,
             content,
+            quote_message_id: row.quote_message_id,
             recall: MessageRecallInfo {
                 recalled: row.is_recalled,
                 recalled_by_user_id: row.recalled_by_user_id,
-                recalled_at: row.recalled_at,
             },
             created_at: row.created_at,
         })
@@ -249,12 +267,28 @@ impl TryFrom<MessageRecord> for MessageEntity {
             sender_user_id: row.sender_user_id,
             source,
             content,
+            quote_message_id: row.quote_message_id,
             created_at: row.created_at,
             recall: MessageRecallInfo {
                 recalled: row.is_recalled,
                 recalled_by_user_id: row.recalled_by_user_id,
-                recalled_at: row.recalled_at,
             },
         })
+    }
+}
+
+fn message_in_same_session(message: &MessageRecord, user_id: u64, source: &MessageSource) -> bool {
+    match source {
+        MessageSource::Private { peer_user_id } => {
+            if message.source_type != "private" {
+                return false;
+            }
+
+            (message.sender_user_id == user_id && message.source_id == *peer_user_id)
+                || (message.sender_user_id == *peer_user_id && message.source_id == user_id)
+        }
+        MessageSource::Group { group_id } => {
+            message.source_type == "group" && message.source_id == *group_id
+        }
     }
 }

@@ -8,7 +8,6 @@ pub enum MessageSegment {
     Text { text: String },
     Image { file: String, url: String },
     At { target: u64 },
-    Reply { message_id: i64 },
     Face { id: String },
 }
 
