@@ -74,18 +74,7 @@ export const faceGroups: FaceGroup[] = configuredGroups
 export const faceLibrary = faceGroups.flatMap((group) => group.faces);
 
 const faceById = new Map(faceLibrary.map((face) => [face.id, face] as const));
-const faceByLabel = new Map(
-  faceLibrary.map((face) => [face.label, face] as const),
-);
 
 export function getFaceById(id: string) {
   return faceById.get(id) ?? null;
-}
-
-export function getFaceByLabel(label: string) {
-  return faceByLabel.get(label) ?? null;
-}
-
-export function faceToken(face: Pick<FaceDefinition, "label">) {
-  return `[${face.label}]`;
 }

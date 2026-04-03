@@ -3,19 +3,24 @@ import {
   mergeAttributes,
   Node as TiptapNode,
 } from "@tiptap/core";
+import Document from "@tiptap/extension-document";
+import Hardbreak from "@tiptap/extension-hard-break";
+import Link from "@tiptap/extension-link";
+import Paragraph from "@tiptap/extension-paragraph";
 import Placeholder from "@tiptap/extension-placeholder";
+import Text from "@tiptap/extension-text";
+import { Dropcursor, TrailingNode, UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { FaceDefinition } from "@/lib/face-library";
 import { getFaceById } from "@/lib/face-library";
-import { tokenizeDraftForDisplay } from "@/lib/message-content";
 import { cn } from "@/lib/utils";
+import type { MessageSegment } from "@/types/chat";
 
 type ChatComposerProps = {
-  draft: string;
-  onDraftChange: (draft: string) => void;
+  segments: MessageSegment[];
+  onSegmentsChange: (segments: MessageSegment[]) => void;
   disabled?: boolean;
   allowMentions: boolean;
   placeholder: string;
@@ -30,8 +35,8 @@ export type ChatComposerHandle = {
   insertMention: (label: string, userId: number) => void;
 };
 
-const ChatFaceNode = TiptapNode.create({
-  name: "chatFace",
+const Face = TiptapNode.create({
+  name: "face",
   group: "inline",
   inline: true,
   atom: true,
@@ -74,41 +79,6 @@ const ChatFaceNode = TiptapNode.create({
   },
 });
 
-const ChatMentionNode = TiptapNode.create({
-  name: "chatMention",
-  group: "inline",
-  inline: true,
-  atom: true,
-  selectable: true,
-
-  addAttributes() {
-    return {
-      label: { default: "" },
-      userId: { default: 0 },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: "span[data-mention-user-id]" }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    const label = String(HTMLAttributes.label ?? "");
-    const userId = Number(HTMLAttributes.userId ?? 0);
-
-    return [
-      "span",
-      mergeAttributes(HTMLAttributes, {
-        "data-mention-user-id": userId,
-        contenteditable: "false",
-        class:
-          "mx-0.5 inline-flex select-none items-center rounded-md bg-sky-500/10 px-1.5 py-0.5 font-medium text-[13px] text-sky-700 dark:text-sky-300",
-      }),
-      `@${label}`,
-    ];
-  },
-});
-
 function inlineContentFromText(text: string): JSONContent[] {
   if (!text) {
     return [];
@@ -129,40 +99,37 @@ function inlineContentFromText(text: string): JSONContent[] {
   return content;
 }
 
-function draftToEditorContent(
-  draft: string,
-  allowMentions: boolean,
+function messageSegmentsToEditorContent(
+  segments: MessageSegment[],
 ): JSONContent {
-  const content = tokenizeDraftForDisplay(draft, { allowMentions }).flatMap(
-    (token) => {
-      if (token.kind === "text") {
-        return inlineContentFromText(token.text);
-      }
+  const content = segments.flatMap((segment) => {
+    if (segment.type === "Text") {
+      return inlineContentFromText(segment.data.text);
+    }
 
-      if (token.kind === "mention") {
-        return [
-          {
-            type: "chatMention",
-            attrs: {
-              label: token.label,
-              userId: token.userId,
-            },
-          },
-        ];
-      }
+    if (segment.type === "At") {
+      return inlineContentFromText(`@${segment.data.target}`);
+    }
 
-      const face = getFaceById(token.faceId);
+    if (segment.type === "Face") {
+      const face = getFaceById(segment.data.id);
       return [
         {
-          type: "chatFace",
+          type: "face",
           attrs: {
-            faceId: token.faceId,
+            faceId: segment.data.id,
             label: face?.label ?? "",
           },
         },
       ];
-    },
-  );
+    }
+
+    if (segment.type === "Image") {
+      return inlineContentFromText("[图片]");
+    }
+
+    return inlineContentFromText(`[回复:${segment.data.message_id}]`);
+  });
 
   return {
     type: "doc",
@@ -175,56 +142,89 @@ function draftToEditorContent(
   };
 }
 
-function draftFromNode(node: JSONContent): string {
+function pushTextSegment(segments: MessageSegment[], text: string) {
+  if (!text) {
+    return;
+  }
+
+  const previous = segments[segments.length - 1];
+  if (previous?.type === "Text") {
+    previous.data.text += text;
+    return;
+  }
+
+  segments.push({ type: "Text", data: { text } });
+}
+
+function appendSegmentsFromNode(
+  node: JSONContent,
+  segments: MessageSegment[],
+  allowMentions: boolean,
+) {
   if (node.type === "text") {
-    return node.text ?? "";
+    pushTextSegment(segments, (node.text ?? "").replace(/\u00A0/g, " "));
+    return;
   }
 
   if (node.type === "hardBreak") {
-    return "\n";
+    pushTextSegment(segments, "\n");
+    return;
   }
 
-  if (node.type === "chatFace") {
+  if (node.type === "face") {
     const faceId = String(node.attrs?.faceId ?? "");
-    const label =
-      String(node.attrs?.label ?? "") || getFaceById(faceId)?.label || "表情";
-    return `[${label}]`;
-  }
+    if (faceId) {
+      segments.push({ type: "Face", data: { id: faceId } });
+      return;
+    }
 
-  if (node.type === "chatMention") {
-    const label = String(node.attrs?.label ?? "");
-    const userId = Number(node.attrs?.userId ?? 0);
-    return `[@${label}:${userId}]`;
+    const fallbackLabel =
+      String(node.attrs?.label ?? "") || getFaceById(faceId)?.label || "表情";
+    pushTextSegment(segments, `[${fallbackLabel}]`);
+    return;
   }
 
   if (!node.content?.length) {
-    return "";
+    return;
   }
 
-  const inner = node.content.map(draftFromNode).join("");
-  if (node.type === "paragraph") {
-    return inner;
+  for (const child of node.content) {
+    appendSegmentsFromNode(child, segments, allowMentions);
   }
-
-  return inner;
 }
 
-function editorContentToDraft(content: JSONContent): string {
+function editorContentToSegments(
+  content: JSONContent,
+  allowMentions: boolean,
+): MessageSegment[] {
   if (!content.content?.length) {
-    return "";
+    return [];
   }
 
-  return content.content
-    .map((node) => draftFromNode(node))
-    .join("\n")
-    .replace(/\u00A0/g, " ");
+  const segments: MessageSegment[] = [];
+  for (const node of content.content) {
+    appendSegmentsFromNode(node, segments, allowMentions);
+  }
+
+  const lastSegment = segments[segments.length - 1];
+  if (lastSegment?.type === "Text") {
+    if (!lastSegment.data.text) {
+      segments.pop();
+    }
+  }
+
+  return segments;
+}
+
+function areSegmentsEqual(next: MessageSegment[], previous: MessageSegment[]) {
+  return JSON.stringify(next) === JSON.stringify(previous);
 }
 
 const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
   (
     {
-      draft,
-      onDraftChange,
+      segments,
+      onSegmentsChange,
       disabled = false,
       allowMentions,
       placeholder,
@@ -233,40 +233,34 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
     },
     ref,
   ) => {
-    const onDraftChangeRef = useRef(onDraftChange);
+    const onSegmentsChangeRef = useRef(onSegmentsChange);
     const onSubmitRef = useRef(onSubmit);
     const isApplyingExternalUpdateRef = useRef(false);
     const allowMentionsRef = useRef(allowMentions);
 
-    onDraftChangeRef.current = onDraftChange;
+    onSegmentsChangeRef.current = onSegmentsChange;
     onSubmitRef.current = onSubmit;
 
     const content = useMemo(
-      () => draftToEditorContent(draft, allowMentions),
-      [draft, allowMentions],
+      () => messageSegmentsToEditorContent(segments),
+      [segments],
     );
 
     const editor = useEditor({
       extensions: [
-        StarterKit.configure({
-          blockquote: false,
-          bulletList: false,
-          code: false,
-          codeBlock: false,
-          dropcursor: false,
-          gapcursor: false,
-          heading: false,
-          horizontalRule: false,
-          listItem: false,
-          orderedList: false,
-          strike: false,
-        }),
+        Document,
+        Paragraph,
+        Text,
+        Dropcursor,
+        TrailingNode,
+        UndoRedo,
+        Hardbreak,
         Placeholder.configure({
           placeholder,
           emptyEditorClass: "is-editor-empty",
         }),
-        ChatFaceNode,
-        ChatMentionNode,
+        Link,
+        Face,
       ],
       content,
       immediatelyRender: false,
@@ -322,7 +316,12 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
           return;
         }
 
-        onDraftChangeRef.current(editorContentToDraft(nextEditor.getJSON()));
+        onSegmentsChangeRef.current(
+          editorContentToSegments(
+            nextEditor.getJSON(),
+            allowMentionsRef.current,
+          ),
+        );
       },
     });
 
@@ -344,19 +343,22 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
 
       if (
         !allowMentionsChanged &&
-        editorContentToDraft(editor.getJSON()) === draft
+        areSegmentsEqual(
+          editorContentToSegments(editor.getJSON(), allowMentions),
+          segments,
+        )
       ) {
         return;
       }
 
       isApplyingExternalUpdateRef.current = true;
-      editor.commands.setContent(draftToEditorContent(draft, allowMentions), {
+      editor.commands.setContent(messageSegmentsToEditorContent(segments), {
         emitUpdate: false,
       });
       queueMicrotask(() => {
         isApplyingExternalUpdateRef.current = false;
       });
-    }, [allowMentions, draft, editor]);
+    }, [allowMentions, segments, editor]);
 
     useImperativeHandle(
       ref,
@@ -372,7 +374,7 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
             ?.chain()
             .focus()
             .insertContent({
-              type: "chatFace",
+              type: "face",
               attrs: {
                 faceId: face.id,
                 label: face.label,
@@ -380,21 +382,14 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
             })
             .run();
         },
-        insertMention(label, userId) {
+        insertMention(label, _userId) {
           editor
             ?.chain()
             .focus()
             .insertContent([
               {
-                type: "chatMention",
-                attrs: {
-                  label,
-                  userId,
-                },
-              },
-              {
                 type: "text",
-                text: " ",
+                text: `@${label} `,
               },
             ])
             .run();
@@ -415,7 +410,5 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
     );
   },
 );
-
-ChatComposer.displayName = "ChatComposer";
 
 export default ChatComposer;

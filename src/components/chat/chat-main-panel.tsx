@@ -22,16 +22,14 @@ import {
   invalidateGroupEventHistoryQuery,
   useGroupEventHistoryQuery,
 } from "@/lib/groups-query";
-import {
-  messageSegmentsToPlainText,
-  parseDraftToMessageSegments,
-} from "@/lib/message-content";
+import { messageSegmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import type {
   ChatMessage,
   ChatPoke,
   GroupEvent,
   InternalEventPayload,
+  MessageSegment,
   MessageSource,
 } from "@/types/chat";
 import type { GroupMemberProfile, GroupRole } from "@/types/group";
@@ -96,6 +94,16 @@ function formatNoticeUntilTime(ts: number): string {
   });
 }
 
+function hasSendableSegments(segments: MessageSegment[]): boolean {
+  return segments.some((segment) => {
+    if (segment.type === "Text") {
+      return segment.data.text.trim().length > 0;
+    }
+
+    return true;
+  });
+}
+
 function ChatMainPanel({
   selectedConversation,
   currentUserId,
@@ -107,7 +115,9 @@ function ChatMainPanel({
   const stickToBottomRef = useRef(true);
   const lastConversationKeyRef = useRef<string | null>(null);
   const [sendLoading, setSendLoading] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [composerSegments, setComposerSegments] = useState<MessageSegment[]>(
+    [],
+  );
   const [chatError, setChatError] = useState<string | null>(null);
   const [groupMemberCards, setGroupMemberCards] = useState<
     Record<number, string>
@@ -435,12 +445,7 @@ function ChatMainPanel({
   }, [currentUnixTime, currentUserMuteUntil, selectedConversation]);
 
   const handleSelectFace = (face: FaceDefinition) => {
-    if (composerRef.current) {
-      composerRef.current.insertFace(face);
-      return;
-    }
-
-    setDraft((previous) => `${previous}[${face.label}]`);
+    composerRef.current?.insertFace(face);
   };
 
   const handleSendMessage = async () => {
@@ -452,22 +457,18 @@ function ChatMainPanel({
       return;
     }
 
-    if (!draft.trim()) {
+    if (!hasSendableSegments(composerSegments)) {
       return;
     }
 
     setSendLoading(true);
     try {
-      const content = parseDraftToMessageSegments(draft, {
-        allowMentions: selectedConversation.source.scene === "group",
-      });
-
       await invoke("send_message", {
         userId: currentUserId,
         source: selectedConversation.source,
-        content,
+        content: composerSegments,
       });
-      setDraft("");
+      setComposerSegments([]);
       shouldScrollToBottomRef.current = true;
       await invalidateMessageHistoryQuery(
         currentUserId,
@@ -494,12 +495,19 @@ function ChatMainPanel({
 
   const handleQuoteMessage = (senderDisplayName: string, text: string) => {
     const quote = `> ${senderDisplayName}: ${text}\n`;
-    setDraft((prev) => {
-      const nextDraft = `${quote}${prev}`;
+    setComposerSegments((previous) => {
+      const quoteSegment: MessageSegment = {
+        type: "Text",
+        data: {
+          text: quote,
+        },
+      };
+
+      const nextSegments = [quoteSegment, ...previous];
       requestAnimationFrame(() => {
         composerRef.current?.moveCaretToEnd();
       });
-      return nextDraft;
+      return nextSegments;
     });
   };
 
@@ -540,12 +548,8 @@ function ChatMainPanel({
     if (selectedConversation.source.scene !== "group") {
       return;
     }
-    if (composerRef.current) {
-      composerRef.current.insertMention(targetName, targetUserId);
-      return;
-    }
 
-    setDraft((prev) => `${prev}[@${targetName}:${targetUserId}] `);
+    composerRef.current?.insertMention(targetName, targetUserId);
   };
 
   const refreshGroupMembers = async () => {
@@ -956,7 +960,11 @@ function ChatMainPanel({
           <Button
             type="button"
             className="h-8 shrink-0 gap-1.5"
-            disabled={sendLoading || isCurrentUserMuted || !draft.trim()}
+            disabled={
+              sendLoading ||
+              isCurrentUserMuted ||
+              !hasSendableSegments(composerSegments)
+            }
             onClick={() => handleSendMessage()}
           >
             <Send className="size-4" /> {isCurrentUserMuted ? "禁言中" : "发送"}
@@ -965,8 +973,8 @@ function ChatMainPanel({
 
         <ChatComposer
           ref={composerRef}
-          draft={draft}
-          onDraftChange={setDraft}
+          segments={composerSegments}
+          onSegmentsChange={setComposerSegments}
           allowMentions={selectedConversation.source.scene === "group"}
           placeholder="输入消息，Enter 发送，Shift+Enter 换行"
           disabled={sendLoading}
