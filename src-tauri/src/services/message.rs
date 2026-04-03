@@ -60,6 +60,16 @@ impl MessageService {
                 )));
             }
 
+            if content
+                .iter()
+                .any(|seg| matches!(seg, MessageSegment::AtAll))
+                && matches!(member.role, GroupRole::Member)
+            {
+                return Err(AppError::validation(
+                    "only owner/admin can mention all members",
+                ));
+            }
+
             let whole_mute = self.group_repo.get_group_whole_mute(*group_id).await?;
 
             if let Some(state) = whole_mute {
