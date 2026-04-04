@@ -1,23 +1,9 @@
-import emojiConfig from "@/assets/default-emojis/default_config.json";
-
-type EmojiConfig = {
-  normalPanelResult?: {
-    SysEmojiGroupList?: Array<{
-      groupName?: string;
-      SysEmojiList?: Array<{
-        emojiId: string;
-        describe: string;
-        isHide: boolean;
-      }>;
-    }>;
-  };
-};
+import emojiConfig from "@/assets/emojis.json";
 
 export type FaceDefinition = {
   id: string;
   label: string;
   src: string;
-  groupName: string;
 };
 
 export type FaceGroup = {
@@ -34,46 +20,33 @@ function resolveEmojiAsset(emojiId: string) {
   return emojiAssets[`../assets/default-emojis/${emojiId}.png`] ?? null;
 }
 
-function normalizeLabel(label: string) {
-  return label.startsWith("/") ? label.slice(1) : label;
-}
+export const faceGroups: FaceGroup[] = emojiConfig.map((group) => {
+  const faces = group.emojis
+    .map((emoji) => {
+      const src = resolveEmojiAsset(emoji.id);
+      if (!src) {
+        return null;
+      }
 
-const configuredGroups =
-  (emojiConfig as EmojiConfig).normalPanelResult?.SysEmojiGroupList ?? [];
+      return {
+        id: emoji.id,
+        label: emoji.label,
+        src,
+      };
+    })
+    .filter((v) => !!v);
 
-export const faceGroups: FaceGroup[] = configuredGroups
-  .map((group) => {
-    const faces =
-      group.SysEmojiList?.flatMap((emoji) => {
-        if (emoji.isHide) {
-          return [];
-        }
+  return {
+    groupName: group.groupName,
+    faces,
+  };
+});
 
-        const src = resolveEmojiAsset(emoji.emojiId);
-        if (!src) {
-          return [];
-        }
-
-        return [
-          {
-            id: emoji.emojiId,
-            label: normalizeLabel(emoji.describe),
-            src,
-            groupName: group.groupName?.trim() || "默认表情",
-          },
-        ];
-      }) ?? [];
-
-    return {
-      groupName: group.groupName?.trim() || "默认表情",
-      faces,
-    };
-  })
-  .filter((group) => group.faces.length > 0);
-
-export const faceLibrary = faceGroups.flatMap((group) => group.faces);
-
-const faceById = new Map(faceLibrary.map((face) => [face.id, face] as const));
+const faceById = new Map(
+  faceGroups
+    .flatMap((group) => group.faces)
+    .map((face) => [face.id, face] as const),
+);
 
 export function getFaceById(id: string) {
   return faceById.get(id) ?? null;

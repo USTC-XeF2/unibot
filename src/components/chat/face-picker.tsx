@@ -6,11 +6,11 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { type FaceDefinition, faceGroups } from "@/lib/face-library";
+import { faceGroups } from "@/lib/face-library";
 import { cn } from "@/lib/utils";
 
 type FacePickerProps = {
-  onSelectFace: (face: FaceDefinition) => void;
+  onSelectFace: (faceId: string) => void;
 };
 
 function FacePicker({ onSelectFace }: FacePickerProps) {
@@ -44,7 +44,7 @@ function FacePicker({ onSelectFace }: FacePickerProps) {
                     )}
                     title={face.label}
                     onClick={() => {
-                      onSelectFace(face);
+                      onSelectFace(face.id);
                       setOpen(false);
                     }}
                   >

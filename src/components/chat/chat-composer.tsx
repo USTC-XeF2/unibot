@@ -24,7 +24,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import type { FaceDefinition } from "@/lib/face-library";
 import { getFaceById } from "@/lib/face-library";
 import { cn } from "@/lib/utils";
 import type { MessageSegment } from "@/types/chat";
@@ -56,7 +55,7 @@ type ChatComposerProps = {
 export type ChatComposerHandle = {
   focus: () => void;
   moveCaretToEnd: () => void;
-  insertFace: (face: FaceDefinition) => void;
+  insertFace: (faceId: string) => void;
   insertMention: (target: number | "all") => void;
   clear: () => void;
 };
@@ -556,7 +555,12 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
         moveCaretToEnd() {
           editor?.commands.focus("end");
         },
-        insertFace(face) {
+        insertFace(faceId) {
+          const face = getFaceById(faceId);
+          if (!face) {
+            return;
+          }
+
           editor
             ?.chain()
             .focus()

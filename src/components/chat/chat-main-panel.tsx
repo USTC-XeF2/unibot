@@ -10,7 +10,6 @@ import ChatMessageItem, {
 import FacePicker from "@/components/chat/face-picker";
 import { Button } from "@/components/ui/button";
 import { useChatEventBus } from "@/hooks/use-chat-event-bus";
-import type { FaceDefinition } from "@/lib/face-library";
 import { messageSegmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
@@ -376,10 +375,6 @@ function ChatMainPanel({
         };
       });
   }, [selectedSource.scene, groupMembersById, users, currentUserId]);
-
-  const handleSelectFace = (face: FaceDefinition) => {
-    composerRef.current?.insertFace(face);
-  };
 
   const handleSendMessage = async () => {
     if (sendLoading) {
@@ -910,7 +905,9 @@ function ChatMainPanel({
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
-            <FacePicker onSelectFace={handleSelectFace} />
+            <FacePicker
+              onSelectFace={(id) => composerRef.current?.insertFace(id)}
+            />
             <Button type="button" variant="ghost" size="icon-sm" title="图片">
               <Image className="size-4" />
             </Button>
