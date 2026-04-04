@@ -14,7 +14,7 @@ pub struct SendMessageResult {
     pub sender_user_id: u64,
     pub source: MessageSource,
     pub content: Vec<MessageSegment>,
-    pub quote_message_id: Option<i64>,
+    pub quoted_message_id: Option<i64>,
     pub recall: MessageRecallInfo,
     pub created_at: u64,
 }
@@ -36,7 +36,7 @@ impl MessageService {
         user_id: u64,
         source: MessageSource,
         content: Vec<MessageSegment>,
-        quote_message_id: Option<i64>,
+        quoted_message_id: Option<i64>,
     ) -> AppResult<SendMessageResult> {
         core.require_user_context(user_id)?;
 
@@ -91,7 +91,7 @@ impl MessageService {
                 .await?;
         }
 
-        if let Some(quoted_id) = quote_message_id {
+        if let Some(quoted_id) = quoted_message_id {
             let quoted_message =
                 self.repo
                     .get_message_by_id(quoted_id)
@@ -118,7 +118,7 @@ impl MessageService {
                 source_type: source_type.to_string(),
                 source_id,
                 content_json,
-                quote_message_id,
+                quoted_message_id,
                 created_at: now,
             })
             .await?;
@@ -141,7 +141,7 @@ impl MessageService {
             sender_user_id: user_id,
             source,
             content,
-            quote_message_id,
+            quoted_message_id,
             recall: MessageRecallInfo {
                 recalled: false,
                 recalled_by_user_id: None,
@@ -253,7 +253,7 @@ impl TryFrom<MessageRecord> for SendMessageResult {
             sender_user_id: row.sender_user_id,
             source,
             content,
-            quote_message_id: row.quote_message_id,
+            quoted_message_id: row.quoted_message_id,
             recall: MessageRecallInfo {
                 recalled: row.is_recalled,
                 recalled_by_user_id: row.recalled_by_user_id,
@@ -277,7 +277,7 @@ impl TryFrom<MessageRecord> for MessageEntity {
             sender_user_id: row.sender_user_id,
             source,
             content,
-            quote_message_id: row.quote_message_id,
+            quoted_message_id: row.quoted_message_id,
             created_at: row.created_at,
             recall: MessageRecallInfo {
                 recalled: row.is_recalled,

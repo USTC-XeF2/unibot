@@ -14,7 +14,7 @@ export type ChatMessage = {
   sender_user_id: number;
   source: MessageSource;
   content: MessageSegment[];
-  quote_message_id: number | null;
+  quoted_message_id: number | null;
   recall: {
     recalled: boolean;
     recalled_by_user_id?: number | null;

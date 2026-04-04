@@ -1,14 +1,9 @@
 import { create } from "zustand";
 import type { MessageSegment } from "@/types/chat";
 
-type QuotedMessage = {
-  messageId: number;
-  summary: string;
-};
-
 type ConversationComposerState = {
   segments: MessageSegment[];
-  quotedMessage: QuotedMessage | null;
+  quotedMessageId: number | null;
 };
 
 type ChatComposerStore = {
@@ -16,14 +11,14 @@ type ChatComposerStore = {
   setSegments: (conversationKey: string, segments: MessageSegment[]) => void;
   setQuotedMessage: (
     conversationKey: string,
-    quotedMessage: QuotedMessage | null,
+    quotedMessageId: number | null,
   ) => void;
   clearConversationState: (conversationKey: string) => void;
 };
 
 export const defaultConversationComposerState: ConversationComposerState = {
   segments: [],
-  quotedMessage: null,
+  quotedMessageId: null,
 };
 
 export const useChatComposerStore = create<ChatComposerStore>((set) => ({
@@ -39,14 +34,14 @@ export const useChatComposerStore = create<ChatComposerStore>((set) => ({
         },
       },
     })),
-  setQuotedMessage: (conversationKey, quotedMessage) =>
+  setQuotedMessage: (conversationKey, quotedMessageId) =>
     set((state) => ({
       byConversation: {
         ...state.byConversation,
         [conversationKey]: {
           ...(state.byConversation[conversationKey] ??
             defaultConversationComposerState),
-          quotedMessage,
+          quotedMessageId,
         },
       },
     })),

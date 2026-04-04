@@ -200,18 +200,18 @@ export function useSendMessageMutation() {
       userId,
       source,
       content,
-      quoteMessageId,
+      quotedMessageId,
     }: {
       userId: number;
       source: MessageSource;
       content: MessageSegment[];
-      quoteMessageId: number | null;
+      quotedMessageId: number | null;
     }) =>
       invoke("send_message", {
         userId,
         source,
         content,
-        quoteMessageId,
+        quotedMessageId,
       }),
     onSuccess: (_, variables) =>
       invalidateMessageHistoryQuery(variables.userId, variables.source),

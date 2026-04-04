@@ -87,7 +87,7 @@ pub struct MessageEntity {
     pub sender_user_id: u64,
     pub source: MessageSource,
     pub content: Vec<MessageSegment>,
-    pub quote_message_id: Option<i64>,
+    pub quoted_message_id: Option<i64>,
     pub created_at: u64,
     pub recall: MessageRecallInfo,
 }

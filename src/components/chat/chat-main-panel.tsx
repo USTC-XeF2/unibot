@@ -16,7 +16,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useChatEventBus } from "@/hooks/use-chat-event-bus";
-import { messageSegmentsToPlainText } from "@/lib/message-content";
+import { segmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
   useKickGroupMemberMutation,
@@ -34,9 +34,12 @@ import {
   useGroupMembersQuery,
   useMessageHistoryQuery,
   usePokeHistoryQuery,
+  useUserGroupsQuery,
+  useUsersQuery,
 } from "@/lib/query";
 import { formatMessageTimestamp } from "@/lib/time-format";
 import { resolveUserDisplayName } from "@/lib/utils";
+import { useAuthStore } from "@/store/use-auth-store";
 import {
   defaultConversationComposerState,
   useChatComposerStore,
@@ -49,17 +52,9 @@ import type {
 } from "@/types/chat";
 import type { GroupEvent } from "@/types/event";
 import type { GroupMemberProfile, GroupRole } from "@/types/group";
-import type { UserProfile } from "@/types/user";
-
-type ConversationSummary = {
-  title: string;
-  source: MessageSource;
-};
 
 type ChatMainPanelProps = {
-  selectedConversation: ConversationSummary;
-  currentUserId: number;
-  users: UserProfile[];
+  conversation: MessageSource;
 };
 
 type ChatTimelineItem =
@@ -94,16 +89,18 @@ function hasSendableSegments(segments: MessageSegment[]): boolean {
   });
 }
 
-function ChatMainPanel({
-  selectedConversation,
-  currentUserId,
-  users,
-}: ChatMainPanelProps) {
+function ChatMainPanel({ conversation }: ChatMainPanelProps) {
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const usersQuery = useUsersQuery();
+  const groupsQuery = useUserGroupsQuery(currentUserId);
+  const users = usersQuery.data ?? [];
+  const groups = groupsQuery.data ?? [];
+
   const conversationKey =
-    selectedConversation.source.scene === "group"
-      ? `group-${selectedConversation.source.group_id}`
-      : `private-${selectedConversation.source.peer_user_id}`;
-  const selectedSource = selectedConversation.source;
+    conversation.scene === "group"
+      ? `group-${conversation.group_id}`
+      : `private-${conversation.peer_user_id}`;
+  const selectedSource = conversation;
 
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
@@ -121,7 +118,7 @@ function ChatMainPanel({
     (state) => state.setQuotedMessage,
   );
   const composerSegments = conversationComposerState.segments;
-  const quotedMessage = conversationComposerState.quotedMessage;
+  const quotedMessageId = conversationComposerState.quotedMessageId;
   const [groupMembersById, setGroupMembersById] = useState<
     Record<number, GroupMemberProfile>
   >({});
@@ -138,11 +135,26 @@ function ChatMainPanel({
 
   const groupMembersQuery = useGroupMembersQuery(
     currentUserId,
-    selectedConversation.source.scene === "group"
-      ? selectedConversation.source.group_id
-      : 0,
-    selectedConversation.source.scene === "group",
+    conversation.scene === "group" ? conversation.group_id : 0,
+    conversation.scene === "group",
   );
+
+  const conversationTitle = useMemo(() => {
+    if (conversation.scene === "private") {
+      const peer = users.find(
+        (user) => user.user_id === conversation.peer_user_id,
+      );
+      return peer?.nickname;
+    }
+
+    const group = groups.find(
+      (entry) => entry.group_id === conversation.group_id,
+    );
+    if (!group) {
+      return;
+    }
+    return `${group.group_name} (${group.member_count})`;
+  }, [conversation, groups, users]);
 
   useEffect(() => {
     if (groupMembersQuery.data) {
@@ -156,21 +168,15 @@ function ChatMainPanel({
 
   const messagesQuery = useMessageHistoryQuery(
     currentUserId,
-    selectedConversation.source,
+    conversation,
     100,
   );
-  const pokesQuery = usePokeHistoryQuery(
-    currentUserId,
-    selectedConversation.source,
-    100,
-  );
+  const pokesQuery = usePokeHistoryQuery(currentUserId, conversation, 100);
   const groupEventsQuery = useGroupEventHistoryQuery(
     currentUserId,
-    selectedConversation.source.scene === "group"
-      ? selectedConversation.source.group_id
-      : 0,
+    conversation.scene === "group" ? conversation.group_id : 0,
     100,
-    selectedConversation.source.scene === "group",
+    conversation.scene === "group",
   );
   const messages = useMemo<ChatMessage[]>(() => {
     const history = messagesQuery.data ?? [];
@@ -252,7 +258,7 @@ function ChatMainPanel({
       shouldScrollToBottomRef.current = false;
       stickToBottomRef.current = true;
     });
-  }, [timeline.length]);
+  }, [timeline]);
 
   const refreshGroupMembers = useCallback(async () => {
     if (selectedSource.scene !== "group") {
@@ -314,19 +320,19 @@ function ChatMainPanel({
   });
 
   const myGroupRole: GroupRole | null = useMemo(() => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return null;
     }
     return groupMembersById[currentUserId]?.role ?? null;
-  }, [currentUserId, groupMembersById, selectedConversation]);
+  }, [conversation, currentUserId, groupMembersById]);
 
   const currentUserMuteUntil = useMemo(() => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return null;
     }
     const muteUntil = groupMembersById[currentUserId]?.mute_until;
     return typeof muteUntil === "number" ? muteUntil : null;
-  }, [currentUserId, groupMembersById, selectedConversation]);
+  }, [conversation, currentUserId, groupMembersById]);
 
   useEffect(() => {
     if (!currentUserMuteUntil || currentUserMuteUntil <= currentUnixTime) {
@@ -347,11 +353,11 @@ function ChatMainPanel({
   }, [currentUnixTime, currentUserMuteUntil]);
 
   const isCurrentUserMuted = useMemo(() => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return false;
     }
     return !!currentUserMuteUntil && currentUserMuteUntil > currentUnixTime;
-  }, [currentUnixTime, currentUserMuteUntil, selectedConversation]);
+  }, [conversation, currentUnixTime, currentUserMuteUntil]);
 
   const mentionableMembers = useMemo<MentionableUser[]>(() => {
     if (selectedSource.scene !== "group") return [];
@@ -386,9 +392,9 @@ function ChatMainPanel({
     try {
       await sendMessageMutation.mutateAsync({
         userId: currentUserId,
-        source: selectedConversation.source,
+        source: conversation,
         content: composerSegments,
-        quoteMessageId: quotedMessage?.messageId ?? null,
+        quotedMessageId,
       });
       composerRef.current?.clear();
       setComposerSegments(conversationKey, []);
@@ -407,24 +413,13 @@ function ChatMainPanel({
     }
   };
 
-  const handleQuoteMessage = (
-    message: ChatMessage,
-    senderDisplayName: string,
-  ) => {
-    const normalizedText = messageSegmentsToPlainText(message.content)
-      .trim()
-      .replace(/\s+/g, " ");
-    const summary = `${senderDisplayName}: ${normalizedText || "[空消息]"}`;
-
-    setQuotedMessage(conversationKey, {
-      messageId: message.id,
-      summary,
-    });
+  const handleQuoteMessage = (message: ChatMessage) => {
+    setQuotedMessage(conversationKey, message.id);
     requestAnimationFrame(() => {
       composerRef.current?.focus();
 
       if (
-        selectedConversation.source.scene === "group" &&
+        conversation.scene === "group" &&
         message.sender_user_id !== currentUserId
       ) {
         composerRef.current?.insertMention(message.sender_user_id);
@@ -437,7 +432,7 @@ function ChatMainPanel({
       await recallMessageMutation.mutateAsync({
         userId: currentUserId,
         messageId,
-        source: selectedConversation.source,
+        source: conversation,
       });
     } catch (error) {
       toast.error(String(error));
@@ -448,7 +443,7 @@ function ChatMainPanel({
     try {
       await pokeUserMutation.mutateAsync({
         userId: currentUserId,
-        source: selectedConversation.source,
+        source: conversation,
         targetUserId,
       });
     } catch (error) {
@@ -458,26 +453,26 @@ function ChatMainPanel({
 
   const handleAtUser = useCallback(
     (targetUserId: number) => {
-      if (selectedConversation.source.scene !== "group") {
+      if (conversation.scene !== "group") {
         return;
       }
 
       composerRef.current?.insertMention(targetUserId);
     },
-    [selectedConversation.source.scene],
+    [conversation.scene],
   );
 
   const handleMuteMember = async (
     targetUserId: number,
     durationSeconds: number,
   ) => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return;
     }
     try {
       await muteGroupMemberMutation.mutateAsync({
         userId: currentUserId,
-        groupId: selectedConversation.source.group_id,
+        groupId: conversation.group_id,
         targetUserId,
         durationSeconds,
       });
@@ -487,7 +482,7 @@ function ChatMainPanel({
   };
 
   const handleKickMember = async (targetUserId: number) => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return;
     }
     const confirmed = await confirmDialog({
@@ -502,7 +497,7 @@ function ChatMainPanel({
     try {
       await kickGroupMemberMutation.mutateAsync({
         userId: currentUserId,
-        groupId: selectedConversation.source.group_id,
+        groupId: conversation.group_id,
         targetUserId,
       });
       await refreshGroupMembers();
@@ -515,13 +510,13 @@ function ChatMainPanel({
     targetUserId: number,
     makeAdmin: boolean,
   ) => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return;
     }
     try {
       await setGroupMemberRoleMutation.mutateAsync({
         userId: currentUserId,
-        groupId: selectedConversation.source.group_id,
+        groupId: conversation.group_id,
         targetUserId,
         isAdmin: makeAdmin,
       });
@@ -532,13 +527,13 @@ function ChatMainPanel({
   };
 
   const handleSetTitle = async (targetUserId: number, title: string) => {
-    if (selectedConversation.source.scene !== "group") {
+    if (conversation.scene !== "group") {
       return;
     }
     try {
       await setGroupMemberTitleMutation.mutateAsync({
         userId: currentUserId,
-        groupId: selectedConversation.source.group_id,
+        groupId: conversation.group_id,
         targetUserId,
         title,
       });
@@ -646,7 +641,7 @@ function ChatMainPanel({
     const message = item.message;
 
     const senderDisplayName =
-      selectedConversation.source.scene === "group"
+      conversation.scene === "group"
         ? resolveUserDisplayName(
             message.sender_user_id,
             sender.nickname,
@@ -655,12 +650,12 @@ function ChatMainPanel({
         : sender.nickname;
 
     const quotedMessagePreview = (() => {
-      const quoteMessageId = message.quote_message_id;
-      if (!quoteMessageId) {
+      const quotedMessageId = message.quoted_message_id;
+      if (!quotedMessageId) {
         return null;
       }
 
-      const quotedMessage = messages.find((msg) => msg.id === quoteMessageId);
+      const quotedMessage = messages.find((msg) => msg.id === quotedMessageId);
       if (!quotedMessage) {
         return {
           senderDisplayName: "引用",
@@ -687,7 +682,7 @@ function ChatMainPanel({
 
       return {
         senderDisplayName: quotedSenderDisplayName,
-        summary: messageSegmentsToPlainText(quotedMessage.content),
+        summary: segmentsToPlainText(quotedMessage.content),
       };
     })();
     const senderGroupProfile = groupMembersById[message.sender_user_id];
@@ -700,24 +695,24 @@ function ChatMainPanel({
       !message.recall.recalled &&
       (message.sender_user_id === currentUserId ||
         (item.kind === "message" &&
-          selectedConversation.source.scene === "group" &&
+          conversation.scene === "group" &&
           (myGroupRole === "owner" || myGroupRole === "admin")));
     const canAt =
-      selectedConversation.source.scene === "group" &&
+      conversation.scene === "group" &&
       message.sender_user_id !== currentUserId;
     const canMute =
-      selectedConversation.source.scene === "group" &&
+      conversation.scene === "group" &&
       message.sender_user_id !== currentUserId &&
       ((myGroupRole === "owner" && canManageTargetByOwner) ||
         (myGroupRole === "admin" && canManageTargetByAdmin));
     const canKick = canMute;
     const canToggleAdmin =
-      selectedConversation.source.scene === "group" &&
+      conversation.scene === "group" &&
       myGroupRole === "owner" &&
       message.sender_user_id !== currentUserId &&
       targetRole !== "owner";
     const canSetTitle =
-      selectedConversation.source.scene === "group" &&
+      conversation.scene === "group" &&
       myGroupRole === "owner" &&
       (targetRole !== "owner" || message.sender_user_id === currentUserId);
 
@@ -807,13 +802,12 @@ function ChatMainPanel({
       {
         key: "copy",
         label: "复制",
-        onSelect: () =>
-          handleCopyMessage(messageSegmentsToPlainText(message.content)),
+        onSelect: () => handleCopyMessage(segmentsToPlainText(message.content)),
       },
       {
         key: "quote",
         label: "引用",
-        onSelect: () => handleQuoteMessage(message, senderDisplayName),
+        onSelect: () => handleQuoteMessage(message),
       },
     ];
 
@@ -836,7 +830,7 @@ function ChatMainPanel({
         senderDisplayName={senderDisplayName}
         senderRole={senderGroupProfile?.role}
         senderTitle={senderGroupProfile?.title}
-        showSenderName={selectedConversation.source.scene === "group"}
+        showSenderName={conversation.scene === "group"}
         message={message}
         quotedMessagePreview={quotedMessagePreview}
         onAtClick={(t) => composerRef.current?.insertMention(t)}
@@ -849,10 +843,44 @@ function ChatMainPanel({
     );
   });
 
+  const quotedMessageSummary = useMemo(() => {
+    if (!quotedMessageId) {
+      return null;
+    }
+
+    const quotedMessage = messages.find(
+      (message) => message.id === quotedMessageId,
+    );
+    if (!quotedMessage) {
+      return "[引用消息不存在]";
+    }
+
+    const quotedSender = users.find(
+      (user) => user.user_id === quotedMessage.sender_user_id,
+    );
+    const quotedSenderDisplayName =
+      conversation.scene === "group"
+        ? resolveUserDisplayName(
+            quotedMessage.sender_user_id,
+            quotedSender?.nickname,
+            groupMembersById,
+          )
+        : (quotedSender?.nickname ?? String(quotedMessage.sender_user_id));
+
+    if (quotedMessage.recall.recalled) {
+      return `${quotedSenderDisplayName}: [该消息已撤回]`;
+    }
+
+    const normalizedText = segmentsToPlainText(quotedMessage.content)
+      .trim()
+      .replace(/\s+/g, " ");
+    return `${quotedSenderDisplayName}: ${normalizedText || "[空消息]"}`;
+  }, [conversation.scene, groupMembersById, messages, quotedMessageId, users]);
+
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       <header className="flex items-center border-b px-4 py-2">
-        <p className="font-semibold text-sm">{selectedConversation.title}</p>
+        <p className="font-semibold text-sm">{conversationTitle}</p>
       </header>
 
       <ResizablePanelGroup orientation="vertical" className="flex-1">
@@ -888,11 +916,11 @@ function ChatMainPanel({
             </div>
 
             <div className="min-w-0 flex-1">
-              {quotedMessage ? (
+              {quotedMessageId ? (
                 <div className="flex items-center gap-2 rounded-md border border-border/80 bg-muted/40 px-2 py-1 text-xs">
                   <span className="shrink-0 text-muted-foreground">引用</span>
                   <span className="min-w-0 flex-1 truncate text-foreground/90">
-                    {quotedMessage.summary}
+                    {quotedMessageSummary}
                   </span>
                   <Button
                     type="button"
@@ -931,7 +959,7 @@ function ChatMainPanel({
               setComposerSegments(conversationKey, segments)
             }
             mentionSupport={
-              selectedConversation.source.scene === "group"
+              conversation.scene === "group"
                 ? myGroupRole === "owner" || myGroupRole === "admin"
                   ? "all"
                   : "user"
