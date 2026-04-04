@@ -41,7 +41,7 @@ const ConfirmDialogModal = NiceModal.create((props: DialogProps) => {
       open={modal.visible}
       onOpenChange={(open) => {
         if (!open) {
-          void closeWith(false);
+          closeWith(false);
         }
       }}
     >
@@ -51,12 +51,12 @@ const ConfirmDialogModal = NiceModal.create((props: DialogProps) => {
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => void closeWith(false)}>
+          <AlertDialogCancel onClick={() => closeWith(false)}>
             取消
           </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            onClick={() => void closeWith(true)}
+            onClick={() => closeWith(true)}
           >
             {confirmText}
           </AlertDialogAction>

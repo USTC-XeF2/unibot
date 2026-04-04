@@ -1,12 +1,9 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
-import type {
-  ChatMessage,
-  ChatPoke,
-  InternalEventPayload,
-  MessageSource,
-} from "@/types/chat";
+import type { ChatMessage, ChatPoke, MessageSource } from "@/types/chat";
+import type { InternalEventPayload } from "@/types/event";
 
 function normalizePrivateSourceFromEvent(
   source: MessageSource,
@@ -28,49 +25,13 @@ function normalizePrivateSourceFromEvent(
   return { scene: "private", peer_user_id: peerCandidate };
 }
 
-type HistoryQueryKey = readonly [
-  "chat",
-  "history",
-  number,
-  "private" | "group",
-  number,
-  number,
-];
-
-type PokeHistoryQueryKey = readonly [
-  "chat",
-  "poke-history",
-  number,
-  "private" | "group",
-  number,
-  number,
-];
-
-function sourceKey(
-  source: MessageSource,
-): readonly ["private" | "group", number] {
-  if (source.scene === "private") {
-    return ["private", source.peer_user_id] as const;
-  }
-  return ["group", source.group_id] as const;
-}
-
-export function messageHistoryQueryKey(
-  userId: number,
-  source: MessageSource,
-  limit: number,
-): HistoryQueryKey {
-  const [scene, targetId] = sourceKey(source);
-  return ["chat", "history", userId, scene, targetId, limit];
-}
-
 export function messageHistoryQueryOptions(
   userId: number,
   source: MessageSource,
   limit: number,
 ) {
   return queryOptions({
-    queryKey: messageHistoryQueryKey(userId, source, limit),
+    queryKey: queryKeys.chat.history(userId, source, limit),
     queryFn: () =>
       invoke<ChatMessage[]>("list_message_history", {
         userId,
@@ -89,22 +50,13 @@ export function useMessageHistoryQuery(
   return useQuery(messageHistoryQueryOptions(userId, source, limit));
 }
 
-export function pokeHistoryQueryKey(
-  userId: number,
-  source: MessageSource,
-  limit: number,
-): PokeHistoryQueryKey {
-  const [scene, targetId] = sourceKey(source);
-  return ["chat", "poke-history", userId, scene, targetId, limit];
-}
-
-export function pokeHistoryQueryOptions(
+export function usePokeHistoryQuery(
   userId: number,
   source: MessageSource,
   limit: number,
 ) {
-  return queryOptions({
-    queryKey: pokeHistoryQueryKey(userId, source, limit),
+  return useQuery({
+    queryKey: queryKeys.chat.poke(userId, source, limit),
     queryFn: () =>
       invoke<ChatPoke[]>("list_poke_history", {
         userId,
@@ -113,14 +65,6 @@ export function pokeHistoryQueryOptions(
       }),
     retry: false,
   });
-}
-
-export function usePokeHistoryQuery(
-  userId: number,
-  source: MessageSource,
-  limit: number,
-) {
-  return useQuery(pokeHistoryQueryOptions(userId, source, limit));
 }
 
 export function sourceFromInternalEvent(
@@ -198,7 +142,7 @@ export function sourceFromInternalEvent(
 
 export function invalidateMessageHistoryQueries(userId: number) {
   return queryClient.invalidateQueries({
-    queryKey: ["chat", "history", userId],
+    queryKey: queryKeys.chat.historyByUser(userId),
     refetchType: "active",
   });
 }
@@ -207,16 +151,15 @@ export function invalidateMessageHistoryQuery(
   userId: number,
   source: MessageSource,
 ) {
-  const [scene, targetId] = sourceKey(source);
   return queryClient.invalidateQueries({
-    queryKey: ["chat", "history", userId, scene, targetId],
+    queryKey: queryKeys.chat.historyPrefix(userId, source),
     refetchType: "active",
   });
 }
 
 export function invalidatePokeHistoryQueries(userId: number) {
   return queryClient.invalidateQueries({
-    queryKey: ["chat", "poke-history", userId],
+    queryKey: queryKeys.chat.pokeByUser(userId),
     refetchType: "active",
   });
 }
@@ -225,9 +168,8 @@ export function invalidatePokeHistoryQuery(
   userId: number,
   source: MessageSource,
 ) {
-  const [scene, targetId] = sourceKey(source);
   return queryClient.invalidateQueries({
-    queryKey: ["chat", "poke-history", userId, scene, targetId],
+    queryKey: queryKeys.chat.pokePrefix(userId, source),
     refetchType: "active",
   });
 }

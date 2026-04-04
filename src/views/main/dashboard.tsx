@@ -1,7 +1,6 @@
 import { Bot, MessageCircle, SquareUser, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useGroupsQuery } from "@/lib/groups-query";
-import { useUsersQuery } from "@/lib/users-query";
+import { useGroupsQuery, useUsersQuery } from "@/lib/query";
 
 function StatValue({
   value,

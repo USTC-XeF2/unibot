@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { confirmDialog } from "@/lib/modal";
-import { invalidateUsersQuery, useUsersQuery } from "@/lib/users-query";
+import { invalidateUsersQuery, useUsersQuery } from "@/lib/query";
 
 function UserManagementView() {
   const navigate = useNavigate();
@@ -138,7 +138,7 @@ function UserManagementView() {
                             aria-label="打开聊天窗口"
                             onClick={(event) => {
                               event.stopPropagation();
-                              void handleOpenUserChatWindow(user.user_id);
+                              handleOpenUserChatWindow(user.user_id);
                             }}
                           >
                             <MessageCircle className="size-4" />
@@ -152,10 +152,7 @@ function UserManagementView() {
                             disabled={deletingUserId === user.user_id}
                             onClick={(event) => {
                               event.stopPropagation();
-                              void handleDeleteUser(
-                                user.user_id,
-                                user.nickname,
-                              );
+                              handleDeleteUser(user.user_id, user.nickname);
                             }}
                           >
                             <Trash2 className="size-4" />

@@ -108,14 +108,9 @@ impl GroupService {
         Ok(created)
     }
 
-    pub async fn list_group_requests(
-        &self,
-        user_id: u64,
-        group_id: u64,
-    ) -> AppResult<Vec<GroupRequestEntity>> {
-        self.ensure_group_member(group_id, user_id).await?;
+    pub async fn list_group_requests(&self, user_id: u64) -> AppResult<Vec<GroupRequestEntity>> {
         self.repo
-            .list_group_requests(group_id)
+            .list_group_requests(user_id)
             .await
             .map_err(Into::into)
     }

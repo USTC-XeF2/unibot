@@ -146,11 +146,10 @@ pub async fn create_group_request(
 pub async fn list_group_requests(
     services: tauri::State<'_, ServiceHub>,
     user_id: u64,
-    group_id: u64,
 ) -> Result<Vec<GroupRequestEntity>, String> {
     services
         .group
-        .list_group_requests(user_id, group_id)
+        .list_group_requests(user_id)
         .await
         .into_command_result()
 }

@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { invalidateUsersQuery } from "@/lib/users-query";
+import { invalidateUsersQuery } from "@/lib/query";
 import type { UserProfile } from "@/types/user";
 
 type CreateUserSheetProps = {

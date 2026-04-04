@@ -7,6 +7,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { getFaceById } from "@/lib/face-library";
+import { formatMessageTimestamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, MessageSegment } from "@/types/chat";
 import type { GroupRole } from "@/types/group";
@@ -55,38 +56,6 @@ function renderFallbackSegment(label: string, key: string) {
       {label}
     </span>
   );
-}
-
-function formatMessageTime(ts: number): string {
-  if (!ts) {
-    return "";
-  }
-  const date = new Date(ts * 1000);
-  const now = new Date();
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (sameDay) {
-    return date.toLocaleTimeString("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  }
-
-  const datePart = date.toLocaleDateString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const timePart = date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-
-  return `${datePart} ${timePart}`;
 }
 
 function ChatMessageContent({
@@ -176,7 +145,7 @@ function ChatMessageItem({
   avatarActions,
   messageActions,
 }: ChatMessageItemProps) {
-  const messageTime = formatMessageTime(message.created_at);
+  const messageTime = formatMessageTimestamp(message.created_at);
   const roleLabel =
     senderRole === "owner" ? "群主" : senderRole === "admin" ? "管理员" : null;
   const cleanTitle = senderTitle?.trim() ?? "";

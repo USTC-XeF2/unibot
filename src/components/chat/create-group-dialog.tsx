@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,14 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { invalidateGroupsQuery } from "@/lib/groups-query";
+import { useCreateGroupMutation } from "@/lib/mutations";
+import { useAuthStore } from "@/store/use-auth-store";
 import type { GroupProfile } from "@/types/group";
 import type { UserProfile } from "@/types/user";
 
 type CreateGroupDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentUserId: number;
   users: UserProfile[];
   groups: GroupProfile[];
 };
@@ -26,17 +25,18 @@ type CreateGroupDialogProps = {
 function CreateGroupDialog({
   open,
   onOpenChange,
-  currentUserId,
   users,
   groups,
 }: CreateGroupDialogProps) {
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
   const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState<
     number[]
   >([]);
   const [groupIdInput, setGroupIdInput] = useState("");
   const [groupNameInput, setGroupNameInput] = useState("");
-  const [creatingGroup, setCreatingGroup] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const createGroupMutation = useCreateGroupMutation();
+  const creatingGroup = createGroupMutation.isPending;
 
   const selectableUsers = useMemo(
     () => users.filter((user) => user.user_id !== currentUserId),
@@ -57,6 +57,11 @@ function CreateGroupDialog({
       return;
     }
 
+    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+      setActionError("当前用户无效，无法创建群聊");
+      return;
+    }
+
     const parsedGroupId = Number(groupIdInput.trim());
     if (!Number.isInteger(parsedGroupId) || parsedGroupId <= 0) {
       setActionError("群聊 ID 必须是大于 0 的整数");
@@ -72,30 +77,25 @@ function CreateGroupDialog({
       return;
     }
 
-    setCreatingGroup(true);
     try {
       const initialMemberUserIds = [...selectedGroupMemberIds].sort(
         (a, b) => a - b,
       );
 
-      await invoke("upsert_group", {
+      await createGroupMutation.mutateAsync({
         userId: currentUserId,
         groupId: parsedGroupId,
         groupName: parsedGroupName,
-        maxMemberCount: 500,
         initialMemberUserIds,
       });
 
-      await invalidateGroupsQuery();
       setGroupIdInput("");
       setGroupNameInput("");
       setSelectedGroupMemberIds([]);
       setActionError(null);
       onOpenChange(false);
     } catch (error) {
-      setActionError(error as string);
-    } finally {
-      setCreatingGroup(false);
+      setActionError(String(error));
     }
   };
 
@@ -190,7 +190,7 @@ function CreateGroupDialog({
             groupIdInput.trim().length === 0 ||
             groupNameInput.trim().length === 0
           }
-          onClick={() => void handleCreateGroup()}
+          onClick={() => handleCreateGroup()}
         >
           {creatingGroup
             ? "创建中..."

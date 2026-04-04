@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { invalidateUsersQuery, useUsersQuery } from "@/lib/users-query";
+import { invalidateUsersQuery, useUsersQuery } from "@/lib/query";
+import { resolveUserDisplayName } from "@/lib/utils";
 import type { UserProfile } from "@/types/user";
 
 type UseEditableFieldReturn = {
@@ -160,9 +161,7 @@ function UserSettingsView() {
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() =>
-                            void handleSave("nickname", nicknameField)
-                          }
+                          onClick={() => handleSave("nickname", nicknameField)}
                         >
                           <Save className="size-3.5" />
                           保存
@@ -180,7 +179,10 @@ function UserSettingsView() {
                   ) : (
                     <>
                       <span className="truncate font-semibold text-lg">
-                        {nicknameField.value || `用户 ${parsedUserId}`}
+                        {resolveUserDisplayName(
+                          user.user_id,
+                          nicknameField.value,
+                        )}
                       </span>
                       <Button
                         type="button"
@@ -233,7 +235,7 @@ function UserSettingsView() {
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => void handleSave("avatar", avatarField)}
+                      onClick={() => handleSave("avatar", avatarField)}
                     >
                       <Save className="size-3.5" />
                       保存
@@ -288,7 +290,7 @@ function UserSettingsView() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => void handleSave("signature", signatureField)}
+                    onClick={() => handleSave("signature", signatureField)}
                   >
                     <Save className="size-3.5" />
                     保存

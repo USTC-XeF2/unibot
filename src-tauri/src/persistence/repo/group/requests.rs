@@ -30,17 +30,43 @@ impl GroupRepo {
 
     pub async fn list_group_requests(
         &self,
-        group_id: u64,
+        user_id: u64,
     ) -> Result<Vec<GroupRequestEntity>, sqlx::Error> {
         let rows = sqlx::query_as::<_, GroupRequestRow>(
             r#"
-            SELECT id, group_id, request_type, initiator_user_id, target_user_id, comment, state, created_at, handled_at, operator_user_id
-            FROM group_requests
-            WHERE group_id = ?1
-            ORDER BY created_at DESC
+            SELECT
+                gr.id,
+                gr.group_id,
+                gr.request_type,
+                gr.initiator_user_id,
+                gr.target_user_id,
+                gr.comment,
+                gr.state,
+                gr.created_at,
+                gr.handled_at,
+                gr.operator_user_id
+            FROM group_requests gr
+            LEFT JOIN group_members gm
+                ON gm.group_id = gr.group_id
+               AND gm.user_id = ?1
+            WHERE gr.state = 0
+              AND (
+                (
+                    gr.request_type = 0
+                    AND gm.role IN (0, 1)
+                )
+                OR (
+                    gr.request_type = 1
+                    AND (
+                        gr.target_user_id = ?1
+                        OR gm.role IN (0, 1)
+                    )
+                )
+              )
+            ORDER BY gr.created_at DESC
             "#,
         )
-        .bind(group_id as i64)
+        .bind(user_id as i64)
         .fetch_all(&self.pool)
         .await?;
 

@@ -1,7 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { File, Image, Send, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChatComposer, {
   type ChatComposerHandle,
   type MentionableUser,
@@ -11,34 +9,45 @@ import ChatMessageItem, {
 } from "@/components/chat/chat-message-item";
 import FacePicker from "@/components/chat/face-picker";
 import { Button } from "@/components/ui/button";
-import {
-  invalidateMessageHistoryQuery,
-  invalidatePokeHistoryQuery,
-  sourceFromInternalEvent,
-  useMessageHistoryQuery,
-  usePokeHistoryQuery,
-} from "@/lib/chat-query";
+import { useChatEventBus } from "@/hooks/use-chat-event-bus";
 import type { FaceDefinition } from "@/lib/face-library";
-import {
-  invalidateGroupEventHistoryQuery,
-  useGroupEventHistoryQuery,
-} from "@/lib/groups-query";
 import { messageSegmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
+import {
+  useKickGroupMemberMutation,
+  useMuteGroupMemberMutation,
+  usePokeUserMutation,
+  useRecallMessageMutation,
+  useSendMessageMutation,
+  useSetGroupMemberRoleMutation,
+  useSetGroupMemberTitleMutation,
+} from "@/lib/mutations";
+import {
+  invalidateGroupMembersQuery,
+  sourceFromInternalEvent,
+  useGroupEventHistoryQuery,
+  useGroupMembersQuery,
+  useMessageHistoryQuery,
+  usePokeHistoryQuery,
+} from "@/lib/query";
+import { formatMessageTimestamp } from "@/lib/time-format";
+import { resolveUserDisplayName } from "@/lib/utils";
+import {
+  defaultConversationComposerState,
+  useChatComposerStore,
+} from "@/store/use-chat-composer-store";
 import type {
   ChatMessage,
   ChatPoke,
-  GroupEvent,
-  InternalEventPayload,
   MessageSegment,
   MessageSource,
 } from "@/types/chat";
+import type { GroupEvent } from "@/types/event";
 import type { GroupMemberProfile, GroupRole } from "@/types/group";
 import type { UserProfile } from "@/types/user";
 
 type ConversationSummary = {
   title: string;
-  type: "private" | "group";
   source: MessageSource;
 };
 
@@ -70,31 +79,6 @@ type ChatTimelineItem =
       groupEvent: GroupEvent;
     };
 
-function formatNoticeUntilTime(ts: number): string {
-  const date = new Date(ts * 1000);
-  const now = new Date();
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (sameDay) {
-    return date.toLocaleTimeString("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  }
-
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 function hasSendableSegments(segments: MessageSegment[]): boolean {
   return segments.some((segment) => {
     if (segment.type === "Text") {
@@ -110,29 +94,63 @@ function ChatMainPanel({
   currentUserId,
   users,
 }: ChatMainPanelProps) {
+  const conversationKey =
+    selectedConversation.source.scene === "group"
+      ? `group-${selectedConversation.source.group_id}`
+      : `private-${selectedConversation.source.peer_user_id}`;
+  const selectedSource = selectedConversation.source;
+
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const shouldScrollToBottomRef = useRef(false);
   const stickToBottomRef = useRef(true);
   const lastConversationKeyRef = useRef<string | null>(null);
-  const [sendLoading, setSendLoading] = useState(false);
-  const [composerSegments, setComposerSegments] = useState<MessageSegment[]>(
-    [],
+  const conversationComposerState = useChatComposerStore(
+    (state) =>
+      state.byConversation[conversationKey] ?? defaultConversationComposerState,
   );
-  const [quotedMessage, setQuotedMessage] = useState<{
-    messageId: number;
-    summary: string;
-  } | null>(null);
+  const setComposerSegments = useChatComposerStore(
+    (state) => state.setSegments,
+  );
+  const setQuotedMessage = useChatComposerStore(
+    (state) => state.setQuotedMessage,
+  );
+  const composerSegments = conversationComposerState.segments;
+  const quotedMessage = conversationComposerState.quotedMessage;
+
   const [chatError, setChatError] = useState<string | null>(null);
-  const [groupMemberCards, setGroupMemberCards] = useState<
-    Record<number, string>
-  >({});
   const [groupMembersById, setGroupMembersById] = useState<
     Record<number, GroupMemberProfile>
   >({});
   const [currentUnixTime, setCurrentUnixTime] = useState(
     Math.floor(Date.now() / 1000),
   );
+  const sendMessageMutation = useSendMessageMutation();
+  const recallMessageMutation = useRecallMessageMutation();
+  const pokeUserMutation = usePokeUserMutation();
+  const muteGroupMemberMutation = useMuteGroupMemberMutation();
+  const kickGroupMemberMutation = useKickGroupMemberMutation();
+  const setGroupMemberRoleMutation = useSetGroupMemberRoleMutation();
+  const setGroupMemberTitleMutation = useSetGroupMemberTitleMutation();
+  const sendLoading = sendMessageMutation.isPending;
+
+  const groupMembersQuery = useGroupMembersQuery(
+    currentUserId,
+    selectedConversation.source.scene === "group"
+      ? selectedConversation.source.group_id
+      : 0,
+    selectedConversation.source.scene === "group",
+  );
+
+  useEffect(() => {
+    if (groupMembersQuery.data) {
+      setGroupMembersById(
+        Object.fromEntries(
+          groupMembersQuery.data.map((member) => [member.user_id, member]),
+        ),
+      );
+    }
+  }, [groupMembersQuery.data]);
 
   const messagesQuery = useMessageHistoryQuery(
     currentUserId,
@@ -205,12 +223,6 @@ function ChatMainPanel({
         ? String(groupEventsQuery.error)
         : null;
 
-  const conversationKey =
-    selectedConversation.source.scene === "group"
-      ? `group-${selectedConversation.source.group_id}`
-      : `private-${selectedConversation.source.peer_user_id}`;
-  const selectedSource = selectedConversation.source;
-
   if (lastConversationKeyRef.current !== conversationKey) {
     lastConversationKeyRef.current = conversationKey;
     shouldScrollToBottomRef.current = true;
@@ -247,175 +259,64 @@ function ChatMainPanel({
     });
   }, [timeline.length]);
 
-  useEffect(() => {
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+  const refreshGroupMembers = useCallback(async () => {
+    if (selectedSource.scene !== "group") {
       return;
     }
 
-    let disposed = false;
-    let unlisten: UnlistenFn | null = null;
-
-    const setup = async () => {
-      unlisten = await listen<InternalEventPayload>("chat:event", (event) => {
-        if (disposed || !event.payload) {
-          return;
-        }
-        const payload = event.payload;
-
-        const source = sourceFromInternalEvent(payload, currentUserId);
-        if (!source) {
-          return;
-        }
-
-        if (source.scene === "group") {
-          if (
-            selectedSource.scene !== "group" ||
-            source.group_id !== selectedSource.group_id
-          ) {
-            return;
-          }
-        } else if (
-          selectedSource.scene !== "private" ||
-          source.peer_user_id !== selectedSource.peer_user_id
-        ) {
-          return;
-        }
-
-        if (stickToBottomRef.current) {
-          shouldScrollToBottomRef.current = true;
-        }
-
-        if (payload.kind === "group_member_muted") {
-          setGroupMembersById((previous) => {
-            const target = previous[payload.target_user_id];
-            if (!target) {
-              return previous;
-            }
-            return {
-              ...previous,
-              [payload.target_user_id]: {
-                ...target,
-                mute_until: payload.mute_until,
-              },
-            };
-          });
-        }
-
-        if (
-          selectedSource.scene === "group" &&
-          ((payload.kind === "notice" &&
-            payload.notice_type === "admin_change") ||
-            payload.kind === "group_member_title_updated" ||
-            payload.kind === "group_member_joined")
-        ) {
-          void (async () => {
-            try {
-              const members = await invoke<GroupMemberProfile[]>(
-                "list_group_members",
-                {
-                  userId: currentUserId,
-                  groupId: selectedSource.group_id,
-                },
-              );
-              if (disposed) {
-                return;
-              }
-
-              setGroupMembersById(
-                Object.fromEntries(
-                  members.map((member) => [member.user_id, member]),
-                ),
-              );
-              setGroupMemberCards(
-                Object.fromEntries(
-                  members.map((member) => [
-                    member.user_id,
-                    member.card?.trim() ?? "",
-                  ]),
-                ),
-              );
-            } catch {
-              // Ignore refresh errors; existing snapshot remains usable.
-            }
-          })();
-        }
-
-        invalidateMessageHistoryQuery(currentUserId, selectedSource);
-        invalidatePokeHistoryQuery(currentUserId, selectedSource);
-        if (selectedSource.scene === "group") {
-          invalidateGroupEventHistoryQuery(
-            currentUserId,
-            selectedSource.group_id,
-          );
-        }
-      });
-    };
-
-    setup();
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
+    await invalidateGroupMembersQuery(currentUserId, selectedSource.group_id);
   }, [currentUserId, selectedSource]);
 
-  useEffect(() => {
-    if (selectedConversation.source.scene !== "group") {
-      setGroupMemberCards({});
-      setGroupMembersById({});
+  useChatEventBus(currentUserId, (payload) => {
+    const source = sourceFromInternalEvent(payload, currentUserId);
+    if (!source) {
       return;
     }
 
-    const groupId = selectedConversation.source.group_id;
-
-    let disposed = false;
-    const fetchMembers = async () => {
-      try {
-        const members = await invoke<GroupMemberProfile[]>(
-          "list_group_members",
-          {
-            userId: currentUserId,
-            groupId,
-          },
-        );
-        if (disposed) {
-          return;
-        }
-
-        setGroupMembersById(
-          Object.fromEntries(members.map((member) => [member.user_id, member])),
-        );
-        setGroupMemberCards(
-          Object.fromEntries(
-            members.map((member) => [
-              member.user_id,
-              member.card?.trim() ?? "",
-            ]),
-          ),
-        );
-      } catch {
-        if (!disposed) {
-          setGroupMembersById({});
-          setGroupMemberCards({});
-        }
+    if (source.scene === "group") {
+      if (
+        selectedSource.scene !== "group" ||
+        source.group_id !== selectedSource.group_id
+      ) {
+        return;
       }
-    };
-
-    fetchMembers();
-    return () => {
-      disposed = true;
-    };
-  }, [currentUserId, selectedConversation]);
-
-  useEffect(() => {
-    if (!conversationKey) {
+    } else if (
+      selectedSource.scene !== "private" ||
+      source.peer_user_id !== selectedSource.peer_user_id
+    ) {
       return;
     }
 
-    setQuotedMessage(null);
-  }, [conversationKey]);
+    if (stickToBottomRef.current) {
+      shouldScrollToBottomRef.current = true;
+    }
+
+    if (payload.kind === "group_member_muted") {
+      setGroupMembersById((previous) => {
+        const target = previous[payload.target_user_id];
+        if (!target) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [payload.target_user_id]: {
+            ...target,
+            mute_until: payload.mute_until,
+          },
+        };
+      });
+    }
+
+    if (
+      selectedSource.scene === "group" &&
+      ((payload.kind === "notice" && payload.notice_type === "admin_change") ||
+        payload.kind === "group_member_title_updated" ||
+        payload.kind === "group_member_joined")
+    ) {
+      refreshGroupMembers();
+    }
+  });
 
   const myGroupRole: GroupRole | null = useMemo(() => {
     if (selectedConversation.source.scene !== "group") {
@@ -463,23 +364,18 @@ function ChatMainPanel({
       .filter((m) => m.user_id !== currentUserId)
       .map((member) => {
         const user = users.find((u) => u.user_id === member.user_id);
-        const name =
-          groupMemberCards[member.user_id] ||
-          user?.nickname ||
-          `用户 ${member.user_id}`;
+        const name = resolveUserDisplayName(
+          member.user_id,
+          user?.nickname,
+          groupMembersById,
+        );
         return {
           id: member.user_id,
           name,
           avatar: user?.avatar,
         };
       });
-  }, [
-    selectedSource.scene,
-    groupMembersById,
-    users,
-    groupMemberCards,
-    currentUserId,
-  ]);
+  }, [selectedSource.scene, groupMembersById, users, currentUserId]);
 
   const handleSelectFace = (face: FaceDefinition) => {
     composerRef.current?.insertFace(face);
@@ -498,26 +394,20 @@ function ChatMainPanel({
       return;
     }
 
-    setSendLoading(true);
     try {
-      await invoke("send_message", {
+      await sendMessageMutation.mutateAsync({
         userId: currentUserId,
         source: selectedConversation.source,
         content: composerSegments,
         quoteMessageId: quotedMessage?.messageId ?? null,
       });
-      setComposerSegments([]);
-      setQuotedMessage(null);
+      composerRef.current?.clear();
+      setComposerSegments(conversationKey, []);
+      setQuotedMessage(conversationKey, null);
       shouldScrollToBottomRef.current = true;
-      await invalidateMessageHistoryQuery(
-        currentUserId,
-        selectedConversation.source,
-      );
       setChatError(null);
     } catch (error) {
-      setChatError(error as string);
-    } finally {
-      setSendLoading(false);
+      setChatError(String(error));
     }
   };
 
@@ -541,7 +431,7 @@ function ChatMainPanel({
       .replace(/\s+/g, " ");
     const summary = `${senderDisplayName}: ${normalizedText || "[空消息]"}`;
 
-    setQuotedMessage({
+    setQuotedMessage(conversationKey, {
       messageId: message.id,
       summary,
     });
@@ -559,63 +449,40 @@ function ChatMainPanel({
 
   const handleRecallMessage = async (messageId: number) => {
     try {
-      await invoke("recall_message", {
+      await recallMessageMutation.mutateAsync({
         userId: currentUserId,
         messageId,
+        source: selectedConversation.source,
       });
       setChatError(null);
-      await invalidateMessageHistoryQuery(
-        currentUserId,
-        selectedConversation.source,
-      );
     } catch (error) {
-      setChatError(error as string);
+      setChatError(String(error));
     }
   };
 
   const handlePokeUser = async (targetUserId: number) => {
     try {
-      await invoke("poke_user", {
+      await pokeUserMutation.mutateAsync({
         userId: currentUserId,
         source: selectedConversation.source,
         targetUserId,
       });
-      await invalidatePokeHistoryQuery(
-        currentUserId,
-        selectedConversation.source,
-      );
       setChatError(null);
     } catch (error) {
-      setChatError(error as string);
+      setChatError(String(error));
     }
   };
 
-  const handleAtUser = (targetUserId: number) => {
-    if (selectedConversation.source.scene !== "group") {
-      return;
-    }
+  const handleAtUser = useCallback(
+    (targetUserId: number) => {
+      if (selectedConversation.source.scene !== "group") {
+        return;
+      }
 
-    composerRef.current?.insertMention(targetUserId);
-  };
-
-  const refreshGroupMembers = async () => {
-    if (selectedConversation.source.scene !== "group") {
-      return;
-    }
-    const groupId = selectedConversation.source.group_id;
-    const members = await invoke<GroupMemberProfile[]>("list_group_members", {
-      userId: currentUserId,
-      groupId,
-    });
-    setGroupMembersById(
-      Object.fromEntries(members.map((member) => [member.user_id, member])),
-    );
-    setGroupMemberCards(
-      Object.fromEntries(
-        members.map((member) => [member.user_id, member.card?.trim() ?? ""]),
-      ),
-    );
-  };
+      composerRef.current?.insertMention(targetUserId);
+    },
+    [selectedConversation.source.scene],
+  );
 
   const handleMuteMember = async (
     targetUserId: number,
@@ -625,7 +492,7 @@ function ChatMainPanel({
       return;
     }
     try {
-      await invoke("mute_group_member", {
+      await muteGroupMemberMutation.mutateAsync({
         userId: currentUserId,
         groupId: selectedConversation.source.group_id,
         targetUserId,
@@ -633,7 +500,7 @@ function ChatMainPanel({
       });
       setChatError(null);
     } catch (error) {
-      setChatError(error as string);
+      setChatError(String(error));
     }
   };
 
@@ -651,7 +518,7 @@ function ChatMainPanel({
     }
 
     try {
-      await invoke("kick_group_member", {
+      await kickGroupMemberMutation.mutateAsync({
         userId: currentUserId,
         groupId: selectedConversation.source.group_id,
         targetUserId,
@@ -659,7 +526,7 @@ function ChatMainPanel({
       await refreshGroupMembers();
       setChatError(null);
     } catch (error) {
-      setChatError(error as string);
+      setChatError(String(error));
     }
   };
 
@@ -671,7 +538,7 @@ function ChatMainPanel({
       return;
     }
     try {
-      await invoke("set_group_member_role", {
+      await setGroupMemberRoleMutation.mutateAsync({
         userId: currentUserId,
         groupId: selectedConversation.source.group_id,
         targetUserId,
@@ -680,7 +547,7 @@ function ChatMainPanel({
       await refreshGroupMembers();
       setChatError(null);
     } catch (error) {
-      setChatError(error as string);
+      setChatError(String(error));
     }
   };
 
@@ -689,7 +556,7 @@ function ChatMainPanel({
       return;
     }
     try {
-      await invoke("set_group_member_title", {
+      await setGroupMemberTitleMutation.mutateAsync({
         userId: currentUserId,
         groupId: selectedConversation.source.group_id,
         targetUserId,
@@ -698,7 +565,7 @@ function ChatMainPanel({
       await refreshGroupMembers();
       setChatError(null);
     } catch (error) {
-      setChatError(error as string);
+      setChatError(String(error));
     }
   };
 
@@ -718,14 +585,16 @@ function ChatMainPanel({
             const resolveName = (userId: number) => {
               const user = users.find((entry) => entry.user_id === userId);
               if (selectedConversation.source.scene === "group") {
-                return (
-                  groupMemberCards[userId] || user?.nickname || `用户${userId}`
+                return resolveUserDisplayName(
+                  userId,
+                  user?.nickname,
+                  groupMembersById,
                 );
               }
               if (userId === currentUserId) {
                 return "你";
               }
-              return user?.nickname || `用户${userId}`;
+              return resolveUserDisplayName(userId, user?.nickname);
             };
 
             const { payload } = item.groupEvent;
@@ -756,7 +625,7 @@ function ChatMainPanel({
                 durationSeconds > 0
                   ? `${durationSeconds}秒`
                   : muteUntil
-                    ? `至 ${formatNoticeUntilTime(muteUntil)}`
+                    ? `至 ${formatMessageTimestamp(muteUntil)}`
                     : "";
               eventText = muted
                 ? `${targetName} 被 ${operatorName} 禁言 ${durationText}`.trim()
@@ -792,17 +661,16 @@ function ChatMainPanel({
             const target = users.find(
               (user) => user.user_id === item.poke.target_user_id,
             );
-            const senderDisplayName =
-              selectedConversation.source.scene === "group"
-                ? groupMemberCards[item.poke.sender_user_id] || sender.nickname
-                : sender.nickname;
-            const targetDisplayName =
-              selectedConversation.source.scene === "group"
-                ? groupMemberCards[item.poke.target_user_id] ||
-                  target?.nickname ||
-                  `用户${item.poke.target_user_id}`
-                : target?.nickname ||
-                  (item.poke.target_user_id === currentUserId ? "你" : "对方");
+            const senderDisplayName = resolveUserDisplayName(
+              item.poke.sender_user_id,
+              sender.nickname,
+              groupMembersById,
+            );
+            const targetDisplayName = resolveUserDisplayName(
+              item.poke.target_user_id,
+              target?.nickname,
+              groupMembersById,
+            );
             const pokeText = `${senderDisplayName} 戳了戳 ${targetDisplayName}`;
 
             return (
@@ -819,7 +687,11 @@ function ChatMainPanel({
 
           const senderDisplayName =
             selectedConversation.source.scene === "group"
-              ? groupMemberCards[message.sender_user_id] || sender.nickname
+              ? resolveUserDisplayName(
+                  message.sender_user_id,
+                  sender.nickname,
+                  groupMembersById,
+                )
               : sender.nickname;
 
           const quotedMessagePreview = (() => {
@@ -842,15 +714,11 @@ function ChatMainPanel({
             const quotedSender = users.find(
               (user) => user.user_id === quotedMessage.sender_user_id,
             );
-            const quotedSenderDisplayName =
-              selectedConversation.source.scene === "group"
-                ? groupMemberCards[quotedMessage.sender_user_id] ||
-                  quotedSender?.nickname ||
-                  `用户${quotedMessage.sender_user_id}`
-                : quotedSender?.nickname ||
-                  (quotedMessage.sender_user_id === currentUserId
-                    ? "你"
-                    : "对方");
+            const quotedSenderDisplayName = resolveUserDisplayName(
+              quotedMessage.sender_user_id,
+              quotedSender?.nickname,
+              groupMembersById,
+            );
 
             if (quotedMessage.recall.recalled) {
               return {
@@ -1016,7 +884,11 @@ function ChatMainPanel({
               quotedMessagePreview={quotedMessagePreview}
               onAtClick={(t) => composerRef.current?.insertMention(t)}
               resolveMemberName={(id) =>
-                mentionableMembers.find((m) => m.id === id)?.name ?? String(id)
+                resolveUserDisplayName(
+                  id,
+                  users.find((u) => u.user_id === id)?.nickname,
+                  groupMembersById,
+                )
               }
               avatarActions={avatarActions}
               messageActions={messageActions}
@@ -1060,7 +932,7 @@ function ChatMainPanel({
                   size="icon-sm"
                   className="size-5"
                   title="取消引用"
-                  onClick={() => setQuotedMessage(null)}
+                  onClick={() => setQuotedMessage(conversationKey, null)}
                 >
                   <X className="size-3.5" />
                 </Button>
@@ -1085,7 +957,9 @@ function ChatMainPanel({
         <ChatComposer
           ref={composerRef}
           segments={composerSegments}
-          onSegmentsChange={setComposerSegments}
+          onSegmentsChange={(segments) =>
+            setComposerSegments(conversationKey, segments)
+          }
           mentionSupport={
             selectedConversation.source.scene === "group"
               ? myGroupRole === "owner" || myGroupRole === "admin"

@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { Check, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,79 +8,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useCreateFriendRequestMutation } from "@/lib/mutations";
+import { useFriendRequestsQuery, useFriendsQuery } from "@/lib/query";
+import { useAuthStore } from "@/store/use-auth-store";
 import type { UserProfile } from "@/types/user";
-
-type RequestState = "pending" | "accepted" | "rejected" | "ignored";
-
-type FriendRequestEntity = {
-  request_id: number;
-  initiator_user_id: number;
-  target_user_id: number;
-  comment: string;
-  state: RequestState;
-  created_at: number;
-  handled_at: number | null;
-  operator_user_id: number | null;
-};
 
 type AddFriendDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentUserId: number;
   users: UserProfile[];
 };
 
-function AddFriendDialog({
-  open,
-  onOpenChange,
-  currentUserId,
-  users,
-}: AddFriendDialogProps) {
-  const [friendRequests, setFriendRequests] = useState<FriendRequestEntity[]>(
-    [],
-  );
+function AddFriendDialog({ open, onOpenChange, users }: AddFriendDialogProps) {
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
   const [sendingFriendRequestIds, setSendingFriendRequestIds] = useState<
     number[]
   >([]);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  const refreshFriendRequests = useCallback(async () => {
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
-      return;
-    }
-
-    try {
-      const rows = await invoke<FriendRequestEntity[]>("list_friend_requests", {
-        userId: currentUserId,
-      });
-      setFriendRequests(rows);
-    } catch {
-      setFriendRequests([]);
-    }
-  }, [currentUserId]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    void refreshFriendRequests();
-  }, [open, refreshFriendRequests]);
-
-  const acceptedFriendIds = useMemo(() => {
-    const set = new Set<number>();
-    for (const request of friendRequests) {
-      if (request.state !== "accepted") {
-        continue;
-      }
-      if (request.initiator_user_id === currentUserId) {
-        set.add(request.target_user_id);
-      }
-      if (request.target_user_id === currentUserId) {
-        set.add(request.initiator_user_id);
-      }
-    }
-    return set;
-  }, [currentUserId, friendRequests]);
+  const createFriendRequestMutation = useCreateFriendRequestMutation();
+  const friendsQuery = useFriendsQuery(currentUserId);
+  const friendIds = friendsQuery.data ?? [];
+  const friendRequestsQuery = useFriendRequestsQuery(currentUserId, open);
+  const friendRequests = friendRequestsQuery.data ?? [];
 
   const pendingFriendIds = useMemo(() => {
     const set = new Set<number>();
@@ -104,17 +52,21 @@ function AddFriendDialog({
       return;
     }
 
+    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+      setActionError("当前用户无效，无法发送好友请求");
+      return;
+    }
+
     setSendingFriendRequestIds((ids) => [...ids, targetUserId]);
     try {
-      await invoke("create_friend_request", {
+      await createFriendRequestMutation.mutateAsync({
         userId: currentUserId,
         targetUserId,
         comment: "",
       });
       setActionError(null);
-      await refreshFriendRequests();
     } catch (error) {
-      setActionError(error as string);
+      setActionError(String(error));
     } finally {
       setSendingFriendRequestIds((ids) =>
         ids.filter((id) => id !== targetUserId),
@@ -146,7 +98,6 @@ function AddFriendDialog({
               .filter((user) => user.user_id !== currentUserId)
               .map((user) => {
                 const pending = pendingFriendIds.has(user.user_id);
-                const accepted = acceptedFriendIds.has(user.user_id);
                 const sending = sendingFriendRequestIds.includes(user.user_id);
                 return (
                   <div
@@ -162,7 +113,7 @@ function AddFriendDialog({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{user.nickname}</p>
                     </div>
-                    {accepted ? (
+                    {friendIds.includes(user.user_id) ? (
                       <span className="text-muted-foreground text-xs">
                         已是好友
                       </span>
@@ -172,9 +123,7 @@ function AddFriendDialog({
                         variant="ghost"
                         size="icon-sm"
                         disabled={pending || sending}
-                        onClick={() =>
-                          void handleSendFriendRequest(user.user_id)
-                        }
+                        onClick={() => handleSendFriendRequest(user.user_id)}
                       >
                         {pending ? (
                           <Check className="size-3.5" />

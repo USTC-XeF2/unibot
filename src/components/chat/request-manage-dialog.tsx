@@ -1,7 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,44 +6,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { invalidateGroupsQuery } from "@/lib/groups-query";
 import {
-  invalidateFriendRequestsQuery,
-  invalidateManageableGroupRequestsQueries,
-  useFriendRequestsQuery,
-  useManageableGroupRequestsQuery,
-} from "@/lib/request-query";
-import type { InternalEventPayload } from "@/types/chat";
+  useHandleFriendRequestMutation,
+  useHandleGroupRequestMutation,
+} from "@/lib/mutations";
+import { useFriendRequestsQuery, useGroupRequestsQuery } from "@/lib/query";
+import { formatMonthDayTime } from "@/lib/time-format";
+import { resolveUserDisplayName } from "@/lib/utils";
+import { useAuthStore } from "@/store/use-auth-store";
 import type { GroupProfile } from "@/types/group";
 import type { UserProfile } from "@/types/user";
 
 type RequestManageDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentUserId: number;
   users: UserProfile[];
   groups: GroupProfile[];
 };
 
-function formatRequestTime(ts: number): string {
-  if (!ts) {
-    return "";
-  }
-  return new Date(ts * 1000).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function RequestManageDialog({
   open,
   onOpenChange,
-  currentUserId,
   users,
   groups,
 }: RequestManageDialogProps) {
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [handlingRequestKeys, setHandlingRequestKeys] = useState<string[]>([]);
 
@@ -54,13 +38,14 @@ function RequestManageDialog({
     () => new Map(users.map((user) => [user.user_id, user])),
     [users],
   );
+  const groupNameById = useMemo(
+    () =>
+      new Map(groups.map((group) => [group.group_id, group.group_name || ""])),
+    [groups],
+  );
 
   const friendRequestsQuery = useFriendRequestsQuery(currentUserId, open);
-  const pendingGroupRequestsQuery = useManageableGroupRequestsQuery(
-    currentUserId,
-    groups,
-    open,
-  );
+  const pendingGroupRequestsQuery = useGroupRequestsQuery(currentUserId, open);
 
   const friendRequests = useMemo(
     () =>
@@ -70,67 +55,8 @@ function RequestManageDialog({
     [friendRequestsQuery.data],
   );
   const pendingGroupRequests = pendingGroupRequestsQuery.data ?? [];
-
-  useEffect(() => {
-    if (!open || !Number.isInteger(currentUserId) || currentUserId <= 0) {
-      return;
-    }
-
-    let disposed = false;
-    let unlisten: UnlistenFn | null = null;
-
-    const setup = async () => {
-      unlisten = await listen<InternalEventPayload>("chat:event", (event) => {
-        if (disposed || !event.payload) {
-          return;
-        }
-
-        const kind = event.payload.kind;
-        if (
-          kind === "friend_request_created" ||
-          kind === "friend_request_handled" ||
-          kind === "group_request_created" ||
-          kind === "group_request_handled"
-        ) {
-          void invalidateFriendRequestsQuery(currentUserId);
-          void invalidateManageableGroupRequestsQueries(currentUserId);
-        }
-      });
-    };
-
-    void setup();
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [open, currentUserId]);
-
-  const handleFriendRequestMutation = useMutation({
-    mutationFn: (payload: {
-      requestId: number;
-      state: "accepted" | "rejected";
-    }) =>
-      invoke("handle_friend_request", {
-        userId: currentUserId,
-        requestId: payload.requestId,
-        state: payload.state,
-      }),
-  });
-
-  const handleGroupRequestMutation = useMutation({
-    mutationFn: (payload: {
-      requestId: number;
-      state: "accepted" | "rejected";
-    }) =>
-      invoke("handle_group_request", {
-        userId: currentUserId,
-        requestId: payload.requestId,
-        state: payload.state,
-      }),
-  });
+  const handleFriendRequestMutation = useHandleFriendRequestMutation();
+  const handleGroupRequestMutation = useHandleGroupRequestMutation();
 
   const handleFriendRequestAction = async (
     requestId: number,
@@ -141,14 +67,21 @@ function RequestManageDialog({
       return;
     }
 
+    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+      setRequestError("当前用户无效，无法处理请求");
+      return;
+    }
+
     setHandlingRequestKeys((keys) => [...keys, key]);
     try {
-      await handleFriendRequestMutation.mutateAsync({ requestId, state });
+      await handleFriendRequestMutation.mutateAsync({
+        userId: currentUserId,
+        requestId,
+        state,
+      });
       setRequestError(null);
-      await invalidateFriendRequestsQuery(currentUserId);
-      await invalidateManageableGroupRequestsQueries(currentUserId);
     } catch (error) {
-      setRequestError(error as string);
+      setRequestError(String(error));
     } finally {
       setHandlingRequestKeys((keys) => keys.filter((item) => item !== key));
     }
@@ -163,14 +96,21 @@ function RequestManageDialog({
       return;
     }
 
+    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+      setRequestError("当前用户无效，无法处理请求");
+      return;
+    }
+
     setHandlingRequestKeys((keys) => [...keys, key]);
     try {
-      await handleGroupRequestMutation.mutateAsync({ requestId, state });
+      await handleGroupRequestMutation.mutateAsync({
+        userId: currentUserId,
+        requestId,
+        state,
+      });
       setRequestError(null);
-      await invalidateGroupsQuery();
-      await invalidateManageableGroupRequestsQueries(currentUserId);
     } catch (error) {
-      setRequestError(error as string);
+      setRequestError(String(error));
     } finally {
       setHandlingRequestKeys((keys) => keys.filter((item) => item !== key));
     }
@@ -228,8 +168,8 @@ function RequestManageDialog({
                           : "待你处理";
 
                 const actionText = isOutgoing
-                  ? `你向 ${target?.nickname || `用户 ${request.target_user_id}`} 发送了好友请求`
-                  : `${sender?.nickname || `用户 ${request.initiator_user_id}`} 请求添加你为好友`;
+                  ? `你向 ${resolveUserDisplayName(request.target_user_id, target?.nickname)} 发送了好友请求`
+                  : `${resolveUserDisplayName(request.initiator_user_id, sender?.nickname)} 请求添加你为好友`;
 
                 return (
                   <div
@@ -255,7 +195,7 @@ function RequestManageDialog({
                           {statusText}
                         </span>
                         <span className="text-[11px] text-muted-foreground">
-                          {formatRequestTime(request.created_at)}
+                          {formatMonthDayTime(request.created_at)}
                         </span>
                       </div>
                     </div>
@@ -267,7 +207,7 @@ function RequestManageDialog({
                           variant="outline"
                           disabled={handling}
                           onClick={() =>
-                            void handleFriendRequestAction(
+                            handleFriendRequestAction(
                               request.request_id,
                               "rejected",
                             )
@@ -280,7 +220,7 @@ function RequestManageDialog({
                           size="xs"
                           disabled={handling}
                           onClick={() =>
-                            void handleFriendRequestAction(
+                            handleFriendRequestAction(
                               request.request_id,
                               "accepted",
                             )
@@ -305,29 +245,26 @@ function RequestManageDialog({
             ) : null}
             {pendingGroupRequests.length === 0 ? (
               <p className="rounded-md border border-dashed px-3 py-4 text-center text-muted-foreground text-xs">
-                {pendingGroupRequestsQuery.isPending
-                  ? "正在加载加群请求..."
-                  : "暂无待处理加群请求"}
+                暂无待处理加群请求
               </p>
             ) : (
               pendingGroupRequests.map((request) => {
                 const initiator = usersById.get(request.initiator_user_id);
-                const target =
-                  request.target_user_id === null
-                    ? null
-                    : usersById.get(request.target_user_id);
                 const handling = handlingRequestKeys.includes(
                   `group-${request.request_id}`,
                 );
+                const groupName =
+                  groupNameById.get(request.group_id) ||
+                  `群 ${request.group_id}`;
+
                 const actionText =
-                  request.request_type === "join"
-                    ? `申请加入 ${request.group_name}`
-                    : `邀请 ${
-                        target?.nickname ||
-                        (request.target_user_id === null
-                          ? "指定用户"
-                          : `用户 ${request.target_user_id}`)
-                      } 加入 ${request.group_name}`;
+                  request.request_type === "join" ||
+                  request.target_user_id === null
+                    ? `申请加入 ${groupName}`
+                    : `邀请 ${resolveUserDisplayName(
+                        request.target_user_id,
+                        usersById.get(request.target_user_id)?.nickname,
+                      )} 加入 ${groupName}`;
 
                 return (
                   <div
@@ -337,8 +274,10 @@ function RequestManageDialog({
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs">
                         <span className="font-medium">
-                          {initiator?.nickname ||
-                            `用户 ${request.initiator_user_id}`}
+                          {resolveUserDisplayName(
+                            request.initiator_user_id,
+                            initiator?.nickname,
+                          )}
                         </span>
                         <span className="text-muted-foreground">
                           {" "}
@@ -346,7 +285,7 @@ function RequestManageDialog({
                         </span>
                       </p>
                       <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {formatRequestTime(request.created_at)}
+                        {formatMonthDayTime(request.created_at)}
                       </span>
                     </div>
                     <div className="flex items-center justify-end gap-2">
@@ -356,7 +295,7 @@ function RequestManageDialog({
                         variant="outline"
                         disabled={handling}
                         onClick={() =>
-                          void handleGroupRequestAction(
+                          handleGroupRequestAction(
                             request.request_id,
                             "rejected",
                           )
@@ -369,7 +308,7 @@ function RequestManageDialog({
                         size="xs"
                         disabled={handling}
                         onClick={() =>
-                          void handleGroupRequestAction(
+                          handleGroupRequestAction(
                             request.request_id,
                             "accepted",
                           )

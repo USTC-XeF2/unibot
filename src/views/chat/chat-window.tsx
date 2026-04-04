@@ -1,6 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Check, Plus, Search, UserPlus, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
@@ -24,32 +23,32 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  invalidateMessageHistoryQueries,
-  invalidateMessageHistoryQuery,
-  messageHistoryQueryOptions,
-  sourceFromInternalEvent,
-} from "@/lib/chat-query";
-import {
-  invalidateFriendsQuery,
-  useFriendsQuery,
-} from "@/lib/friendships-query";
-import { invalidateGroupsQuery, useUserGroupsQuery } from "@/lib/groups-query";
+import { useChatEventBus } from "@/hooks/use-chat-event-bus";
 import { messageSegmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
-  invalidateFriendRequestsQuery,
-  invalidateManageableGroupRequestsQueries,
+  useDeleteFriendMutation,
+  useDissolveGroupMutation,
+  useLeaveGroupMutation,
+  useRenameGroupMutation,
+  useSetGroupWholeMuteMutation,
+} from "@/lib/mutations";
+import {
+  isValidUserId,
+  messageHistoryQueryOptions,
   useFriendRequestsQuery,
-  useManageableGroupRequestsQuery,
-} from "@/lib/request-query";
-import { invalidateUsersQuery, useUsersQuery } from "@/lib/users-query";
-import type { InternalEventPayload, MessageSource } from "@/types/chat";
+  useFriendsQuery,
+  useGroupRequestsQuery,
+  useUserGroupsQuery,
+  useUsersQuery,
+} from "@/lib/query";
+import { formatConversationPreviewTime } from "@/lib/time-format";
+import { useAuthStore } from "@/store/use-auth-store";
+import type { MessageSource } from "@/types/chat";
 import type { GroupMemberProfile, GroupRole } from "@/types/group";
 
 type ConversationItem = {
   key: string;
-  type: "private" | "group";
   source: MessageSource;
   title: string;
   avatarText: string;
@@ -61,33 +60,35 @@ type ConversationSnapshot = {
   lastAt: number;
 };
 
-function formatMessageTime(ts: number): string {
-  if (!ts) {
-    return "";
-  }
-  const date = new Date(ts * 1000);
-  const now = new Date();
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (sameDay) {
-    return date.toLocaleTimeString("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  return date.toLocaleDateString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
 function ChatWindowView() {
   const { userId } = useParams();
-  const currentUserId = useMemo(() => Number(userId), [userId]);
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const setCurrentUserId = useAuthStore((state) => state.setCurrentUserId);
+
+  const deleteFriendMutation = useDeleteFriendMutation();
+  const setGroupWholeMuteMutation = useSetGroupWholeMuteMutation();
+  const renameGroupMutation = useRenameGroupMutation();
+  const dissolveGroupMutation = useDissolveGroupMutation();
+  const leaveGroupMutation = useLeaveGroupMutation();
+
+  useChatEventBus(currentUserId);
+
+  useEffect(() => {
+    const userIdNum = Number(userId);
+    const normalizedUserId = isValidUserId(userIdNum) ? userIdNum : null;
+    setCurrentUserId(normalizedUserId);
+    setSearchText("");
+    setSelectedConversationKey(null);
+    setAddFriendOpen(false);
+    setCreateGroupOpen(false);
+    setRequestManageOpen(false);
+    setConversationActionError(null);
+
+    return () => {
+      setCurrentUserId(null);
+    };
+  }, [userId, setCurrentUserId]);
+
   const usersQuery = useUsersQuery();
   const groupsQuery = useUserGroupsQuery(currentUserId);
 
@@ -110,7 +111,6 @@ function ChatWindowView() {
       )
       .map((user) => ({
         key: `private-${user.user_id}`,
-        type: "private" as const,
         source: { scene: "private" as const, peer_user_id: user.user_id },
         title: user.nickname,
         avatarText: user.nickname.slice(0, 1).toUpperCase(),
@@ -119,7 +119,6 @@ function ChatWindowView() {
 
     const groupConversations = groups.map((group) => ({
       key: `group-${group.group_id}`,
-      type: "group" as const,
       source: { scene: "group" as const, group_id: group.group_id },
       title: `${group.group_name} (${group.member_count})`,
       avatarText: "群",
@@ -161,19 +160,16 @@ function ChatWindowView() {
       return;
     }
     try {
-      await invoke("delete_friend", {
+      await deleteFriendMutation.mutateAsync({
         userId: currentUserId,
         friendUserId: peerUserId,
       });
       setConversationActionError(null);
-      await invalidateUsersQuery();
-      await invalidateFriendRequestsQuery(currentUserId);
-      await invalidateFriendsQuery(currentUserId);
       if (selectedConversationKey === `private-${peerUserId}`) {
         setSelectedConversationKey(null);
       }
     } catch (error) {
-      setConversationActionError(error as string);
+      setConversationActionError(String(error));
     }
   };
 
@@ -194,14 +190,14 @@ function ChatWindowView() {
     }
 
     try {
-      await invoke("set_group_whole_mute", {
+      await setGroupWholeMuteMutation.mutateAsync({
         userId: currentUserId,
         groupId,
         durationSeconds: duration,
       });
       setConversationActionError(null);
     } catch (error) {
-      setConversationActionError(error as string);
+      setConversationActionError(String(error));
     }
   };
 
@@ -222,15 +218,14 @@ function ChatWindowView() {
     }
 
     try {
-      await invoke("rename_group", {
+      await renameGroupMutation.mutateAsync({
         userId: currentUserId,
         groupId,
         groupName: name,
       });
       setConversationActionError(null);
-      await invalidateGroupsQuery();
     } catch (error) {
-      setConversationActionError(error as string);
+      setConversationActionError(String(error));
     }
   };
 
@@ -244,15 +239,14 @@ function ChatWindowView() {
       return;
     }
     try {
-      await invoke("dissolve_group", {
+      await dissolveGroupMutation.mutateAsync({
         userId: currentUserId,
         groupId,
       });
       setConversationActionError(null);
       setSelectedConversationKey(null);
-      await invalidateGroupsQuery();
     } catch (error) {
-      setConversationActionError(error as string);
+      setConversationActionError(String(error));
     }
   };
 
@@ -267,38 +261,28 @@ function ChatWindowView() {
     }
 
     try {
-      await invoke("leave_group", {
+      await leaveGroupMutation.mutateAsync({
         userId: currentUserId,
         groupId,
       });
       setConversationActionError(null);
       setSelectedConversationKey(null);
-      await invalidateGroupsQuery();
     } catch (error) {
-      setConversationActionError(error as string);
+      setConversationActionError(String(error));
     }
   };
 
   const friendRequestsQuery = useFriendRequestsQuery(currentUserId, true);
-  const manageableGroupRequestsQuery = useManageableGroupRequestsQuery(
-    currentUserId,
-    groups,
-    true,
-  );
+  const groupRequestsQuery = useGroupRequestsQuery(currentUserId, true);
   const hasPendingRequests = useMemo(() => {
     const incomingPendingFriendRequests = (friendRequestsQuery.data ?? []).some(
       (request) =>
         request.state === "pending" && request.target_user_id === currentUserId,
     );
-    const pendingManageableGroupRequests =
-      (manageableGroupRequestsQuery.data ?? []).length > 0;
+    const pendingGroupRequests = (groupRequestsQuery.data ?? []).length > 0;
 
-    return incomingPendingFriendRequests || pendingManageableGroupRequests;
-  }, [
-    friendRequestsQuery.data,
-    manageableGroupRequestsQuery.data,
-    currentUserId,
-  ]);
+    return incomingPendingFriendRequests || pendingGroupRequests;
+  }, [friendRequestsQuery.data, groupRequestsQuery.data, currentUserId]);
 
   const snapshotQueries = useQueries({
     queries: conversations.map((conversation) =>
@@ -349,74 +333,6 @@ function ChatWindowView() {
     () => conversations.find((item) => item.key === selectedConversationKey),
     [selectedConversationKey, conversations],
   );
-
-  useEffect(() => {
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
-      return;
-    }
-
-    let disposed = false;
-    let unlisten: UnlistenFn | null = null;
-
-    const setup = async () => {
-      unlisten = await listen<InternalEventPayload>("chat:event", (event) => {
-        if (disposed) {
-          return;
-        }
-
-        const payload = event.payload;
-        if (!payload) {
-          return;
-        }
-
-        const source = sourceFromInternalEvent(payload, currentUserId);
-        if (source) {
-          void invalidateMessageHistoryQuery(currentUserId, source);
-          if (
-            payload.kind === "group_member_joined" &&
-            payload.target_user_id === currentUserId
-          ) {
-            void invalidateGroupsQuery();
-          }
-          if (
-            payload.kind === "friend_request_created" ||
-            payload.kind === "friend_request_handled" ||
-            payload.kind === "group_request_created" ||
-            payload.kind === "group_request_handled"
-          ) {
-            void invalidateFriendRequestsQuery(currentUserId);
-            void invalidateManageableGroupRequestsQueries(currentUserId);
-            if (payload.kind === "friend_request_handled") {
-              void invalidateFriendsQuery(currentUserId);
-            }
-            if (
-              payload.kind === "group_request_handled" &&
-              payload.state === "accepted"
-            ) {
-              const shouldRefreshGroups =
-                payload.initiator_user_id === currentUserId ||
-                payload.target_user_id === currentUserId;
-              if (shouldRefreshGroups) {
-                void invalidateGroupsQuery();
-              }
-            }
-          }
-          return;
-        }
-
-        void invalidateMessageHistoryQueries(currentUserId);
-      });
-    };
-
-    void setup();
-
-    return () => {
-      disposed = true;
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [currentUserId]);
 
   if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
     return (
@@ -542,7 +458,9 @@ function ChatWindowView() {
                                 {conversation.title}
                               </p>
                               <span className="shrink-0 text-[11px] text-muted-foreground">
-                                {formatMessageTime(snapshot?.lastAt ?? 0)}
+                                {formatConversationPreviewTime(
+                                  snapshot?.lastAt ?? 0,
+                                )}
                               </span>
                             </div>
                             <p className="truncate text-muted-foreground text-xs">
@@ -556,9 +474,7 @@ function ChatWindowView() {
                       {privatePeerId !== null ? (
                         <ContextMenuItem
                           variant="destructive"
-                          onSelect={() =>
-                            void handleDeleteFriend(privatePeerId)
-                          }
+                          onSelect={() => handleDeleteFriend(privatePeerId)}
                         >
                           删除好友
                         </ContextMenuItem>
@@ -641,20 +557,17 @@ function ChatWindowView() {
       <AddFriendDialog
         open={addFriendOpen}
         onOpenChange={setAddFriendOpen}
-        currentUserId={currentUserId}
         users={users}
       />
       <CreateGroupDialog
         open={createGroupOpen}
         onOpenChange={setCreateGroupOpen}
-        currentUserId={currentUserId}
         users={users}
         groups={groups}
       />
       <RequestManageDialog
         open={requestManageOpen}
         onOpenChange={setRequestManageOpen}
-        currentUserId={currentUserId}
         users={users}
         groups={groups}
       />

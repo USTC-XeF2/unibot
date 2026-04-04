@@ -58,6 +58,7 @@ export type ChatComposerHandle = {
   moveCaretToEnd: () => void;
   insertFace: (face: FaceDefinition) => void;
   insertMention: (target: number | "all") => void;
+  clear: () => void;
 };
 
 const Face = TiptapNode.create({
@@ -615,6 +616,9 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
               { type: "text", text: " " },
             ])
             .run();
+        },
+        clear() {
+          editor?.commands.clearContent(true);
         },
       }),
       [editor],

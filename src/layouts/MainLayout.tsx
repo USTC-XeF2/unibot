@@ -29,7 +29,7 @@ import {
   SidebarProvider,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { useUsersQuery } from "@/lib/users-query";
+import { useUsersQuery } from "@/lib/query";
 
 const footerNavItems = [
   { value: "settings", to: "/settings", label: "设置", icon: Settings },
