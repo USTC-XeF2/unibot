@@ -1,8 +1,4 @@
-import {
-  type JSONContent,
-  mergeAttributes,
-  Node as TiptapNode,
-} from "@tiptap/core";
+import { type JSONContent, Node as TiptapNode } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import Hardbreak from "@tiptap/extension-hard-break";
 import Link from "@tiptap/extension-link";
@@ -11,11 +7,18 @@ import Paragraph from "@tiptap/extension-paragraph";
 import Placeholder from "@tiptap/extension-placeholder";
 import Text from "@tiptap/extension-text";
 import { Dropcursor, TrailingNode, UndoRedo } from "@tiptap/extensions";
-import { EditorContent, ReactRenderer, useEditor } from "@tiptap/react";
+import {
+  EditorContent,
+  NodeViewWrapper,
+  ReactNodeViewRenderer,
+  ReactRenderer,
+  useEditor,
+} from "@tiptap/react";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import * as React from "react";
 import { useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import tippy, { type Instance } from "tippy.js";
+import Face from "@/components/chat/face";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Command,
@@ -24,8 +27,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { getFaceById } from "@/lib/face-library";
-import { cn } from "@/lib/utils";
+import { cn, faceById } from "@/lib/utils";
 import type { MessageSegment } from "@/types/chat";
 
 export interface MentionableUser {
@@ -60,7 +62,7 @@ export type ChatComposerHandle = {
   clear: () => void;
 };
 
-const Face = TiptapNode.create({
+const FaceNode = TiptapNode.create({
   name: "face",
   group: "inline",
   inline: true,
@@ -70,7 +72,6 @@ const Face = TiptapNode.create({
   addAttributes() {
     return {
       faceId: { default: "" },
-      label: { default: "" },
     };
   },
 
@@ -78,29 +79,21 @@ const Face = TiptapNode.create({
     return [{ tag: "span[data-face-id]" }];
   },
 
-  renderHTML({ HTMLAttributes }) {
-    const faceId = String(HTMLAttributes.faceId ?? "");
-    const label = String(HTMLAttributes.label ?? "");
-    const face = getFaceById(faceId);
+  addNodeView() {
+    return ReactNodeViewRenderer((props) => {
+      const faceId = String(props.node.attrs.faceId ?? "");
 
-    return [
-      "span",
-      mergeAttributes(HTMLAttributes, {
-        "data-face-id": faceId,
-        contenteditable: "false",
-        class:
-          "mx-0.5 inline-flex select-none items-center justify-center align-[-0.25em]",
-      }),
-      [
-        "img",
-        {
-          src: face?.src ?? "",
-          alt: label || face?.label || "表情",
-          draggable: "false",
-          class: "size-4.5 object-contain",
-        },
-      ],
-    ];
+      return (
+        <NodeViewWrapper
+          as="span"
+          data-face-id={faceId}
+          contentEditable={false}
+          className="mx-0.5 inline-flex items-center justify-center align-[-0.25em]"
+        >
+          <Face id={faceId} className="size-4.5 object-contain" />
+        </NodeViewWrapper>
+      );
+    });
   },
 });
 
@@ -169,7 +162,7 @@ function messageSegmentsToEditorContent(
     }
 
     if (segment.type === "Face") {
-      const face = getFaceById(segment.data.id);
+      const face = faceById.get(segment.data.id);
       return [
         {
           type: "face",
@@ -232,7 +225,7 @@ function appendSegmentsFromNode(
     }
 
     const fallbackLabel =
-      String(node.attrs?.label ?? "") || getFaceById(faceId)?.label || "表情";
+      String(node.attrs?.label ?? "") || faceById.get(faceId)?.label || "表情";
     pushTextSegment(segments, `[${fallbackLabel}]`);
     return;
   }
@@ -436,7 +429,7 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
           emptyEditorClass: "is-editor-empty",
         }),
         Link,
-        Face,
+        FaceNode,
         Mention.configure({
           HTMLAttributes: {
             class: "text-sky-600 dark:text-sky-300",
@@ -555,7 +548,7 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
           editor?.commands.focus("end");
         },
         insertFace(faceId) {
-          const face = getFaceById(faceId);
+          const face = faceById.get(faceId);
           if (!face) {
             return;
           }
@@ -567,7 +560,6 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
               type: "face",
               attrs: {
                 faceId: face.id,
-                label: face.label,
               },
             })
             .run();

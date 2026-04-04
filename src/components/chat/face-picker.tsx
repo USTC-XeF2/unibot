@@ -1,12 +1,13 @@
 import { Smile } from "lucide-react";
 import { useState } from "react";
+import Face from "@/components/chat/face";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { faceGroups } from "@/lib/face-library";
+import faceGroups from "@/data/faces.json";
 import { cn } from "@/lib/utils";
 
 type FacePickerProps = {
@@ -48,12 +49,7 @@ function FacePicker({ onSelectFace }: FacePickerProps) {
                       setOpen(false);
                     }}
                   >
-                    <img
-                      src={face.src}
-                      alt={face.label}
-                      className="size-8 object-contain"
-                      draggable={false}
-                    />
+                    <Face id={face.id} className="size-8" />
                   </button>
                 ))}
               </div>

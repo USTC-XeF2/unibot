@@ -1,4 +1,4 @@
-import { getFaceById } from "@/lib/face-library";
+import { faceById } from "@/lib/utils";
 import type { MessageSegment } from "@/types/chat";
 
 export function messageSegmentsToPlainText(segments: MessageSegment[]) {
@@ -14,7 +14,7 @@ export function messageSegmentsToPlainText(segments: MessageSegment[]) {
         case "Image":
           return "[图片]";
         case "Face": {
-          const face = getFaceById(segment.data.id);
+          const face = faceById.get(segment.data.id);
           if (!face) {
             return "[表情]";
           }

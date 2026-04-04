@@ -1,3 +1,4 @@
+import Face from "@/components/chat/face";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ContextMenu,
@@ -6,7 +7,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { getFaceById } from "@/lib/face-library";
 import { formatMessageTimestamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, MessageSegment } from "@/types/chat";
@@ -100,24 +100,12 @@ function ChatMessageContent({
               </button>
             );
           case "Face": {
-            const face = getFaceById(segment.data.id);
-            if (!face) {
-              return renderFallbackSegment("[表情]", key);
-            }
-
             return (
-              <span
+              <Face
                 key={key}
-                title={face.label}
-                className="mx-0.5 inline-flex items-center justify-center align-[-0.25em]"
-              >
-                <img
-                  src={face.src}
-                  alt={face.label}
-                  className="size-4.5 object-contain"
-                  draggable={false}
-                />
-              </span>
+                id={segment.data.id}
+                className="size-5.5 px-0.5 pb-0.5"
+              />
             );
           }
           case "Image":
