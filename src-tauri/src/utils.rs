@@ -18,11 +18,9 @@ pub fn emit_to_users(
     event: InternalEvent,
 ) {
     for user_id in user_ids {
-        if let Ok(ctx) = core.require_user_context(user_id)
-            && let Err(err) = ctx.event_tx.send(event.clone())
-        {
-            eprintln!("failed to emit event to user {user_id}: {err}");
-        }
+        if let Ok(ctx) = core.require_user_context(user_id) {
+            let _ = ctx.event_tx.send(event.clone());
+        };
     }
 }
 

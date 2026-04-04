@@ -449,8 +449,7 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
       editorProps: {
         attributes: {
           class: cn(
-            "min-h-28 max-h-28 overflow-auto px-2.5 py-2 text-base leading-6 outline-none md:text-sm md:leading-5",
-            "whitespace-pre-wrap break-words",
+            "h-full min-h-0 overflow-y-auto p-2 text-base leading-6 outline-none md:text-sm md:leading-5",
             "[&_.is-editor-empty:first-child::before]:pointer-events-none",
             "[&_.is-editor-empty:first-child::before]:float-left",
             "[&_.is-editor-empty:first-child::before]:h-0",
@@ -628,16 +627,7 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
       [editor],
     );
 
-    return (
-      <EditorContent
-        editor={editor}
-        className={cn(
-          "rounded-lg border-0 bg-transparent shadow-none focus-within:ring-0",
-          disabled && "opacity-50",
-          className,
-        )}
-      />
-    );
+    return <EditorContent editor={editor} className={className} />;
   },
 );
 

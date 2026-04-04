@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Check, Plus, Search, UserPlus, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
+import { toast } from "sonner";
 import AddFriendDialog from "@/components/chat/add-friend-dialog";
 import ChatMainPanel from "@/components/chat/chat-main-panel";
 import CreateGroupDialog from "@/components/chat/create-group-dialog";
@@ -23,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Toaster } from "@/components/ui/sonner";
 import { useChatEventBus } from "@/hooks/use-chat-event-bus";
 import { messageSegmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
@@ -79,10 +81,7 @@ function ChatWindowView() {
     setCurrentUserId(normalizedUserId);
     setSearchText("");
     setSelectedConversationKey(null);
-    setAddFriendOpen(false);
-    setCreateGroupOpen(false);
-    setRequestManageOpen(false);
-    setConversationActionError(null);
+    setActiveDialog(null);
 
     return () => {
       setCurrentUserId(null);
@@ -131,11 +130,8 @@ function ChatWindowView() {
   const [selectedConversationKey, setSelectedConversationKey] = useState<
     string | null
   >(null);
-  const [addFriendOpen, setAddFriendOpen] = useState(false);
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
-  const [requestManageOpen, setRequestManageOpen] = useState(false);
-  const [conversationActionError, setConversationActionError] = useState<
-    string | null
+  const [activeDialog, setActiveDialog] = useState<
+    "add-friend" | "create-group" | "request-manage" | null
   >(null);
 
   const resolveMyGroupRole = async (
@@ -164,12 +160,11 @@ function ChatWindowView() {
         userId: currentUserId,
         friendUserId: peerUserId,
       });
-      setConversationActionError(null);
       if (selectedConversationKey === `private-${peerUserId}`) {
         setSelectedConversationKey(null);
       }
     } catch (error) {
-      setConversationActionError(String(error));
+      toast.error(String(error));
     }
   };
 
@@ -185,7 +180,7 @@ function ChatWindowView() {
 
     const duration = Number(input.trim());
     if (!Number.isInteger(duration) || duration < 0) {
-      setConversationActionError("禁言时长必须为大于等于 0 的整数");
+      toast.error("禁言时长必须为大于等于 0 的整数");
       return;
     }
 
@@ -195,9 +190,8 @@ function ChatWindowView() {
         groupId,
         durationSeconds: duration,
       });
-      setConversationActionError(null);
     } catch (error) {
-      setConversationActionError(String(error));
+      toast.error(String(error));
     }
   };
 
@@ -213,7 +207,7 @@ function ChatWindowView() {
 
     const name = input.trim();
     if (!name) {
-      setConversationActionError("群昵称不能为空");
+      toast.error("群昵称不能为空");
       return;
     }
 
@@ -223,9 +217,8 @@ function ChatWindowView() {
         groupId,
         groupName: name,
       });
-      setConversationActionError(null);
     } catch (error) {
-      setConversationActionError(String(error));
+      toast.error(String(error));
     }
   };
 
@@ -243,10 +236,9 @@ function ChatWindowView() {
         userId: currentUserId,
         groupId,
       });
-      setConversationActionError(null);
       setSelectedConversationKey(null);
     } catch (error) {
-      setConversationActionError(String(error));
+      toast.error(String(error));
     }
   };
 
@@ -265,10 +257,9 @@ function ChatWindowView() {
         userId: currentUserId,
         groupId,
       });
-      setConversationActionError(null);
       setSelectedConversationKey(null);
     } catch (error) {
-      setConversationActionError(String(error));
+      toast.error(String(error));
     }
   };
 
@@ -374,30 +365,21 @@ function ChatWindowView() {
                     ) : null}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44 min-w-44">
+                <DropdownMenuContent align="start">
                   <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      setAddFriendOpen(true);
-                    }}
+                    onSelect={() => setActiveDialog("add-friend")}
                   >
                     <UserPlus className="size-4" />
                     添加好友
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      setCreateGroupOpen(true);
-                    }}
+                    onSelect={() => setActiveDialog("create-group")}
                   >
                     <Users className="size-4" />
                     创建群聊
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      setRequestManageOpen(true);
-                    }}
+                    onSelect={() => setActiveDialog("request-manage")}
                   >
                     <Check className="size-4" />
                     请求管理
@@ -408,135 +390,115 @@ function ChatWindowView() {
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto p-2">
-          {conversationActionError ? (
-            <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-destructive text-xs">
-              {conversationActionError}
-            </div>
-          ) : null}
-          <div className="space-y-1">
-            {filteredConversations.length === 0 ? (
-              <div className="rounded-lg border border-dashed px-3 py-6 text-center text-muted-foreground text-xs">
-                没有匹配的会话
-              </div>
-            ) : (
-              filteredConversations.map((conversation) => {
-                const snapshot = snapshots[conversation.key];
-                const isActive = selectedConversation?.key === conversation.key;
-                const privatePeerId =
-                  conversation.source.scene === "private"
-                    ? conversation.source.peer_user_id
-                    : null;
-                const groupId =
-                  conversation.source.scene === "group"
-                    ? conversation.source.group_id
-                    : null;
-                return (
-                  <ContextMenu key={conversation.key}>
-                    <ContextMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                          isActive
-                            ? "border-primary/40 bg-primary/10"
-                            : "border-transparent hover:border-border hover:bg-muted/40"
-                        }`}
-                        onClick={() =>
-                          setSelectedConversationKey(conversation.key)
-                        }
-                      >
-                        <div className="flex items-center gap-2">
-                          <Avatar className="size-8">
-                            <AvatarImage src={conversation.avatarUrl} />
-                            <AvatarFallback>
-                              {conversation.avatarText}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate font-medium text-sm">
-                                {conversation.title}
-                              </p>
-                              <span className="shrink-0 text-[11px] text-muted-foreground">
-                                {formatConversationPreviewTime(
-                                  snapshot?.lastAt ?? 0,
-                                )}
-                              </span>
-                            </div>
-                            <p className="truncate text-muted-foreground text-xs">
-                              {snapshot?.lastMessage ?? ""}
-                            </p>
-                          </div>
+        <div className="flex-1 space-y-1 overflow-auto p-2">
+          {filteredConversations.map((conversation) => {
+            const snapshot = snapshots[conversation.key];
+            const privatePeerId =
+              conversation.source.scene === "private"
+                ? conversation.source.peer_user_id
+                : null;
+            const groupId =
+              conversation.source.scene === "group"
+                ? conversation.source.group_id
+                : null;
+            return (
+              <ContextMenu key={conversation.key}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                      selectedConversation?.key === conversation.key
+                        ? "border-primary/40 bg-primary/10"
+                        : "border-transparent hover:border-border hover:bg-muted/40"
+                    }`}
+                    onClick={() => setSelectedConversationKey(conversation.key)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Avatar className="size-8">
+                        <AvatarImage src={conversation.avatarUrl} />
+                        <AvatarFallback>
+                          {conversation.avatarText}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate font-medium text-sm">
+                            {conversation.title}
+                          </p>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {formatConversationPreviewTime(
+                              snapshot?.lastAt ?? 0,
+                            )}
+                          </span>
                         </div>
-                      </button>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      {privatePeerId !== null ? (
-                        <ContextMenuItem
-                          variant="destructive"
-                          onSelect={() => handleDeleteFriend(privatePeerId)}
-                        >
-                          删除好友
-                        </ContextMenuItem>
-                      ) : null}
+                        <p className="truncate text-muted-foreground text-xs">
+                          {snapshot?.lastMessage ?? ""}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  {privatePeerId !== null ? (
+                    <ContextMenuItem
+                      variant="destructive"
+                      onSelect={() => handleDeleteFriend(privatePeerId)}
+                    >
+                      删除好友
+                    </ContextMenuItem>
+                  ) : null}
 
-                      {groupId !== null ? (
-                        <ContextMenuItem
-                          onSelect={async () => {
-                            const role = await resolveMyGroupRole(groupId);
-                            if (role !== "owner" && role !== "admin") {
-                              setConversationActionError(
-                                "仅群主或管理员可设置全体禁言",
-                              );
-                              return;
-                            }
-                            await handleSetWholeMute(groupId);
-                          }}
-                        >
-                          设置全体禁言
-                        </ContextMenuItem>
-                      ) : null}
-                      {groupId !== null ? (
-                        <ContextMenuItem
-                          onSelect={async () => {
-                            const role = await resolveMyGroupRole(groupId);
-                            if (role !== "owner" && role !== "admin") {
-                              setConversationActionError(
-                                "仅群主或管理员可修改群昵称",
-                              );
-                              return;
-                            }
-                            await handleRenameGroup(groupId);
-                          }}
-                        >
-                          修改群昵称
-                        </ContextMenuItem>
-                      ) : null}
-                      {groupId !== null ? <ContextMenuSeparator /> : null}
-                      {groupId !== null ? (
-                        <ContextMenuItem
-                          variant="destructive"
-                          onSelect={async () => {
-                            const role = await resolveMyGroupRole(groupId);
-                            if (role === "owner") {
-                              await handleDissolveGroup(groupId);
-                              return;
-                            }
-                            await handleLeaveGroup(groupId);
-                          }}
-                        >
-                          {groups.find((item) => item.group_id === groupId)
-                            ?.owner_user_id === currentUserId
-                            ? "解散群聊"
-                            : "退出群聊"}
-                        </ContextMenuItem>
-                      ) : null}
-                    </ContextMenuContent>
-                  </ContextMenu>
-                );
-              })
-            )}
-          </div>
+                  {groupId !== null ? (
+                    <ContextMenuItem
+                      onSelect={async () => {
+                        const role = await resolveMyGroupRole(groupId);
+                        if (role !== "owner" && role !== "admin") {
+                          toast.error("仅群主或管理员可设置全体禁言");
+                          return;
+                        }
+                        await handleSetWholeMute(groupId);
+                      }}
+                    >
+                      设置全体禁言
+                    </ContextMenuItem>
+                  ) : null}
+                  {groupId !== null ? (
+                    <ContextMenuItem
+                      onSelect={async () => {
+                        const role = await resolveMyGroupRole(groupId);
+                        if (role !== "owner" && role !== "admin") {
+                          toast.error("仅群主或管理员可修改群昵称");
+                          return;
+                        }
+                        await handleRenameGroup(groupId);
+                      }}
+                    >
+                      修改群昵称
+                    </ContextMenuItem>
+                  ) : null}
+                  {groupId !== null ? <ContextMenuSeparator /> : null}
+                  {groupId !== null ? (
+                    <ContextMenuItem
+                      variant="destructive"
+                      onSelect={async () => {
+                        const role = await resolveMyGroupRole(groupId);
+                        if (role === "owner") {
+                          await handleDissolveGroup(groupId);
+                          return;
+                        }
+                        await handleLeaveGroup(groupId);
+                      }}
+                    >
+                      {groups.find((item) => item.group_id === groupId)
+                        ?.owner_user_id === currentUserId
+                        ? "解散群聊"
+                        : "退出群聊"}
+                    </ContextMenuItem>
+                  ) : null}
+                </ContextMenuContent>
+              </ContextMenu>
+            );
+          })}
         </div>
       </aside>
 
@@ -554,20 +516,21 @@ function ChatWindowView() {
         </section>
       )}
 
+      <Toaster position="top-center" />
       <AddFriendDialog
-        open={addFriendOpen}
-        onOpenChange={setAddFriendOpen}
+        open={activeDialog === "add-friend"}
+        onOpenChange={(open) => setActiveDialog(open ? "add-friend" : null)}
         users={users}
       />
       <CreateGroupDialog
-        open={createGroupOpen}
-        onOpenChange={setCreateGroupOpen}
+        open={activeDialog === "create-group"}
+        onOpenChange={(open) => setActiveDialog(open ? "create-group" : null)}
         users={users}
         groups={groups}
       />
       <RequestManageDialog
-        open={requestManageOpen}
-        onOpenChange={setRequestManageOpen}
+        open={activeDialog === "request-manage"}
+        onOpenChange={(open) => setActiveDialog(open ? "request-manage" : null)}
         users={users}
         groups={groups}
       />
