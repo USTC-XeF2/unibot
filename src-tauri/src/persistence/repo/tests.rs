@@ -64,6 +64,21 @@ async fn smoke_crud_users(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     assert!(got.is_some());
     assert_eq!(got.unwrap().nickname, "Alice");
 
+    // Duplicate upsert must not soft-delete — account_status stays active
+    let alice_v2 = crate::models::UserProfile {
+        nickname: "Alice2".to_string(),
+        ..alice
+    };
+    repo.upsert_user(&alice_v2).await?;
+    let after_dup = repo.get_user_by_id("10001").await?;
+    assert!(after_dup.is_some());
+    let after_dup = after_dup.unwrap();
+    assert_eq!(after_dup.nickname, "Alice2");
+    assert_eq!(
+        after_dup.account_status,
+        crate::models::AccountStatus::Active
+    );
+
     Ok(())
 }
 
@@ -167,10 +182,12 @@ async fn smoke_crud_groups(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     assert!(got_mute.is_some());
     assert!(got_mute.unwrap().muted);
 
-    // Remove member
+    // Remove member — must also remove user_groups entry
     repo.remove_group_member("20001", "10002").await?;
     let after = repo.list_group_members("20001").await?;
     assert_eq!(after.len(), 1);
+    let after_user_groups = repo.list_user_groups("10002").await?;
+    assert!(!after_user_groups.iter().any(|g| g.group_id == "20001"));
 
     // `upsert_group_member` now writes user_groups alongside group_members
     let user_groups = repo.list_user_groups("10001").await?;
@@ -350,6 +367,10 @@ async fn smoke_group_requests(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error>
         .await?;
     assert!(handled.is_some());
     assert_eq!(handled.unwrap().state, RequestState::Accepted);
+
+    // Accepted join request must populate user_groups
+    let user_groups = repo.list_user_groups("10002").await?;
+    assert!(user_groups.iter().any(|g| g.group_id == "20001"));
 
     Ok(())
 }
