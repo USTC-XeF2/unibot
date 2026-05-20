@@ -1,7 +1,6 @@
 use crate::models::{
     GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity, GroupFolderEntity,
-    GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType, GroupRole,
-    GroupWholeMuteState, RequestState,
+    GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupWholeMuteState,
 };
 use crate::persistence::repo::codecs;
 
@@ -97,7 +96,6 @@ pub(super) struct GroupEssenceRow {
     pub created_at: u64,
 }
 
-pub(super) const DEFAULT_MAX_MEMBER_COUNT: u32 = 500;
 
 impl TryFrom<GroupRow> for GroupProfile {
     type Error = sqlx::Error;
