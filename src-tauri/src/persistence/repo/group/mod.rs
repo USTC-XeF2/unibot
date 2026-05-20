@@ -6,30 +6,29 @@ mod basic;
 mod content;
 mod events;
 mod requests;
-mod schema;
 mod types;
 
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 pub struct GroupEventRecord {
-    pub id: i64,
-    pub group_id: u64,
+    pub id: String,
+    pub group_id: String,
     pub payload: String,
     pub created_at: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct NewGroupEventRecord {
-    pub group_id: u64,
+    pub group_id: String,
     pub payload: String,
     pub created_at: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct NewGroupRequestRecord {
-    pub group_id: u64,
+    pub group_id: String,
     pub request_type: GroupRequestType,
-    pub initiator_user_id: u64,
-    pub target_user_id: Option<u64>,
+    pub initiator_user_id: String,
+    pub target_user_id: Option<String>,
     pub comment: Option<String>,
     pub created_at: u64,
 }
