@@ -256,7 +256,10 @@ CREATE TABLE IF NOT EXISTS group_files (
 );
 CREATE INDEX IF NOT EXISTS idx_group_files_group_time ON group_files(group_id, created_at DESC);
 
--- 14. 精华消息（历史快照，反范式化：group_id / sender_user_id 冗余自 messages，不可由 message_id 推导的保留独立行）
+-- 14. 精华消息（快照记录，非 messages 的纯派生视图）
+-- group_id 和 sender_user_id 为独立快照列：即使原消息被撤回、发送者退群
+-- 或 message 行被物理删除后，精华记录仍可独立还原展示。
+-- message_id 在原消息物理删除时由 FK SET NULL 置空。
 CREATE TABLE IF NOT EXISTS group_essence_messages (
     essence_id       TEXT PRIMARY KEY NOT NULL,
     group_id         TEXT NOT NULL,
