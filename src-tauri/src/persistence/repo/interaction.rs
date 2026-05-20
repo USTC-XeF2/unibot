@@ -1,14 +1,14 @@
 use sqlx::SqlitePool;
 
-use crate::models::{MessageReactionEntity, MessageSource, PokeEntity};
+use crate::models::{MessageReactionEntity, PokeEntity};
 
 #[derive(sqlx::FromRow)]
 struct MessageReactionRow {
-    id: i64,
-    message_id: i64,
+    id: String,
+    message_id: String,
     source_type: String,
-    source_id: u64,
-    operator_user_id: u64,
+    source_id: String,
+    operator_user_id: String,
     face_id: String,
     is_add: bool,
     created_at: u64,
@@ -16,20 +16,18 @@ struct MessageReactionRow {
 
 #[derive(sqlx::FromRow)]
 struct PokeRow {
-    id: i64,
+    id: String,
     source_type: String,
-    source_id: u64,
-    sender_user_id: u64,
-    target_user_id: u64,
+    source_id: String,
+    sender_user_id: String,
+    target_user_id: String,
     created_at: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct NewMessageReactionRecord {
-    pub message_id: i64,
-    pub source_type: String,
-    pub source_id: u64,
-    pub operator_user_id: u64,
+    pub message_id: String,
+    pub operator_user_id: String,
     pub face_id: String,
     pub is_add: bool,
     pub created_at: u64,
@@ -38,9 +36,9 @@ pub struct NewMessageReactionRecord {
 #[derive(Debug, Clone)]
 pub struct NewPokeRecord {
     pub source_type: String,
-    pub source_id: u64,
-    pub sender_user_id: u64,
-    pub target_user_id: u64,
+    pub source_id: String,
+    pub sender_user_id: String,
+    pub target_user_id: String,
     pub created_at: u64,
 }
 
@@ -54,137 +52,81 @@ impl InteractionRepo {
         Self { pool }
     }
 
-    pub async fn init_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS message_reactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message_id INTEGER NOT NULL,
-                source_type TEXT NOT NULL,
-                source_id INTEGER NOT NULL,
-                operator_user_id INTEGER NOT NULL,
-                face_id TEXT NOT NULL,
-                is_add INTEGER NOT NULL,
-                created_at INTEGER NOT NULL,
-                FOREIGN KEY (message_id) REFERENCES messages(id)
-                    ON DELETE CASCADE
-                    ON UPDATE CASCADE,
-                FOREIGN KEY (operator_user_id) REFERENCES users(user_id)
-                    ON DELETE CASCADE
-                    ON UPDATE CASCADE
-            )
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS pokes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_type TEXT NOT NULL,
-                source_id INTEGER NOT NULL,
-                sender_user_id INTEGER NOT NULL,
-                target_user_id INTEGER NOT NULL,
-                created_at INTEGER NOT NULL,
-                FOREIGN KEY (sender_user_id) REFERENCES users(user_id)
-                    ON DELETE CASCADE
-                    ON UPDATE CASCADE,
-                FOREIGN KEY (target_user_id) REFERENCES users(user_id)
-                    ON DELETE CASCADE
-                    ON UPDATE CASCADE
-            )
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_message_reactions_operator_created
-            ON message_reactions(operator_user_id, created_at)
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_message_reactions_message_created
-            ON message_reactions(message_id, created_at)
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_pokes_sender_created
-            ON pokes(sender_user_id, created_at)
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_pokes_target_created
-            ON pokes(target_user_id, created_at)
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_pokes_source_created
-            ON pokes(source_type, source_id, created_at)
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        Ok(())
-    }
-
     pub async fn insert_message_reaction(
         &self,
         record: NewMessageReactionRecord,
     ) -> Result<MessageReactionEntity, sqlx::Error> {
         let row = sqlx::query_as::<_, MessageReactionRow>(
             r#"
+            WITH next_id(value) AS (
+                SELECT CAST(COALESCE(MAX(CAST(reaction_id AS INTEGER)), 0) + 1 AS TEXT)
+                FROM message_reactions
+            )
             INSERT INTO message_reactions (
-                message_id, source_type, source_id, operator_user_id, face_id, is_add, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            RETURNING id, message_id, source_type, source_id, operator_user_id, face_id, is_add, created_at
+                reaction_id, message_id, operator_user_id, face_id, is_add, created_at
+            ) SELECT value, ?1, ?2, ?3, ?4, ?5
+            FROM next_id
+            RETURNING reaction_id AS id
             "#,
         )
-        .bind(record.message_id)
-        .bind(record.source_type)
-        .bind(record.source_id as i64)
-        .bind(record.operator_user_id as i64)
-        .bind(record.face_id)
+        .bind(&record.message_id)
+        .bind(&record.operator_user_id)
+        .bind(&record.face_id)
         .bind(record.is_add)
         .bind(record.created_at as i64)
         .fetch_one(&self.pool)
         .await?;
 
-        row.try_into()
+        let full_row = sqlx::query_as::<_, MessageReactionRow>(
+            r#"
+            SELECT
+                r.reaction_id AS id,
+                r.message_id,
+                m.message_scene AS source_type,
+                CASE
+                    WHEN m.message_scene IN ('private', 'temp') AND m.sender_user_id = r.operator_user_id THEN m.receiver_user_id
+                    WHEN m.message_scene IN ('private', 'temp') THEN m.sender_user_id
+                    ELSE m.group_id
+                END AS source_id,
+                r.operator_user_id,
+                r.face_id,
+                r.is_add,
+                r.created_at
+            FROM message_reactions r
+            INNER JOIN messages m ON m.message_id = r.message_id
+            WHERE r.reaction_id = ?1
+            "#,
+        )
+        .bind(&row.id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        full_row.try_into()
     }
 
     pub async fn insert_poke(&self, record: NewPokeRecord) -> Result<PokeEntity, sqlx::Error> {
         let row = sqlx::query_as::<_, PokeRow>(
             r#"
+            WITH next_id(value) AS (
+                SELECT CAST(COALESCE(MAX(CAST(poke_id AS INTEGER)), 0) + 1 AS TEXT)
+                FROM pokes
+            )
             INSERT INTO pokes (
-                source_type, source_id, sender_user_id, target_user_id, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5)
-            RETURNING id, source_type, source_id, sender_user_id, target_user_id, created_at
+                poke_id, message_scene, peer_id, sender_user_id, target_user_id, created_at
+            ) SELECT value, ?1, ?2, ?3, ?4, ?5
+            FROM next_id
+            RETURNING poke_id AS id,
+                      message_scene AS source_type,
+                      peer_id AS source_id,
+                      sender_user_id,
+                      target_user_id,
+                      created_at
             "#,
         )
-        .bind(record.source_type)
-        .bind(record.source_id as i64)
-        .bind(record.sender_user_id as i64)
-        .bind(record.target_user_id as i64)
+        .bind(&record.source_type)
+        .bind(&record.source_id)
+        .bind(&record.sender_user_id)
+        .bind(&record.target_user_id)
         .bind(record.created_at as i64)
         .fetch_one(&self.pool)
         .await?;
@@ -194,17 +136,25 @@ impl InteractionRepo {
 
     pub async fn list_pokes(
         &self,
-        user_id: u64,
+        user_id: &str,
         source_type: &str,
-        source_id: u64,
+        source_id: &str,
         limit: i64,
     ) -> Result<Vec<PokeEntity>, sqlx::Error> {
         let rows = if source_type == "private" {
             sqlx::query_as::<_, PokeRow>(
                 r#"
-                SELECT id, source_type, source_id, sender_user_id, target_user_id, created_at
+                SELECT poke_id AS id,
+                       message_scene AS source_type,
+                       CASE
+                           WHEN sender_user_id = ?1 THEN target_user_id
+                           ELSE sender_user_id
+                       END AS source_id,
+                       sender_user_id,
+                       target_user_id,
+                       created_at
                 FROM pokes
-                WHERE source_type = 'private'
+                WHERE message_scene = 'private'
                   AND (
                     (sender_user_id = ?1 AND target_user_id = ?2)
                     OR (sender_user_id = ?2 AND target_user_id = ?1)
@@ -213,23 +163,28 @@ impl InteractionRepo {
                 LIMIT ?3
                 "#,
             )
-            .bind(user_id as i64)
-            .bind(source_id as i64)
+            .bind(user_id)
+            .bind(source_id)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?
         } else {
             sqlx::query_as::<_, PokeRow>(
                 r#"
-                SELECT id, source_type, source_id, sender_user_id, target_user_id, created_at
+                SELECT poke_id AS id,
+                       message_scene AS source_type,
+                       peer_id AS source_id,
+                       sender_user_id,
+                       target_user_id,
+                       created_at
                 FROM pokes
-                WHERE source_type = ?1 AND source_id = ?2
+                WHERE message_scene = ?1 AND peer_id = ?2
                 ORDER BY created_at DESC
                 LIMIT ?3
                 "#,
             )
             .bind(source_type)
-            .bind(source_id as i64)
+            .bind(source_id)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?
@@ -243,8 +198,9 @@ impl TryFrom<MessageReactionRow> for MessageReactionEntity {
     type Error = sqlx::Error;
 
     fn try_from(row: MessageReactionRow) -> Result<Self, Self::Error> {
-        let source: MessageSource = (row.source_type.as_str(), row.source_id)
-            .try_into()
+        use crate::models::MessageSource;
+
+        let source = MessageSource::try_from((row.source_type.as_str(), row.source_id))
             .map_err(sqlx::Error::Protocol)?;
 
         Ok(Self {
@@ -263,8 +219,9 @@ impl TryFrom<PokeRow> for PokeEntity {
     type Error = sqlx::Error;
 
     fn try_from(row: PokeRow) -> Result<Self, Self::Error> {
-        let source: MessageSource = (row.source_type.as_str(), row.source_id)
-            .try_into()
+        use crate::models::MessageSource;
+
+        let source = MessageSource::try_from((row.source_type.as_str(), row.source_id))
             .map_err(sqlx::Error::Protocol)?;
 
         Ok(Self {

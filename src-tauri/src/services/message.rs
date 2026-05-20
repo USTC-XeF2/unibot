@@ -119,7 +119,7 @@ impl MessageService {
                 source_type: source_type.to_string(),
                 source_id: source_id.to_string(),
                 content_json,
-                quoted_message_id,
+                quoted_message_id: quoted_message_id.clone(),
                 created_at: now,
             })
             .await?;
