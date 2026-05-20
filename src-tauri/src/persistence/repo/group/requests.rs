@@ -193,8 +193,7 @@ impl GroupRepo {
                 .execute(&mut *tx)
                 .await?;
 
-                let default_category =
-                    format!("{}:group:default", joined_user_id);
+                let default_category = format!("{}:group:default", joined_user_id);
                 sqlx::query(
                     r#"
                     INSERT OR IGNORE INTO user_groups (

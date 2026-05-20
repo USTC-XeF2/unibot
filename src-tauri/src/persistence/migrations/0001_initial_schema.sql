@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS group_requests (
     created_at        INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
     handled_at        INTEGER,
     operator_user_id  TEXT,
-    PRIMARY KEY (group_id, notification_seq),
+    PRIMARY KEY (notification_seq),
     FOREIGN KEY (group_id) REFERENCES chat_groups(group_id) ON DELETE CASCADE,
     FOREIGN KEY (initiator_user_id) REFERENCES im_accounts(user_id) ON DELETE CASCADE,
     FOREIGN KEY (target_user_id) REFERENCES im_accounts(user_id) ON DELETE SET NULL,

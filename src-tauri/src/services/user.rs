@@ -34,11 +34,15 @@ impl UserService {
             account_status: Default::default(),
         };
 
-        self.repo.upsert_user(&profile).await?;
-        if let Err(err) = core.register_user(profile.clone()) {
-            let _ = self.repo.delete_user(&profile.user_id).await;
-            return Err(err);
+        if core.user_context(&user_id).is_some() {
+            return Err(AppError::conflict(format!(
+                "user {} is already registered",
+                user_id
+            )));
         }
+
+        self.repo.upsert_user(&profile).await?;
+        core.register_user(profile.clone())?;
 
         Ok(profile)
     }
