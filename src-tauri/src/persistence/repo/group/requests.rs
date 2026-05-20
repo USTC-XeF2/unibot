@@ -171,7 +171,11 @@ impl GroupRepo {
         if state == RequestState::Accepted {
             let joined_user_id = match handled.request_type {
                 GroupRequestType::Join => &handled.initiator_user_id,
-                GroupRequestType::Invite => handled.target_user_id.as_ref().map(|s| s.as_str()).unwrap_or(""),
+                GroupRequestType::Invite => handled
+                    .target_user_id
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(""),
             };
 
             if !joined_user_id.is_empty() {

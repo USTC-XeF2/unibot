@@ -63,7 +63,10 @@ impl GroupService {
                     return Err(AppError::validation("only owner/admin can invite users"));
                 }
 
-                let target_member = self.repo.get_group_member(&group_id, &target_user_id).await?;
+                let target_member = self
+                    .repo
+                    .get_group_member(&group_id, &target_user_id)
+                    .await?;
                 if target_member.is_some() {
                     return Err(AppError::conflict("target user is already in group"));
                 }
@@ -138,8 +141,9 @@ impl GroupService {
 
         match current.request_type {
             GroupRequestType::Join => {
-                let operator_member =
-                    self.ensure_group_member(&current.group_id, &user_id).await?;
+                let operator_member = self
+                    .ensure_group_member(&current.group_id, &user_id)
+                    .await?;
                 if matches!(operator_member.role, GroupRole::Member) {
                     return Err(AppError::validation(
                         "only owner/admin can handle join requests",
@@ -195,9 +199,7 @@ impl GroupService {
         if state == RequestState::Accepted {
             let joined_user_id = match handled.request_type {
                 GroupRequestType::Join => handled.initiator_user_id.clone(),
-                GroupRequestType::Invite => {
-                    handled.target_user_id.clone().unwrap_or_default()
-                }
+                GroupRequestType::Invite => handled.target_user_id.clone().unwrap_or_default(),
             };
             let event_time = handled.handled_at.unwrap_or_else(now_ts);
 

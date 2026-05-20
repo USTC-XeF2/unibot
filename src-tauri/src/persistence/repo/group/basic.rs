@@ -1,8 +1,8 @@
 use crate::models::{GroupMemberProfile, GroupProfile, GroupRole, GroupWholeMuteState};
 use crate::persistence::repo::codecs;
 
-use super::types::{GroupMemberRow, GroupRow, GroupWholeMuteRow};
 use super::GroupRepo;
+use super::types::{GroupMemberRow, GroupRow, GroupWholeMuteRow};
 
 impl GroupRepo {
     pub async fn upsert_group(&self, group: &GroupProfile) -> Result<(), sqlx::Error> {

@@ -30,7 +30,10 @@ impl RequestService {
         core.require_user_context(&user_id)?;
         core.require_user_context(&target_user_id)?;
 
-        let already_friends = self.user_repo.are_friends(&user_id, &target_user_id).await?;
+        let already_friends = self
+            .user_repo
+            .are_friends(&user_id, &target_user_id)
+            .await?;
         if already_friends {
             return Err(AppError::conflict("users are already friends"));
         }
@@ -69,7 +72,10 @@ impl RequestService {
         Ok(created)
     }
 
-    pub async fn list_friend_requests(&self, user_id: String) -> AppResult<Vec<FriendRequestEntity>> {
+    pub async fn list_friend_requests(
+        &self,
+        user_id: String,
+    ) -> AppResult<Vec<FriendRequestEntity>> {
         self.user_repo
             .list_friend_requests(&user_id)
             .await

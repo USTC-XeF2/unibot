@@ -2,8 +2,8 @@ use crate::models::{
     GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity, GroupFolderEntity,
 };
 
-use super::types::{GroupAnnouncementRow, GroupEssenceRow, GroupFileRow, GroupFolderRow};
 use super::GroupRepo;
+use super::types::{GroupAnnouncementRow, GroupEssenceRow, GroupFileRow, GroupFolderRow};
 
 impl GroupRepo {
     pub async fn upsert_announcement(

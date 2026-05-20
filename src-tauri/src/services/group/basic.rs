@@ -120,7 +120,11 @@ impl GroupService {
             ));
         }
 
-        if let Some(member) = self.repo.get_group_member(&group_id, &target_user_id).await? {
+        if let Some(member) = self
+            .repo
+            .get_group_member(&group_id, &target_user_id)
+            .await?
+        {
             return Ok(member);
         }
 

@@ -108,10 +108,7 @@ impl MessageRepo {
                 record.owner_user_id, record.source_type, record.source_id
             )
         } else {
-            format!(
-                "{}:group:{}",
-                record.owner_user_id, record.source_id
-            )
+            format!("{}:group:{}", record.owner_user_id, record.source_id)
         };
 
         if is_private {

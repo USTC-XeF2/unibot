@@ -1,7 +1,7 @@
 use crate::models::UserProfile;
 
-use super::types::UserRow;
 use super::UserRepo;
+use super::types::UserRow;
 
 impl UserRepo {
     pub async fn upsert_user(&self, profile: &UserProfile) -> Result<(), sqlx::Error> {
@@ -29,8 +29,7 @@ impl UserRepo {
         .execute(&self.pool)
         .await?;
 
-        let default_friend_category =
-            format!("{}:friend:default", profile.user_id);
+        let default_friend_category = format!("{}:friend:default", profile.user_id);
         sqlx::query(
             r#"
             INSERT OR IGNORE INTO friend_categories (category_id, owner_user_id, name, sort_order)
@@ -42,8 +41,7 @@ impl UserRepo {
         .execute(&self.pool)
         .await?;
 
-        let default_group_category =
-            format!("{}:group:default", profile.user_id);
+        let default_group_category = format!("{}:group:default", profile.user_id);
         sqlx::query(
             r#"
             INSERT OR IGNORE INTO group_categories (category_id, owner_user_id, name, sort_order)

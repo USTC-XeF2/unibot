@@ -96,7 +96,6 @@ pub(super) struct GroupEssenceRow {
     pub created_at: u64,
 }
 
-
 impl TryFrom<GroupRow> for GroupProfile {
     type Error = sqlx::Error;
 

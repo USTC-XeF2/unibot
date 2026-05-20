@@ -42,10 +42,8 @@ impl UserRepo {
         let updated: FriendRequestEntity = row.try_into()?;
 
         if state == RequestState::Accepted {
-            let initiator_category =
-                format!("{}:friend:default", updated.initiator_user_id);
-            let target_category =
-                format!("{}:friend:default", updated.target_user_id);
+            let initiator_category = format!("{}:friend:default", updated.initiator_user_id);
+            let target_category = format!("{}:friend:default", updated.target_user_id);
 
             sqlx::query(
                 r#"

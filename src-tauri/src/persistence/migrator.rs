@@ -67,7 +67,12 @@ async fn apply_migration(pool: &SqlitePool, migration: &Migration) -> Result<(),
     .bind(migration.version)
     .execute(&mut *tx)
     .await
-    .map_err(|err| format!("migration {}: failed to update version: {err}", migration.version))?;
+    .map_err(|err| {
+        format!(
+            "migration {}: failed to update version: {err}",
+            migration.version
+        )
+    })?;
 
     tx.commit()
         .await
@@ -116,9 +121,7 @@ pub fn split_sql_statements(sql: &str) -> Vec<String> {
                     if in_trigger_body {
                         let stmt_text = &sql[statement_start..byte_pos];
                         if is_trigger_end(stmt_text) {
-                            let stmt = sql[statement_start..byte_pos + ch_len]
-                                .trim()
-                                .to_string();
+                            let stmt = sql[statement_start..byte_pos + ch_len].trim().to_string();
                             if !stmt.is_empty() {
                                 statements.push(stmt);
                             }
@@ -259,15 +262,21 @@ mod tests {
     fn parses_initial_schema_as_expected() {
         let statements =
             split_sql_statements(crate::persistence::migrations::all_migrations()[0].sql);
-        assert!(statements
-            .iter()
-            .any(|stmt| stmt.contains("CREATE TABLE IF NOT EXISTS im_accounts")));
-        assert!(statements
-            .iter()
-            .any(|stmt| stmt.contains("CREATE TRIGGER IF NOT EXISTS trg_unread_inc")));
-        assert!(statements
-            .iter()
-            .any(|stmt| stmt.contains("INSERT INTO app_settings")));
+        assert!(
+            statements
+                .iter()
+                .any(|stmt| stmt.contains("CREATE TABLE IF NOT EXISTS im_accounts"))
+        );
+        assert!(
+            statements
+                .iter()
+                .any(|stmt| stmt.contains("CREATE TRIGGER IF NOT EXISTS trg_unread_inc"))
+        );
+        assert!(
+            statements
+                .iter()
+                .any(|stmt| stmt.contains("INSERT INTO app_settings"))
+        );
     }
 
     #[sqlx::test]
