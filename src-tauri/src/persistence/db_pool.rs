@@ -1,10 +1,13 @@
 use std::fs;
+use std::time::Duration;
 
 use sqlx::SqlitePool;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use sqlx::sqlite::{
+    SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
+};
 use tauri::Manager;
 
-use super::{GroupRepo, InteractionRepo, MessageRepo, UserRepo};
+use super::migrator;
 
 pub async fn init_sqlite_pool(app: &tauri::AppHandle) -> Result<SqlitePool, String> {
     let app_data_dir = app
@@ -20,7 +23,9 @@ pub async fn init_sqlite_pool(app: &tauri::AppHandle) -> Result<SqlitePool, Stri
         .filename(db_path)
         .create_if_missing(true)
         .foreign_keys(true)
-        .journal_mode(SqliteJournalMode::Wal);
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .busy_timeout(Duration::from_millis(5000));
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
@@ -28,18 +33,9 @@ pub async fn init_sqlite_pool(app: &tauri::AppHandle) -> Result<SqlitePool, Stri
         .await
         .map_err(|err| format!("failed to connect sqlite: {err}"))?;
 
-    UserRepo::init_schema(&pool)
+    migrator::run_migrations(&pool)
         .await
-        .map_err(|err| format!("failed to init users schema: {err}"))?;
-    MessageRepo::init_schema(&pool)
-        .await
-        .map_err(|err| format!("failed to init messages schema: {err}"))?;
-    GroupRepo::init_schema(&pool)
-        .await
-        .map_err(|err| format!("failed to init groups schema: {err}"))?;
-    InteractionRepo::init_schema(&pool)
-        .await
-        .map_err(|err| format!("failed to init interaction schema: {err}"))?;
+        .map_err(|err| format!("database migration failed: {err}"))?;
 
     Ok(pool)
 }
