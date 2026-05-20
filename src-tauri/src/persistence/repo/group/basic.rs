@@ -213,6 +213,8 @@ impl GroupRepo {
         group_id: &str,
         user_id: &str,
     ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query(
             r#"
             DELETE FROM group_members
@@ -221,9 +223,21 @@ impl GroupRepo {
         )
         .bind(group_id)
         .bind(user_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
+        sqlx::query(
+            r#"
+            DELETE FROM user_groups
+            WHERE owner_user_id = ?1 AND group_id = ?2
+            "#,
+        )
+        .bind(user_id)
+        .bind(group_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 

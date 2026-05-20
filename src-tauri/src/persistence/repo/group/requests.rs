@@ -192,6 +192,22 @@ impl GroupRepo {
                 .bind(joined_at as i64)
                 .execute(&mut *tx)
                 .await?;
+
+                let default_category =
+                    format!("{}:group:default", joined_user_id);
+                sqlx::query(
+                    r#"
+                    INSERT OR IGNORE INTO user_groups (
+                        owner_user_id, group_id, category_id, joined_at
+                    ) VALUES (?1, ?2, ?3, ?4)
+                    "#,
+                )
+                .bind(joined_user_id)
+                .bind(&handled.group_id)
+                .bind(&default_category)
+                .bind(joined_at as i64)
+                .execute(&mut *tx)
+                .await?;
             }
         }
 

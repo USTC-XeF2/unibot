@@ -89,7 +89,7 @@ impl UserRepo {
     pub async fn delete_user(&self, user_id: &str) -> Result<bool, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
+        let rows = sqlx::query(
             r#"
             UPDATE im_accounts
             SET account_status = 'deleted',
@@ -100,7 +100,13 @@ impl UserRepo {
         )
         .bind(user_id)
         .execute(&mut *tx)
-        .await?;
+        .await?
+        .rows_affected();
+
+        if rows == 0 {
+            tx.commit().await?;
+            return Ok(false);
+        }
 
         sqlx::query(
             r#"

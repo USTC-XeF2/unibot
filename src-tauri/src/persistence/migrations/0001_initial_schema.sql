@@ -48,8 +48,7 @@ CREATE TABLE IF NOT EXISTS account_faces (
     remote_url        TEXT,
     local_path        TEXT,
     created_at        INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-    FOREIGN KEY (owner_user_id) REFERENCES im_accounts(user_id) ON DELETE CASCADE,
-    CHECK (face_id GLOB '*[^0-9]*')
+    FOREIGN KEY (owner_user_id) REFERENCES im_accounts(user_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_account_faces_owner ON account_faces(owner_user_id);
 

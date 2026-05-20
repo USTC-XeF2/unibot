@@ -53,9 +53,11 @@ export function CreateUserSheet({ open, onOpenChange }: CreateUserSheetProps) {
     setSubmitting(true);
     setSubmitError(null);
 
+    const trimmedUserId = formUserId.trim();
+
     try {
       await invoke<UserProfile>("register_user", {
-        userId: parsedUserId,
+        userId: trimmedUserId,
         nickname: formNickname.trim(),
         avatar: formAvatar.trim(),
         signature: "",
