@@ -1,4 +1,6 @@
 pub mod db_pool;
+pub mod migrations;
+pub mod migrator;
 pub mod repo;
 
 pub use db_pool::init_sqlite_pool;
