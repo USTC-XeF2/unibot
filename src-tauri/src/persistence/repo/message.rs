@@ -199,7 +199,7 @@ impl MessageRepo {
             SELECT message_id AS id,
                    sender_user_id,
                    message_scene AS source_type,
-                   group_id AS source_id,
+                   COALESCE(group_id, peer_id) AS source_id,
                    receiver_user_id,
                    group_id,
                    content_json,

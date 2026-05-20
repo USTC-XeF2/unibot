@@ -22,9 +22,9 @@ function UserManagementView() {
   const users = usersQuery.data ?? [];
   const error = usersQuery.error ? usersQuery.error.message : null;
   const [createOpen, setCreateOpen] = useState(false);
-  const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
-  const handleOpenUserChatWindow = async (userId: number) => {
+  const handleOpenUserChatWindow = async (userId: string) => {
     try {
       await invoke<{ created: boolean }>("open_user_chat_window", {
         userId,
@@ -34,7 +34,7 @@ function UserManagementView() {
     }
   };
 
-  const handleDeleteUser = async (userId: number, nickname: string) => {
+  const handleDeleteUser = async (userId: string, nickname: string) => {
     const confirmed = await confirmDialog({
       title: "确认删除用户",
       description: `确认删除用户 ${nickname} (${userId}) 吗？`,

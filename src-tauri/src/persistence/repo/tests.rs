@@ -172,11 +172,9 @@ async fn smoke_crud_groups(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     let after = repo.list_group_members("20001").await?;
     assert_eq!(after.len(), 1);
 
-    // Groups the user belongs to (via group_members)
+    // `upsert_group_member` now writes user_groups alongside group_members
     let user_groups = repo.list_user_groups("10001").await?;
-    // list_user_groups requires user_groups entries; they are created through
-    // the service layer, not raw repo methods. Just check it doesn't error.
-    assert!(user_groups.is_empty());
+    assert!(!user_groups.is_empty());
 
     Ok(())
 }

@@ -100,6 +100,8 @@ impl GroupRepo {
         &self,
         member: &GroupMemberProfile,
     ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query(
             r#"
             INSERT INTO group_members (
@@ -122,9 +124,25 @@ impl GroupRepo {
         .bind(member.joined_at as i64)
         .bind(member.last_sent_at as i64)
         .bind(member.mute_until.map(|ts| ts as i64))
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
+        let default_category = format!("{}:group:default", member.user_id);
+        sqlx::query(
+            r#"
+            INSERT OR IGNORE INTO user_groups (
+                owner_user_id, group_id, category_id, joined_at
+            ) VALUES (?1, ?2, ?3, ?4)
+            "#,
+        )
+        .bind(&member.user_id)
+        .bind(&member.group_id)
+        .bind(&default_category)
+        .bind(member.joined_at as i64)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 

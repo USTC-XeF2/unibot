@@ -65,7 +65,7 @@ function MainLayout() {
     setUsersOpen(!usersOpen);
   };
 
-  const handleOpenUserChatWindow = async (userId: number) => {
+  const handleOpenUserChatWindow = async (userId: string) => {
     try {
       await invoke<{ created: boolean }>("open_user_chat_window", {
         userId,

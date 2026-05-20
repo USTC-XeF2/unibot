@@ -48,7 +48,7 @@ function useEditableField(value: string): UseEditableFieldReturn {
 function UserSettingsView() {
   const { userId } = useParams();
   const usersQuery = useUsersQuery();
-  const parsedUserId = useMemo(() => Number(userId), [userId]);
+  const parsedUserId = userId ?? "";
   const user = useMemo(
     () => (usersQuery.data ?? []).find((item) => item.user_id === parsedUserId),
     [parsedUserId, usersQuery.data],
@@ -61,10 +61,6 @@ function UserSettingsView() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: We only want to reset the fields when the user ID changes.
   useEffect(() => {
-    if (parsedUserId === undefined) {
-      return;
-    }
-
     nicknameField.finishEditing();
     avatarField.finishEditing();
     signatureField.finishEditing();
@@ -75,7 +71,7 @@ function UserSettingsView() {
     field: "nickname" | "avatar" | "signature",
     editableField: UseEditableFieldReturn,
   ) => {
-    if (!Number.isInteger(parsedUserId) || parsedUserId <= 0) {
+    if (!parsedUserId) {
       setSubmitError("无效的用户 ID");
       return;
     }

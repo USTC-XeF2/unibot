@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
 type AuthState = {
-  currentUserId: number | null;
-  setCurrentUserId: (userId: number | null) => void;
+  currentUserId: string | null;
+  setCurrentUserId: (userId: string | null) => void;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({

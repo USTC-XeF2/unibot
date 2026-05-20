@@ -7,8 +7,8 @@ import type { InternalEventPayload } from "@/types/event";
 
 function normalizePrivateSourceFromEvent(
   source: MessageSource,
-  currentUserId: number,
-  peerCandidate: number | null,
+  currentUserId: string,
+  peerCandidate: string | null,
 ): MessageSource {
   if (source.scene !== "private") {
     return source;
@@ -18,7 +18,7 @@ function normalizePrivateSourceFromEvent(
     return source;
   }
 
-  if (!peerCandidate || peerCandidate <= 0 || peerCandidate === currentUserId) {
+  if (!peerCandidate || peerCandidate === currentUserId) {
     return source;
   }
 
@@ -26,7 +26,7 @@ function normalizePrivateSourceFromEvent(
 }
 
 export function messageHistoryQueryOptions(
-  userId: number,
+  userId: string,
   source: MessageSource,
   limit: number,
 ) {
@@ -43,7 +43,7 @@ export function messageHistoryQueryOptions(
 }
 
 export function useMessageHistoryQuery(
-  userId: number,
+  userId: string,
   source: MessageSource,
   limit: number,
 ) {
@@ -51,7 +51,7 @@ export function useMessageHistoryQuery(
 }
 
 export function usePokeHistoryQuery(
-  userId: number,
+  userId: string,
   source: MessageSource,
   limit: number,
 ) {
@@ -69,7 +69,7 @@ export function usePokeHistoryQuery(
 
 export function sourceFromInternalEvent(
   payload: InternalEventPayload,
-  currentUserId: number,
+  currentUserId: string,
 ): MessageSource | null {
   if (payload.kind === "message") {
     if (payload.group_id) {
@@ -140,7 +140,7 @@ export function sourceFromInternalEvent(
   return null;
 }
 
-export function invalidateMessageHistoryQueries(userId: number) {
+export function invalidateMessageHistoryQueries(userId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.chat.historyByUser(userId),
     refetchType: "active",
@@ -148,7 +148,7 @@ export function invalidateMessageHistoryQueries(userId: number) {
 }
 
 export function invalidateMessageHistoryQuery(
-  userId: number,
+  userId: string,
   source: MessageSource,
 ) {
   return queryClient.invalidateQueries({
@@ -157,7 +157,7 @@ export function invalidateMessageHistoryQuery(
   });
 }
 
-export function invalidatePokeHistoryQueries(userId: number) {
+export function invalidatePokeHistoryQueries(userId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.chat.pokeByUser(userId),
     refetchType: "active",
@@ -165,7 +165,7 @@ export function invalidatePokeHistoryQueries(userId: number) {
 }
 
 export function invalidatePokeHistoryQuery(
-  userId: number,
+  userId: string,
   source: MessageSource,
 ) {
   return queryClient.invalidateQueries({

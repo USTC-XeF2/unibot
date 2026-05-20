@@ -9,7 +9,7 @@ pub fn now_ts() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs()
+        .as_millis() as u64
 }
 
 pub fn emit_to_users<I, S>(core: &CoreContainer, user_ids: I, event: InternalEvent)

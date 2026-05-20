@@ -4,16 +4,16 @@ import { isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 
-export function useFriendsQuery(userId: number) {
+export function useFriendsQuery(userId: string) {
   return useQuery({
     queryKey: queryKeys.friends.byUser(userId),
-    queryFn: () => invoke<number[]>("list_friends", { userId }),
+    queryFn: () => invoke<string[]>("list_friends", { userId }),
     retry: false,
     enabled: isValidUserId(userId),
   });
 }
 
-export function invalidateFriendsQuery(userId: number) {
+export function invalidateFriendsQuery(userId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.friends.byUser(userId),
   });

@@ -7,9 +7,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function resolveUserDisplayName(
-  userId: number,
+  userId: string,
   nickname?: string,
-  cards?: Record<number, { card: string }>,
+  cards?: Record<string, { card: string }>,
 ): string {
   return cards?.[userId]?.card?.trim() || nickname?.trim() || `用户 ${userId}`;
 }

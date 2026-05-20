@@ -8,20 +8,18 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
-import { isValidUserId } from "@/lib/query";
 import { useAuthStore } from "@/store/use-auth-store";
 import type { MessageSource } from "@/types/chat";
 
 function ChatWindowView() {
   const { userId } = useParams();
-  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const currentUserId = useAuthStore((state) => state.currentUserId);
   const setCurrentUserId = useAuthStore((state) => state.setCurrentUserId);
   const [selectedConversation, setSelectedConversation] =
     useState<MessageSource | null>(null);
 
   useEffect(() => {
-    const userIdNum = Number(userId);
-    const normalizedUserId = isValidUserId(userIdNum) ? userIdNum : null;
+    const normalizedUserId = userId || null;
 
     setCurrentUserId(normalizedUserId);
     setSelectedConversation(null);
@@ -31,7 +29,7 @@ function ChatWindowView() {
     };
   }, [userId, setCurrentUserId]);
 
-  if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+  if (!currentUserId) {
     return null;
   }
 

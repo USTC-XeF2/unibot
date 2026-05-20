@@ -30,7 +30,7 @@ function RequestManageDialog({
   users,
   groups,
 }: RequestManageDialogProps) {
-  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? "");
   const [requestError, setRequestError] = useState<string | null>(null);
   const [handlingRequestKeys, setHandlingRequestKeys] = useState<string[]>([]);
 
@@ -59,7 +59,7 @@ function RequestManageDialog({
   const handleGroupRequestMutation = useHandleGroupRequestMutation();
 
   const handleFriendRequestAction = async (
-    requestId: number,
+    requestId: string,
     state: "accepted" | "rejected",
   ) => {
     const key = `friend-${requestId}`;
@@ -67,7 +67,7 @@ function RequestManageDialog({
       return;
     }
 
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+    if (!currentUserId) {
       setRequestError("当前用户无效，无法处理请求");
       return;
     }
@@ -88,7 +88,7 @@ function RequestManageDialog({
   };
 
   const handleGroupRequestAction = async (
-    requestId: number,
+    requestId: string,
     state: "accepted" | "rejected",
   ) => {
     const key = `group-${requestId}`;
@@ -96,7 +96,7 @@ function RequestManageDialog({
       return;
     }
 
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+    if (!currentUserId) {
       setRequestError("当前用户无效，无法处理请求");
       return;
     }

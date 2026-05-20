@@ -23,8 +23,8 @@ export type ChatContextAction = {
 type ChatMessageContentProps = {
   content: MessageSegment[];
   className?: string;
-  onAtClick: (target: number | "all") => void;
-  resolveMemberName: (userId: number) => string;
+  onAtClick: (target: string | "all") => void;
+  resolveMemberName: (userId: string) => string;
 };
 
 type ChatMessageItemProps = {
@@ -41,8 +41,8 @@ type ChatMessageItemProps = {
     summary: string;
     missing?: boolean;
   } | null;
-  onAtClick: (target: number | "all") => void;
-  resolveMemberName: (userId: number) => string;
+  onAtClick: (target: string | "all") => void;
+  resolveMemberName: (userId: string) => string;
   avatarActions: ChatContextAction[];
   messageActions: ChatContextAction[];
 };

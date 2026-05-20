@@ -17,7 +17,7 @@ import type { InternalEventPayload } from "@/types/event";
 type ChatEventSubscriber = (payload: InternalEventPayload) => void;
 
 const subscribers = new Set<ChatEventSubscriber>();
-let activeUserId: number | null = null;
+let activeUserId: string | null = null;
 let activeUnlisten: UnlistenFn | null = null;
 let setupPromise: Promise<void> | null = null;
 
@@ -28,7 +28,7 @@ function dispatchToSubscribers(payload: InternalEventPayload) {
 }
 
 function handleQueryInvalidation(
-  userId: number,
+  userId: string,
   payload: InternalEventPayload,
 ) {
   const source = sourceFromInternalEvent(payload, userId);
@@ -85,7 +85,7 @@ function detachListener() {
   activeUserId = null;
 }
 
-async function ensureListener(userId: number) {
+async function ensureListener(userId: string) {
   if (activeUserId === userId && activeUnlisten) {
     return;
   }
@@ -122,7 +122,7 @@ async function ensureListener(userId: number) {
 }
 
 export function useChatEventBus(
-  userId: number,
+  userId: string,
   onEvent?: (payload: InternalEventPayload) => void,
 ) {
   const onEventRef = useRef(onEvent);
@@ -136,7 +136,7 @@ export function useChatEventBus(
   }
 
   useEffect(() => {
-    if (!Number.isInteger(userId) || userId <= 0) {
+    if (!userId) {
       return;
     }
 
