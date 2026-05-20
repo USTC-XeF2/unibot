@@ -15,6 +15,11 @@ struct MessageReactionRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct MessageReactionIdRow {
+    id: String,
+}
+
+#[derive(sqlx::FromRow)]
 struct PokeRow {
     id: String,
     source_type: String,
@@ -56,7 +61,7 @@ impl InteractionRepo {
         &self,
         record: NewMessageReactionRecord,
     ) -> Result<MessageReactionEntity, sqlx::Error> {
-        let row = sqlx::query_as::<_, MessageReactionRow>(
+        let row = sqlx::query_as::<_, MessageReactionIdRow>(
             r#"
             WITH next_id(value) AS (
                 SELECT CAST(COALESCE(MAX(CAST(reaction_id AS INTEGER)), 0) + 1 AS TEXT)
