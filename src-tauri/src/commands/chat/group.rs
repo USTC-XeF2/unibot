@@ -12,11 +12,11 @@ use super::super::IntoCommandResult;
 pub async fn upsert_group(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
     group_name: String,
     max_member_count: u32,
-    initial_member_user_ids: Vec<u64>,
+    initial_member_user_ids: Vec<String>,
 ) -> Result<GroupProfile, String> {
     services
         .group
@@ -36,9 +36,9 @@ pub async fn upsert_group(
 pub async fn upsert_group_member(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
-    target_user_id: u64,
+    user_id: String,
+    group_id: String,
+    target_user_id: String,
 ) -> Result<GroupMemberProfile, String> {
     services
         .group
@@ -50,8 +50,8 @@ pub async fn upsert_group_member(
 #[tauri::command]
 pub async fn list_group_members(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<Vec<GroupMemberProfile>, String> {
     services
         .group
@@ -63,8 +63,8 @@ pub async fn list_group_members(
 #[tauri::command]
 pub async fn list_group_event_history(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
     limit: Option<usize>,
 ) -> Result<Vec<GroupEventEntity>, String> {
     services
@@ -78,9 +78,9 @@ pub async fn list_group_event_history(
 pub async fn mute_group_member(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
-    target_user_id: u64,
+    user_id: String,
+    group_id: String,
+    target_user_id: String,
     duration_seconds: u64,
 ) -> Result<MuteGroupMemberResult, String> {
     services
@@ -94,8 +94,8 @@ pub async fn mute_group_member(
 pub async fn set_group_whole_mute(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
     duration_seconds: u64,
 ) -> Result<GroupWholeMuteState, String> {
     services
@@ -108,8 +108,8 @@ pub async fn set_group_whole_mute(
 #[tauri::command]
 pub async fn get_group_whole_mute(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<Option<GroupWholeMuteState>, String> {
     services
         .group
@@ -122,10 +122,10 @@ pub async fn get_group_whole_mute(
 pub async fn create_group_request(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
     request_type: GroupRequestType,
-    target_user_id: Option<u64>,
+    target_user_id: Option<String>,
     comment: Option<String>,
 ) -> Result<GroupRequestEntity, String> {
     services
@@ -145,7 +145,7 @@ pub async fn create_group_request(
 #[tauri::command]
 pub async fn list_group_requests(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
 ) -> Result<Vec<GroupRequestEntity>, String> {
     services
         .group
@@ -158,8 +158,8 @@ pub async fn list_group_requests(
 pub async fn handle_group_request(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    request_id: i64,
+    user_id: String,
+    request_id: String,
     state: RequestState,
 ) -> Result<GroupRequestEntity, String> {
     services
@@ -173,9 +173,9 @@ pub async fn handle_group_request(
 pub async fn kick_group_member(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
-    target_user_id: u64,
+    user_id: String,
+    group_id: String,
+    target_user_id: String,
 ) -> Result<(), String> {
     services
         .group
@@ -188,9 +188,9 @@ pub async fn kick_group_member(
 pub async fn set_group_member_role(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
-    target_user_id: u64,
+    user_id: String,
+    group_id: String,
+    target_user_id: String,
     is_admin: bool,
 ) -> Result<GroupMemberProfile, String> {
     services
@@ -204,9 +204,9 @@ pub async fn set_group_member_role(
 pub async fn set_group_member_title(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
-    target_user_id: u64,
+    user_id: String,
+    group_id: String,
+    target_user_id: String,
     title: String,
 ) -> Result<GroupMemberProfile, String> {
     services
@@ -220,8 +220,8 @@ pub async fn set_group_member_title(
 pub async fn rename_group(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
     group_name: String,
 ) -> Result<GroupProfile, String> {
     services
@@ -235,8 +235,8 @@ pub async fn rename_group(
 pub async fn leave_group(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<(), String> {
     services
         .group
@@ -249,8 +249,8 @@ pub async fn leave_group(
 pub async fn dissolve_group(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<(), String> {
     services
         .group
@@ -275,8 +275,8 @@ pub async fn upsert_group_announcement(
 #[tauri::command]
 pub async fn list_group_announcements(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<Vec<GroupAnnouncementEntity>, String> {
     services
         .group
@@ -301,8 +301,8 @@ pub async fn upsert_group_folder(
 #[tauri::command]
 pub async fn list_group_folders(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<Vec<GroupFolderEntity>, String> {
     services
         .group
@@ -327,8 +327,8 @@ pub async fn upsert_group_file(
 #[tauri::command]
 pub async fn list_group_files(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<Vec<GroupFileEntity>, String> {
     services
         .group
@@ -341,9 +341,9 @@ pub async fn list_group_files(
 pub async fn set_group_essence_message(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
-    message_id: i64,
+    user_id: String,
+    group_id: String,
+    message_id: String,
     is_set: bool,
 ) -> Result<GroupEssenceMessageEntity, String> {
     services
@@ -356,8 +356,8 @@ pub async fn set_group_essence_message(
 #[tauri::command]
 pub async fn list_group_essence_messages(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    group_id: u64,
+    user_id: String,
+    group_id: String,
 ) -> Result<Vec<GroupEssenceMessageEntity>, String> {
     services
         .group

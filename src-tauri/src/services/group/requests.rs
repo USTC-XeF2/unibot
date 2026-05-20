@@ -12,22 +12,22 @@ impl GroupService {
     pub async fn create_group_request(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
         request_type: GroupRequestType,
-        target_user_id: Option<u64>,
+        target_user_id: Option<String>,
         comment: Option<String>,
     ) -> AppResult<GroupRequestEntity> {
         self.repo
-            .get_group(group_id)
+            .get_group(&group_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("group {} not found", group_id)))?;
 
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         if self
             .repo
-            .has_pending_group_request(group_id, request_type, user_id, target_user_id)
+            .has_pending_group_request(&group_id, request_type, &user_id, target_user_id.as_deref())
             .await?
         {
             return Err(AppError::conflict("a pending group request already exists"));
@@ -43,7 +43,7 @@ impl GroupService {
 
                 let already_member = self
                     .repo
-                    .get_group_member(group_id, user_id)
+                    .get_group_member(&group_id, &user_id)
                     .await?
                     .is_some();
                 if already_member {
@@ -51,19 +51,19 @@ impl GroupService {
                 }
             }
             GroupRequestType::Invite => {
-                let target_user_id = target_user_id.ok_or_else(|| {
+                let target_user_id = target_user_id.clone().ok_or_else(|| {
                     AppError::validation("invite request requires target_user_id")
                 })?;
 
-                core.require_user_context(target_user_id)?;
+                core.require_user_context(&target_user_id)?;
 
-                let initiator_member = self.ensure_group_member(group_id, user_id).await?;
+                let initiator_member = self.ensure_group_member(&group_id, &user_id).await?;
 
                 if matches!(initiator_member.role, GroupRole::Member) {
                     return Err(AppError::validation("only owner/admin can invite users"));
                 }
 
-                let target_member = self.repo.get_group_member(group_id, target_user_id).await?;
+                let target_member = self.repo.get_group_member(&group_id, &target_user_id).await?;
                 if target_member.is_some() {
                     return Err(AppError::conflict("target user is already in group"));
                 }
@@ -73,33 +73,33 @@ impl GroupService {
         let created = self
             .repo
             .create_group_request(NewGroupRequestRecord {
-                group_id,
+                group_id: group_id.clone(),
                 request_type,
-                initiator_user_id: user_id,
-                target_user_id,
+                initiator_user_id: user_id.clone(),
+                target_user_id: target_user_id.clone(),
                 comment,
                 created_at: now_ts(),
             })
             .await?;
 
         let event = InternalEvent::GroupRequestCreated {
-            request_id: created.request_id,
-            group_id: created.group_id,
+            request_id: created.request_id.clone(),
+            group_id: created.group_id.clone(),
             request_type: created.request_type,
-            initiator_user_id: created.initiator_user_id,
-            target_user_id: created.target_user_id,
+            initiator_user_id: created.initiator_user_id.clone(),
+            target_user_id: created.target_user_id.clone(),
             time: created.created_at,
         };
 
         match created.request_type {
             GroupRequestType::Join => {
-                emit_to_group_members(core, &self.repo, created.group_id, event.clone()).await;
-                emit_to_users(core, [user_id], event);
+                emit_to_group_members(core, &self.repo, &created.group_id, event.clone()).await;
+                emit_to_users(core, [&user_id], event);
             }
             GroupRequestType::Invite => {
-                let mut recipients = vec![created.initiator_user_id];
-                if let Some(target_user_id) = created.target_user_id {
-                    recipients.push(target_user_id);
+                let mut recipients = vec![created.initiator_user_id.clone()];
+                if let Some(ref target_user_id) = created.target_user_id {
+                    recipients.push(target_user_id.clone());
                 }
                 emit_to_users(core, recipients, event);
             }
@@ -108,9 +108,9 @@ impl GroupService {
         Ok(created)
     }
 
-    pub async fn list_group_requests(&self, user_id: u64) -> AppResult<Vec<GroupRequestEntity>> {
+    pub async fn list_group_requests(&self, user_id: String) -> AppResult<Vec<GroupRequestEntity>> {
         self.repo
-            .list_group_requests(user_id)
+            .list_group_requests(&user_id)
             .await
             .map_err(Into::into)
     }
@@ -118,15 +118,15 @@ impl GroupService {
     pub async fn handle_group_request(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        request_id: i64,
+        user_id: String,
+        request_id: String,
         state: RequestState,
     ) -> AppResult<GroupRequestEntity> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         let current = self
             .repo
-            .get_group_request_by_id(request_id)
+            .get_group_request_by_id(&request_id)
             .await?
             .ok_or_else(|| {
                 AppError::not_found(format!("group request {} not found", request_id))
@@ -138,7 +138,8 @@ impl GroupService {
 
         match current.request_type {
             GroupRequestType::Join => {
-                let operator_member = self.ensure_group_member(current.group_id, user_id).await?;
+                let operator_member =
+                    self.ensure_group_member(&current.group_id, &user_id).await?;
                 if matches!(operator_member.role, GroupRole::Member) {
                     return Err(AppError::validation(
                         "only owner/admin can handle join requests",
@@ -148,12 +149,13 @@ impl GroupService {
             GroupRequestType::Invite => {
                 let target_user_id = current
                     .target_user_id
+                    .as_ref()
                     .ok_or_else(|| AppError::internal("invite request is missing target user"))?;
 
-                let is_target_operator = user_id == target_user_id;
+                let is_target_operator = user_id == *target_user_id;
                 let admin_or_owner = self
                     .repo
-                    .get_group_member(current.group_id, user_id)
+                    .get_group_member(&current.group_id, &user_id)
                     .await?
                     .map(|m| !matches!(m.role, GroupRole::Member))
                     .unwrap_or(false);
@@ -168,41 +170,43 @@ impl GroupService {
 
         let handled = self
             .repo
-            .handle_group_request(request_id, state, user_id, now_ts(), now_ts())
+            .handle_group_request(&request_id, state, &user_id, now_ts(), now_ts())
             .await?
             .ok_or_else(|| {
                 AppError::not_found(format!("group request {} not found", request_id))
             })?;
 
         let event = InternalEvent::GroupRequestHandled {
-            request_id: handled.request_id,
-            group_id: handled.group_id,
+            request_id: handled.request_id.clone(),
+            group_id: handled.group_id.clone(),
             request_type: handled.request_type,
-            initiator_user_id: handled.initiator_user_id,
-            target_user_id: handled.target_user_id,
-            operator_user_id: user_id,
+            initiator_user_id: handled.initiator_user_id.clone(),
+            target_user_id: handled.target_user_id.clone(),
+            operator_user_id: user_id.clone(),
             state,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, handled.group_id, event.clone()).await;
-        emit_to_users(core, [handled.initiator_user_id], event.clone());
-        if let Some(target_user_id) = handled.target_user_id {
+        emit_to_group_members(core, &self.repo, &handled.group_id, event.clone()).await;
+        emit_to_users(core, [&handled.initiator_user_id], event.clone());
+        if let Some(ref target_user_id) = handled.target_user_id {
             emit_to_users(core, [target_user_id], event);
         }
 
         if state == RequestState::Accepted {
             let joined_user_id = match handled.request_type {
-                GroupRequestType::Join => handled.initiator_user_id,
-                GroupRequestType::Invite => handled.target_user_id.unwrap_or(0),
+                GroupRequestType::Join => handled.initiator_user_id.clone(),
+                GroupRequestType::Invite => {
+                    handled.target_user_id.clone().unwrap_or_default()
+                }
             };
             let event_time = handled.handled_at.unwrap_or_else(now_ts);
 
-            if joined_user_id != 0 {
+            if !joined_user_id.is_empty() {
                 self.save_group_event(
-                    handled.group_id,
+                    &handled.group_id,
                     GroupEventPayload::MemberJoined {
-                        operator_user_id: user_id,
-                        joined_user_id,
+                        operator_user_id: user_id.clone(),
+                        joined_user_id: joined_user_id.clone(),
                     },
                     event_time,
                 )
@@ -211,10 +215,10 @@ impl GroupService {
                 emit_to_group_members(
                     core,
                     &self.repo,
-                    handled.group_id,
+                    &handled.group_id,
                     InternalEvent::GroupMemberJoined {
-                        group_id: handled.group_id,
-                        operator_user_id: user_id,
+                        group_id: handled.group_id.clone(),
+                        operator_user_id: user_id.clone(),
                         target_user_id: joined_user_id,
                         time: event_time,
                     },

@@ -1,3 +1,4 @@
+mod codecs;
 pub mod group;
 pub mod interaction;
 pub mod message;

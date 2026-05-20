@@ -51,7 +51,7 @@ impl UserContext {
 }
 
 pub struct CoreContainer {
-    users: RwLock<HashMap<u64, UserContext>>,
+    users: RwLock<HashMap<String, UserContext>>,
 }
 
 impl Default for CoreContainer {
@@ -69,7 +69,7 @@ impl CoreContainer {
 
     pub fn register_user(&self, profile: UserProfile) -> AppResult<UserContext> {
         let context = UserContext::new(profile);
-        let user_id = context.profile.user_id;
+        let user_id = context.profile.user_id.clone();
         let mut users = self.users.write().expect("users lock poisoned");
         if users.contains_key(&user_id) {
             return Err(AppError::conflict(format!(
@@ -81,18 +81,18 @@ impl CoreContainer {
         Ok(context)
     }
 
-    pub fn unregister_user(&self, user_id: u64) -> Option<UserContext> {
+    pub fn unregister_user(&self, user_id: &str) -> Option<UserContext> {
         self.users
             .write()
             .expect("users lock poisoned")
-            .remove(&user_id)
+            .remove(user_id)
     }
 
-    pub fn user_context(&self, user_id: u64) -> Option<UserContext> {
+    pub fn user_context(&self, user_id: &str) -> Option<UserContext> {
         self.users
             .read()
             .expect("users lock poisoned")
-            .get(&user_id)
+            .get(user_id)
             .cloned()
     }
 
@@ -105,7 +105,7 @@ impl CoreContainer {
             .collect()
     }
 
-    pub fn require_user_context(&self, user_id: u64) -> AppResult<UserContext> {
+    pub fn require_user_context(&self, user_id: &str) -> AppResult<UserContext> {
         self.user_context(user_id)
             .ok_or_else(|| AppError::not_found(format!("user {} is not registered", user_id)))
     }
@@ -113,14 +113,14 @@ impl CoreContainer {
     pub fn open_user_chat_window(
         &self,
         app: tauri::AppHandle,
-        user_id: u64,
+        user_id: String,
         nickname_hint: Option<String>,
     ) -> AppResult<bool> {
-        if user_id == 0 {
+        if user_id.trim().is_empty() {
             return Err(AppError::validation("invalid user id"));
         }
 
-        let user_context = self.require_user_context(user_id)?;
+        let user_context = self.require_user_context(&user_id)?;
 
         if let Some(existing_label) = user_context.chat_window_label() {
             if let Some(existing_window) = app.get_webview_window(&existing_label) {
@@ -175,6 +175,7 @@ impl CoreContainer {
         let mut event_rx = user_context.subscribe_events();
         let app_handle_for_events = app.clone();
         let event_window_label = label.clone();
+        let user_id_for_events = user_id.clone();
         tauri::async_runtime::spawn(async move {
             loop {
                 match event_rx.recv().await {
@@ -199,7 +200,7 @@ impl CoreContainer {
         chat_window.on_window_event(move |event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let core_state = app_handle.state::<CoreContainer>();
-                if let Some(context) = core_state.user_context(user_id) {
+                if let Some(context) = core_state.user_context(&user_id_for_events) {
                     context.clear_chat_window_label();
                 }
             }

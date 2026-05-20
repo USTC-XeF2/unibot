@@ -15,10 +15,10 @@ impl GroupService {
         core: &CoreContainer,
         announcement: GroupAnnouncementEntity,
     ) -> AppResult<GroupAnnouncementEntity> {
-        core.require_user_context(announcement.sender_user_id)?;
+        core.require_user_context(&announcement.sender_user_id)?;
 
         let sender = self
-            .ensure_group_member(announcement.group_id, announcement.sender_user_id)
+            .ensure_group_member(&announcement.group_id, &announcement.sender_user_id)
             .await?;
         if matches!(sender.role, GroupRole::Member) {
             return Err(AppError::validation(
@@ -31,11 +31,11 @@ impl GroupService {
         emit_to_group_members(
             core,
             &self.repo,
-            announcement.group_id,
+            &announcement.group_id,
             InternalEvent::GroupAnnouncementUpserted {
                 announcement_id: announcement.announcement_id.clone(),
-                group_id: announcement.group_id,
-                sender_user_id: announcement.sender_user_id,
+                group_id: announcement.group_id.clone(),
+                sender_user_id: announcement.sender_user_id.clone(),
                 time: announcement.updated_at,
             },
         )
@@ -46,12 +46,12 @@ impl GroupService {
 
     pub async fn list_announcements(
         &self,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
     ) -> AppResult<Vec<GroupAnnouncementEntity>> {
-        self.ensure_group_member(group_id, user_id).await?;
+        self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
-            .list_announcements(group_id)
+            .list_announcements(&group_id)
             .await
             .map_err(Into::into)
     }
@@ -61,9 +61,9 @@ impl GroupService {
         core: &CoreContainer,
         folder: GroupFolderEntity,
     ) -> AppResult<GroupFolderEntity> {
-        core.require_user_context(folder.creator_user_id)?;
+        core.require_user_context(&folder.creator_user_id)?;
 
-        self.ensure_group_member(folder.group_id, folder.creator_user_id)
+        self.ensure_group_member(&folder.group_id, &folder.creator_user_id)
             .await?;
 
         self.repo.upsert_group_folder(&folder).await?;
@@ -71,11 +71,11 @@ impl GroupService {
         emit_to_group_members(
             core,
             &self.repo,
-            folder.group_id,
+            &folder.group_id,
             InternalEvent::GroupFolderUpserted {
                 folder_id: folder.folder_id.clone(),
-                group_id: folder.group_id,
-                creator_user_id: folder.creator_user_id,
+                group_id: folder.group_id.clone(),
+                creator_user_id: folder.creator_user_id.clone(),
                 time: folder.updated_at,
             },
         )
@@ -86,12 +86,12 @@ impl GroupService {
 
     pub async fn list_group_folders(
         &self,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
     ) -> AppResult<Vec<GroupFolderEntity>> {
-        self.ensure_group_member(group_id, user_id).await?;
+        self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
-            .list_group_folders(group_id)
+            .list_group_folders(&group_id)
             .await
             .map_err(Into::into)
     }
@@ -101,9 +101,9 @@ impl GroupService {
         core: &CoreContainer,
         file: GroupFileEntity,
     ) -> AppResult<GroupFileEntity> {
-        core.require_user_context(file.uploader_user_id)?;
+        core.require_user_context(&file.uploader_user_id)?;
 
-        self.ensure_group_member(file.group_id, file.uploader_user_id)
+        self.ensure_group_member(&file.group_id, &file.uploader_user_id)
             .await?;
 
         self.repo.upsert_group_file(&file).await?;
@@ -111,11 +111,11 @@ impl GroupService {
         emit_to_group_members(
             core,
             &self.repo,
-            file.group_id,
+            &file.group_id,
             InternalEvent::GroupFileUpserted {
                 file_id: file.file_id.clone(),
-                group_id: file.group_id,
-                uploader_user_id: file.uploader_user_id,
+                group_id: file.group_id.clone(),
+                uploader_user_id: file.uploader_user_id.clone(),
                 time: file.uploaded_at,
             },
         )
@@ -126,12 +126,12 @@ impl GroupService {
 
     pub async fn list_group_files(
         &self,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
     ) -> AppResult<Vec<GroupFileEntity>> {
-        self.ensure_group_member(group_id, user_id).await?;
+        self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
-            .list_group_files(group_id)
+            .list_group_files(&group_id)
             .await
             .map_err(Into::into)
     }
@@ -139,14 +139,14 @@ impl GroupService {
     pub async fn set_group_essence_message(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
-        message_id: i64,
+        user_id: String,
+        group_id: String,
+        message_id: String,
         is_set: bool,
     ) -> AppResult<GroupEssenceMessageEntity> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
-        let operator = self.ensure_group_member(group_id, user_id).await?;
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(
@@ -156,7 +156,7 @@ impl GroupService {
 
         let message = self
             .message_repo
-            .get_message_by_id(message_id)
+            .get_message_by_id(&message_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("message {} not found", message_id)))?;
 
@@ -175,10 +175,10 @@ impl GroupService {
         let essence = self
             .repo
             .create_group_essence_message(
-                group_id,
-                message_id,
-                message.sender_user_id,
-                user_id,
+                &group_id,
+                &message_id,
+                &message.sender_user_id,
+                &user_id,
                 is_set,
                 now_ts(),
             )
@@ -186,11 +186,11 @@ impl GroupService {
 
         if essence.is_set {
             self.save_group_event(
-                group_id,
+                &group_id,
                 GroupEventPayload::EssenceSet {
-                    message_id: essence.message_id,
-                    sender_user_id: essence.sender_user_id,
-                    operator_user_id: essence.operator_user_id,
+                    message_id: essence.message_id.clone(),
+                    sender_user_id: essence.sender_user_id.clone(),
+                    operator_user_id: essence.operator_user_id.clone(),
                 },
                 essence.created_at,
             )
@@ -200,13 +200,13 @@ impl GroupService {
         emit_to_group_members(
             core,
             &self.repo,
-            group_id,
+            &group_id,
             InternalEvent::GroupEssenceUpdated {
-                essence_id: essence.essence_id,
-                group_id: essence.group_id,
-                message_id: essence.message_id,
-                sender_user_id: essence.sender_user_id,
-                operator_user_id: essence.operator_user_id,
+                essence_id: essence.essence_id.clone(),
+                group_id: essence.group_id.clone(),
+                message_id: essence.message_id.clone(),
+                sender_user_id: essence.sender_user_id.clone(),
+                operator_user_id: essence.operator_user_id.clone(),
                 is_set: essence.is_set,
                 time: essence.created_at,
             },
@@ -218,41 +218,41 @@ impl GroupService {
 
     pub async fn list_group_essence_messages(
         &self,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
     ) -> AppResult<Vec<GroupEssenceMessageEntity>> {
-        self.ensure_group_member(group_id, user_id).await?;
+        self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
-            .list_group_essence_messages(group_id)
+            .list_group_essence_messages(&group_id)
             .await
             .map_err(Into::into)
     }
 
     pub async fn list_group_event_history(
         &self,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
         limit: usize,
     ) -> AppResult<Vec<GroupEventEntity>> {
-        self.ensure_group_member(group_id, user_id).await?;
+        self.ensure_group_member(&group_id, &user_id).await?;
 
         let limit_i64 =
             i64::try_from(limit).map_err(|_| AppError::validation("limit is too large"))?;
 
-        let rows = self.repo.list_group_events(group_id, limit_i64).await?;
+        let rows = self.repo.list_group_events(&group_id, limit_i64).await?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
     pub(super) async fn save_group_event(
         &self,
-        group_id: u64,
+        group_id: &str,
         payload: GroupEventPayload,
         created_at: u64,
     ) -> AppResult<()> {
         let payload_json = serde_json::to_string(&payload)?;
         self.repo
             .insert_group_event(NewGroupEventRecord {
-                group_id,
+                group_id: group_id.to_string(),
                 payload: payload_json,
                 created_at,
             })

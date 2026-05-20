@@ -1,5 +1,5 @@
 use crate::core::CoreContainer;
-use crate::models::{GroupProfile, UserProfile};
+use crate::models::{DbId, GroupProfile, UserProfile};
 use crate::services::ServiceHub;
 
 use super::super::IntoCommandResult;
@@ -7,7 +7,7 @@ use super::super::IntoCommandResult;
 #[tauri::command]
 pub async fn update_user_profile(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
     nickname: Option<String>,
     avatar: Option<String>,
     signature: Option<String>,
@@ -22,8 +22,8 @@ pub async fn update_user_profile(
 #[tauri::command]
 pub async fn list_friends(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-) -> Result<Vec<u64>, String> {
+    user_id: String,
+) -> Result<Vec<DbId>, String> {
     services
         .user
         .list_friends(user_id)
@@ -35,7 +35,7 @@ pub async fn list_friends(
 pub async fn list_user_groups(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
 ) -> Result<Vec<GroupProfile>, String> {
     services
         .group

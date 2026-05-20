@@ -25,24 +25,22 @@ impl InteractionService {
     pub async fn react_to_message(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        message_id: i64,
+        user_id: String,
+        message_id: String,
         face_id: String,
         is_add: bool,
     ) -> AppResult<MessageReactionEntity> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         let message = self
             .message_repo
-            .get_message_by_id(message_id)
+            .get_message_by_id(&message_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("message {} not found", message_id)))?;
 
         let record = NewMessageReactionRecord {
-            message_id,
-            source_type: message.source_type,
-            source_id: message.source_id,
-            operator_user_id: user_id,
+            message_id: message_id.clone(),
+            operator_user_id: user_id.clone(),
             face_id,
             is_add,
             created_at: now_ts(),
@@ -54,15 +52,15 @@ impl InteractionService {
             core,
             &self.group_repo,
             &reaction.source,
-            user_id,
-            Some(message.sender_user_id),
+            &user_id,
+            Some(&message.sender_user_id),
         )
         .await;
         let event = InternalEvent::MessageReaction {
-            reaction_id: reaction.reaction_id,
-            message_id: reaction.message_id,
+            reaction_id: reaction.reaction_id.clone(),
+            message_id: reaction.message_id.clone(),
             source: reaction.source.clone(),
-            operator_user_id: reaction.operator_user_id,
+            operator_user_id: reaction.operator_user_id.clone(),
             face_id: reaction.face_id.clone(),
             is_add: reaction.is_add,
             time: reaction.created_at,
@@ -75,17 +73,17 @@ impl InteractionService {
     pub async fn poke(
         &self,
         core: &CoreContainer,
-        user_id: u64,
+        user_id: String,
         source: MessageSource,
-        target_user_id: u64,
+        target_user_id: String,
     ) -> AppResult<PokeEntity> {
-        core.require_user_context(user_id)?;
-        core.require_user_context(target_user_id)?;
+        core.require_user_context(&user_id)?;
+        core.require_user_context(&target_user_id)?;
 
         let (source_type, source_id) = source.to_db_parts();
         let record = NewPokeRecord {
             source_type: source_type.to_string(),
-            source_id,
+            source_id: source_id.to_string(),
             sender_user_id: user_id,
             target_user_id,
             created_at: now_ts(),
@@ -97,15 +95,15 @@ impl InteractionService {
             core,
             &self.group_repo,
             &poke.source,
-            poke.sender_user_id,
-            Some(poke.target_user_id),
+            &poke.sender_user_id,
+            Some(&poke.target_user_id),
         )
         .await;
         let event = InternalEvent::Poke {
-            poke_id: poke.poke_id,
+            poke_id: poke.poke_id.clone(),
             source: poke.source.clone(),
-            sender_user_id: poke.sender_user_id,
-            target_user_id: poke.target_user_id,
+            sender_user_id: poke.sender_user_id.clone(),
+            target_user_id: poke.target_user_id.clone(),
             time: poke.created_at,
         };
         emit_to_users(core, recipients, event);
@@ -115,7 +113,7 @@ impl InteractionService {
 
     pub async fn list_poke_history(
         &self,
-        user_id: u64,
+        user_id: String,
         source: MessageSource,
         limit: usize,
     ) -> AppResult<Vec<PokeEntity>> {
@@ -123,7 +121,7 @@ impl InteractionService {
             i64::try_from(limit).map_err(|_| AppError::validation("limit is too large"))?;
         let (source_type, source_id) = source.to_db_parts();
         self.repo
-            .list_pokes(user_id, source_type, source_id, limit_i64)
+            .list_pokes(&user_id, source_type, source_id, limit_i64)
             .await
             .map_err(Into::into)
     }

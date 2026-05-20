@@ -9,8 +9,8 @@ mod requests;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MuteGroupMemberResult {
-    pub group_id: u64,
-    pub target_user_id: u64,
+    pub group_id: String,
+    pub target_user_id: String,
     pub muted: bool,
     pub mute_until: Option<u64>,
 }

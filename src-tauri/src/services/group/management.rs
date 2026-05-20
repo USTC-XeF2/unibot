@@ -10,19 +10,19 @@ impl GroupService {
     pub async fn kick_group_member(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
-        target_user_id: u64,
+        user_id: String,
+        group_id: String,
+        target_user_id: String,
     ) -> AppResult<()> {
         if user_id == target_user_id {
             return Err(AppError::validation("cannot kick yourself"));
         }
 
-        core.require_user_context(user_id)?;
-        core.require_user_context(target_user_id)?;
+        core.require_user_context(&user_id)?;
+        core.require_user_context(&target_user_id)?;
 
-        let operator = self.ensure_group_member(group_id, user_id).await?;
-        let target = self.ensure_group_member(group_id, target_user_id).await?;
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
+        let target = self.ensure_group_member(&group_id, &target_user_id).await?;
 
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation("only owner/admin can kick members"));
@@ -35,18 +35,18 @@ impl GroupService {
         }
 
         self.repo
-            .remove_group_member(group_id, target_user_id)
+            .remove_group_member(&group_id, &target_user_id)
             .await?;
 
         let event = InternalEvent::Notice {
-            group_id,
-            actor: user_id,
-            target: target_user_id,
+            group_id: group_id.clone(),
+            actor: user_id.clone(),
+            target: target_user_id.clone(),
             notice_type: NoticeType::Kick,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, group_id, event.clone()).await;
-        emit_to_users(core, [target_user_id], event);
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await;
+        emit_to_users(core, [&target_user_id], event);
 
         Ok(())
     }
@@ -54,20 +54,20 @@ impl GroupService {
     pub async fn set_group_member_role(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
-        target_user_id: u64,
+        user_id: String,
+        group_id: String,
+        target_user_id: String,
         is_admin: bool,
     ) -> AppResult<GroupMemberProfile> {
-        core.require_user_context(user_id)?;
-        core.require_user_context(target_user_id)?;
+        core.require_user_context(&user_id)?;
+        core.require_user_context(&target_user_id)?;
 
-        let operator = self.ensure_group_member(group_id, user_id).await?;
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
         if !matches!(operator.role, GroupRole::Owner) {
             return Err(AppError::validation("only owner can change admin role"));
         }
 
-        let target = self.ensure_group_member(group_id, target_user_id).await?;
+        let target = self.ensure_group_member(&group_id, &target_user_id).await?;
 
         if matches!(target.role, GroupRole::Owner) {
             return Err(AppError::validation("cannot change owner role"));
@@ -81,18 +81,18 @@ impl GroupService {
 
         let updated = self
             .repo
-            .update_group_member_role(group_id, target_user_id, role)
+            .update_group_member_role(&group_id, &target_user_id, role)
             .await?
             .ok_or_else(|| AppError::validation("target user is not in group"))?;
 
         let event = InternalEvent::Notice {
-            group_id,
-            actor: user_id,
-            target: target_user_id,
+            group_id: group_id.clone(),
+            actor: user_id.clone(),
+            target: target_user_id.clone(),
             notice_type: NoticeType::AdminChange,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await;
 
         Ok(updated)
     }
@@ -100,15 +100,15 @@ impl GroupService {
     pub async fn set_group_member_title(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
-        target_user_id: u64,
+        user_id: String,
+        group_id: String,
+        target_user_id: String,
         title: String,
     ) -> AppResult<GroupMemberProfile> {
-        core.require_user_context(user_id)?;
-        core.require_user_context(target_user_id)?;
+        core.require_user_context(&user_id)?;
+        core.require_user_context(&target_user_id)?;
 
-        let operator = self.ensure_group_member(group_id, user_id).await?;
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
         if !matches!(operator.role, GroupRole::Owner) {
             return Err(AppError::validation(
                 "only owner can set group member title",
@@ -117,17 +117,17 @@ impl GroupService {
 
         let updated = self
             .repo
-            .update_group_member_title(group_id, target_user_id, title)
+            .update_group_member_title(&group_id, &target_user_id, title)
             .await?
             .ok_or_else(|| AppError::validation("target user is not in group"))?;
 
         let event = InternalEvent::GroupMemberTitleUpdated {
-            group_id,
-            operator_user_id: user_id,
-            target_user_id,
+            group_id: group_id.clone(),
+            operator_user_id: user_id.clone(),
+            target_user_id: target_user_id.clone(),
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await;
 
         Ok(updated)
     }
@@ -135,13 +135,13 @@ impl GroupService {
     pub async fn rename_group(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
         group_name: String,
     ) -> AppResult<GroupProfile> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
-        let operator = self.ensure_group_member(group_id, user_id).await?;
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
         if matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation("only owner/admin can rename group"));
         }
@@ -152,7 +152,7 @@ impl GroupService {
         }
 
         self.repo
-            .update_group_name(group_id, name.to_string())
+            .update_group_name(&group_id, name.to_string())
             .await?
             .ok_or_else(|| AppError::not_found(format!("group {} not found", group_id)))
     }
@@ -160,12 +160,12 @@ impl GroupService {
     pub async fn leave_group(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
     ) -> AppResult<()> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
-        let member = self.ensure_group_member(group_id, user_id).await?;
+        let member = self.ensure_group_member(&group_id, &user_id).await?;
 
         if matches!(member.role, GroupRole::Owner) {
             return Err(AppError::validation(
@@ -173,7 +173,7 @@ impl GroupService {
             ));
         }
 
-        self.repo.remove_group_member(group_id, user_id).await?;
+        self.repo.remove_group_member(&group_id, &user_id).await?;
 
         Ok(())
     }
@@ -181,14 +181,14 @@ impl GroupService {
     pub async fn dissolve_group(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        group_id: u64,
+        user_id: String,
+        group_id: String,
     ) -> AppResult<()> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         let group = self
             .repo
-            .get_group(group_id)
+            .get_group(&group_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("group {} not found", group_id)))?;
 
@@ -196,7 +196,7 @@ impl GroupService {
             return Err(AppError::validation("only owner can dissolve group"));
         }
 
-        let deleted = self.repo.delete_group(group_id).await?;
+        let deleted = self.repo.delete_group(&group_id).await?;
         if !deleted {
             return Err(AppError::not_found(format!("group {} not found", group_id)));
         }

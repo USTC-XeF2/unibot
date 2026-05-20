@@ -16,7 +16,7 @@ impl UserService {
     pub async fn register_user(
         &self,
         core: &CoreContainer,
-        user_id: u64,
+        user_id: String,
         nickname: String,
         avatar: String,
         signature: String,
@@ -27,15 +27,16 @@ impl UserService {
         }
 
         let profile = UserProfile {
-            user_id,
+            user_id: user_id.clone(),
             nickname: nickname.to_string(),
             avatar: avatar.trim().to_string(),
             signature: signature.trim().to_string(),
+            account_status: Default::default(),
         };
 
         self.repo.upsert_user(&profile).await?;
         if let Err(err) = core.register_user(profile.clone()) {
-            let _ = self.repo.delete_user(profile.user_id).await;
+            let _ = self.repo.delete_user(&profile.user_id).await;
             return Err(err);
         }
 
@@ -48,14 +49,14 @@ impl UserService {
 
     pub async fn update_user_profile(
         &self,
-        user_id: u64,
+        user_id: String,
         nickname: Option<String>,
         avatar: Option<String>,
         signature: Option<String>,
     ) -> AppResult<UserProfile> {
         let existing = self
             .repo
-            .get_user_by_id(user_id)
+            .get_user_by_id(&user_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("user {} not found", user_id)))?;
 
@@ -64,6 +65,7 @@ impl UserService {
             nickname: existing_nickname,
             avatar: existing_avatar,
             signature: existing_signature,
+            ..
         } = existing;
 
         let nickname = match nickname {
@@ -92,28 +94,29 @@ impl UserService {
             nickname,
             avatar,
             signature,
+            account_status: Default::default(),
         };
 
         self.repo.upsert_user(&profile).await?;
         Ok(profile)
     }
 
-    pub async fn delete_user(&self, core: &CoreContainer, user_id: u64) -> AppResult<()> {
-        let deleted = self.repo.delete_user(user_id).await?;
+    pub async fn delete_user(&self, core: &CoreContainer, user_id: String) -> AppResult<()> {
+        let deleted = self.repo.delete_user(&user_id).await?;
         if !deleted {
             return Err(AppError::not_found(format!("user {} not found", user_id)));
         }
 
-        core.unregister_user(user_id);
+        core.unregister_user(&user_id);
         Ok(())
     }
 
-    pub async fn list_friends(&self, user_id: u64) -> AppResult<Vec<u64>> {
-        let rows = self.repo.list_friends(user_id).await?;
+    pub async fn list_friends(&self, user_id: String) -> AppResult<Vec<String>> {
+        let rows = self.repo.list_friends(&user_id).await?;
         Ok(rows.into_iter().map(|row| row.friend_user_id).collect())
     }
 
-    pub async fn get_user_by_id(&self, user_id: u64) -> AppResult<Option<UserProfile>> {
+    pub async fn get_user_by_id(&self, user_id: &str) -> AppResult<Option<UserProfile>> {
         self.repo.get_user_by_id(user_id).await.map_err(Into::into)
     }
 }
