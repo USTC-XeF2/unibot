@@ -270,7 +270,7 @@ mod tests {
         assert!(
             statements
                 .iter()
-                .any(|stmt| stmt.contains("CREATE TRIGGER IF NOT EXISTS trg_unread_inc"))
+                .any(|stmt| stmt.contains("CREATE TRIGGER IF NOT EXISTS trg_member_count_inc"))
         );
         assert!(
             statements

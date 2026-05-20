@@ -233,8 +233,8 @@ CREATE TABLE IF NOT EXISTS group_folders (
     created_at       INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
     updated_at       INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
     FOREIGN KEY (group_id) REFERENCES chat_groups(group_id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_folder_id) REFERENCES group_folders(folder_id) ON DELETE CASCADE,
-    FOREIGN KEY (creator_user_id) REFERENCES im_accounts(user_id) ON DELETE CASCADE
+    FOREIGN KEY (creator_user_id) REFERENCES im_accounts(user_id) ON DELETE CASCADE,
+    UNIQUE (folder_id, group_id)
 );
 CREATE INDEX IF NOT EXISTS idx_folders_group_parent ON group_folders(group_id, parent_folder_id);
 
@@ -251,12 +251,12 @@ CREATE TABLE IF NOT EXISTS group_files (
     expire_at        INTEGER,
     download_count   INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (group_id) REFERENCES chat_groups(group_id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_folder_id) REFERENCES group_folders(folder_id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_folder_id, group_id) REFERENCES group_folders(folder_id, group_id) ON DELETE CASCADE,
     FOREIGN KEY (uploader_user_id) REFERENCES im_accounts(user_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_group_files_group_time ON group_files(group_id, created_at DESC);
 
--- 14. 精华消息
+-- 14. 精华消息（历史快照，反范式化：group_id / sender_user_id 冗余自 messages，不可由 message_id 推导的保留独立行）
 CREATE TABLE IF NOT EXISTS group_essence_messages (
     essence_id       TEXT PRIMARY KEY NOT NULL,
     group_id         TEXT NOT NULL,
@@ -560,20 +560,8 @@ BEGIN
     );
 END;
 
--- 未读计数 +1（新消息到达时自动增加会话未读数）
-CREATE TRIGGER IF NOT EXISTS trg_unread_inc
-AFTER INSERT ON messages
-FOR EACH ROW
-BEGIN
-    UPDATE conversations
-    SET unread_count = unread_count + 1,
-        updated_at = NEW.created_at
-    WHERE conversation_scene = NEW.message_scene
-    AND (
-        (NEW.message_scene IN ('private', 'temp') AND peer_user_id = NEW.sender_user_id)
-        OR (NEW.message_scene = 'group' AND group_id = NEW.group_id)
-    );
-END;
+-- 未读计数由 service/repo 在明确 owner_user_id 的事务中更新，不由 DB trigger 维护。
+-- 原因：unread_count 是每个 owner 的会话状态，trigger 缺少 owner 上下文会导致跨用户计数错误。
 
 -- ============================================================================
 -- 初始数据
