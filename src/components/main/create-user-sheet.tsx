@@ -37,8 +37,9 @@ export function CreateUserSheet({ open, onOpenChange }: CreateUserSheetProps) {
 
   const handleCreateUser = async () => {
     const trimmedUserId = formUserId.trim();
-    if (!trimmedUserId) {
-      setSubmitError("用户 ID 不能为空");
+    const numericId = Number(trimmedUserId);
+    if (!trimmedUserId || !Number.isInteger(numericId) || numericId < 10000) {
+      setSubmitError("用户 ID 必须是 10000 及以上的整数");
       return;
     }
     if (!formNickname.trim()) {
