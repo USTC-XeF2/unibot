@@ -200,7 +200,6 @@ pub struct FriendRequestEntity {
     pub state: RequestState,
     pub created_at: u64,
     pub handled_at: Option<u64>,
-    pub operator_user_id: Option<DbId>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

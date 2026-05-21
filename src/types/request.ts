@@ -9,7 +9,6 @@ export type FriendRequestEntity = {
   state: RequestState;
   created_at: number;
   handled_at: number | null;
-  operator_user_id: string | null;
 };
 
 export type GroupRequestEntity = {

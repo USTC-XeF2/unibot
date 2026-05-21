@@ -93,7 +93,7 @@ impl RequestService {
 
         let updated = self
             .user_repo
-            .handle_friend_request_for_target(&request_id, state, &user_id, &user_id, now_ts())
+            .handle_friend_request_for_target(&request_id, state, &user_id, now_ts())
             .await?;
 
         let updated = if let Some(updated) = updated {

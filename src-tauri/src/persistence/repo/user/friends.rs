@@ -10,7 +10,6 @@ impl UserRepo {
         request_id: &str,
         state: RequestState,
         target_user_id: &str,
-        operator_user_id: &str,
         handled_at: u64,
     ) -> Result<Option<FriendRequestEntity>, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
@@ -23,14 +22,13 @@ impl UserRepo {
             WHERE request_id = ?1
               AND state = 'pending'
               AND target_user_id = ?4
-            RETURNING request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at, ?5 AS operator_user_id
+            RETURNING request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at
             "#,
         )
         .bind(request_id)
         .bind(codecs::request_state_to_db(state))
         .bind(handled_at as i64)
         .bind(target_user_id)
-        .bind(operator_user_id)
         .fetch_optional(&mut *tx)
         .await?;
 
@@ -47,8 +45,9 @@ impl UserRepo {
 
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO friendships (owner_user_id, friend_user_id, friend_category_id, created_at)
-                VALUES (?1, ?2, ?3, ?4)
+                INSERT OR IGNORE INTO friendships (
+                    owner_user_id, friend_user_id, friend_category_id, created_at
+                ) VALUES (?1, ?2, ?3, ?4)
                 "#,
             )
             .bind(&updated.initiator_user_id)
@@ -60,8 +59,9 @@ impl UserRepo {
 
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO friendships (owner_user_id, friend_user_id, friend_category_id, created_at)
-                VALUES (?1, ?2, ?3, ?4)
+                INSERT OR IGNORE INTO friendships (
+                    owner_user_id, friend_user_id, friend_category_id, created_at
+                ) VALUES (?1, ?2, ?3, ?4)
                 "#,
             )
             .bind(&updated.target_user_id)
@@ -90,7 +90,7 @@ impl UserRepo {
                 request_id, initiator_user_id, target_user_id, comment, state, created_at
             ) SELECT value, ?1, ?2, ?3, 'pending', ?4
             FROM next_id
-            RETURNING request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at, NULL AS operator_user_id
+            RETURNING request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at
             "#,
         )
         .bind(&record.initiator_user_id)
@@ -109,7 +109,7 @@ impl UserRepo {
     ) -> Result<Vec<FriendRequestEntity>, sqlx::Error> {
         let rows = sqlx::query_as::<_, FriendRequestRow>(
             r#"
-            SELECT request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at, operator_user_id
+            SELECT request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at
             FROM friend_requests
             WHERE initiator_user_id = ?1 OR target_user_id = ?1
             ORDER BY created_at DESC
@@ -128,7 +128,7 @@ impl UserRepo {
     ) -> Result<Option<FriendRequestEntity>, sqlx::Error> {
         let row = sqlx::query_as::<_, FriendRequestRow>(
             r#"
-            SELECT request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at, operator_user_id
+            SELECT request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at
             FROM friend_requests
             WHERE request_id = ?1
             "#,

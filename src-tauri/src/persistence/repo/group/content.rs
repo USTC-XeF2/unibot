@@ -177,15 +177,15 @@ impl GroupRepo {
                     FROM group_essence_messages
                 )
                 INSERT INTO group_essence_messages (
-                    essence_id, group_id, message_id, sender_user_id, operator_user_id, is_set, created_at
-                ) SELECT value, ?1, ?2, ?3, ?4, 1, ?5
+                    essence_id, group_id, message_id, sender_user_id, operator_user_id, created_at
+                ) SELECT value, ?1, ?2, ?3, ?4, ?5
                 FROM next_id
+                WHERE true
                 ON CONFLICT(group_id, message_id) DO UPDATE SET
                     sender_user_id = excluded.sender_user_id,
                     operator_user_id = excluded.operator_user_id,
-                    is_set = 1,
                     created_at = excluded.created_at
-                RETURNING essence_id AS id, group_id, message_id, sender_user_id, operator_user_id, is_set, created_at
+                RETURNING essence_id AS id, group_id, message_id, sender_user_id, operator_user_id, 1 AS is_set, created_at
                 "#,
             )
             .bind(group_id)

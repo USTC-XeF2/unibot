@@ -109,13 +109,7 @@ async fn smoke_crud_friends(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     );
 
     let handled = repo
-        .handle_friend_request_for_target(
-            &created.request_id,
-            RequestState::Accepted,
-            "10002",
-            "10002",
-            200,
-        )
+        .handle_friend_request_for_target(&created.request_id, RequestState::Accepted, "10002", 200)
         .await?;
     assert!(handled.is_some());
     assert_eq!(handled.unwrap().state, RequestState::Accepted);
@@ -246,6 +240,17 @@ async fn smoke_crud_messages(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> 
         })
         .await?;
     assert!(!grp_msg.id.is_empty());
+
+    let essence = group_repo
+        .create_group_essence_message("20001", &grp_msg.id, "10001", "10001", true, 300)
+        .await?;
+    assert!(essence.is_set);
+    assert_eq!(essence.message_id, grp_msg.id);
+    assert_eq!(essence.operator_user_id, "10001");
+
+    let essences = group_repo.list_group_essence_messages("20001").await?;
+    assert_eq!(essences.len(), 1);
+    assert_eq!(essences[0].message_id, grp_msg.id);
 
     // List private history
     let priv_history = msg_repo

@@ -20,7 +20,6 @@ pub(super) struct FriendRequestRow {
     pub state: String,
     pub created_at: u64,
     pub handled_at: Option<u64>,
-    pub operator_user_id: Option<String>,
 }
 
 impl TryFrom<UserRow> for UserProfile {
@@ -49,7 +48,6 @@ impl TryFrom<FriendRequestRow> for FriendRequestEntity {
             state: codecs::request_state_from_db(&row.state)?,
             created_at: row.created_at,
             handled_at: row.handled_at,
-            operator_user_id: row.operator_user_id,
         })
     }
 }
