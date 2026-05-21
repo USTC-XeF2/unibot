@@ -16,9 +16,6 @@ impl UserRepo {
                 nickname = excluded.nickname,
                 avatar_url = excluded.avatar_url,
                 signature = excluded.signature,
-                account_status = 'active',
-                unavailable_at = NULL,
-                deleted_at = NULL,
                 updated_at = unixepoch() * 1000
             "#,
         )

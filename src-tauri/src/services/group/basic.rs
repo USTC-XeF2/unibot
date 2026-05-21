@@ -22,6 +22,17 @@ impl GroupService {
     ) -> AppResult<GroupProfile> {
         core.require_user_context(&user_id)?;
 
+        if group_id.trim().is_empty() {
+            return Err(AppError::validation("group_id cannot be empty"));
+        }
+        let group_numeric_id: u64 = group_id
+            .trim()
+            .parse()
+            .map_err(|_| AppError::validation("group_id must be a valid integer"))?;
+        if group_numeric_id < 10000 {
+            return Err(AppError::validation("group_id must be >= 10000"));
+        }
+
         if initial_member_user_ids.contains(&user_id) {
             return Err(AppError::validation(
                 "initial_member_user_ids must not contain owner user_id",
