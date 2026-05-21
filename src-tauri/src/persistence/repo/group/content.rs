@@ -98,7 +98,12 @@ impl GroupRepo {
                 gf.creator_user_id,
                 gf.created_at,
                 gf.updated_at,
-                COALESCE(gf.file_count, 0) AS file_count
+                (
+                    SELECT COUNT(*)
+                    FROM group_files f
+                    WHERE f.group_id = gf.group_id
+                      AND f.parent_folder_id = gf.folder_id
+                ) AS file_count
             FROM group_folders gf
             WHERE gf.group_id = ?1
             ORDER BY gf.created_at ASC
@@ -115,7 +120,7 @@ impl GroupRepo {
         sqlx::query(
             r#"
             INSERT INTO group_files (
-                file_id, group_id, parent_folder_id, file_name, file_size, file_hash, uploader_user_id, uploaded_at, expire_at
+                file_id, group_id, parent_folder_id, file_name, file_size, file_hash, uploader_user_id, created_at, expire_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(file_id) DO UPDATE SET
                 parent_folder_id = excluded.parent_folder_id,
@@ -147,10 +152,10 @@ impl GroupRepo {
         let rows = sqlx::query_as::<_, GroupFileRow>(
             r#"
             SELECT file_id, group_id, parent_folder_id, file_name, file_size, file_hash,
-                   uploader_user_id, uploaded_at AS uploaded_at, expire_at, download_count
+                   uploader_user_id, created_at AS uploaded_at, expire_at, download_count
             FROM group_files
             WHERE group_id = ?1
-            ORDER BY uploaded_at DESC
+            ORDER BY created_at DESC
             "#,
         )
         .bind(group_id)
