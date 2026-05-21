@@ -58,11 +58,12 @@ async fn apply_migration(pool: &SqlitePool, migration: &Migration) -> Result<(),
     }
 
     sqlx::query(
-        "UPDATE app_settings
-         SET setting_value = ?1,
-             description = '当前数据库 schema 迁移版本',
-             updated_at = unixepoch() * 1000
-         WHERE setting_key = 'schema.version'",
+        "INSERT INTO app_settings (setting_key, setting_value, value_type, description, updated_at)
+         VALUES ('schema.version', ?1, 'string', '当前数据库 schema 迁移版本', unixepoch() * 1000)
+         ON CONFLICT(setting_key) DO UPDATE SET
+             setting_value = excluded.setting_value,
+             description = excluded.description,
+             updated_at = excluded.updated_at",
     )
     .bind(migration.version)
     .execute(&mut *tx)

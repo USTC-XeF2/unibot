@@ -69,7 +69,7 @@ impl UserService {
             nickname: existing_nickname,
             avatar: existing_avatar,
             signature: existing_signature,
-            ..
+            account_status: existing_account_status,
         } = existing;
 
         let nickname = match nickname {
@@ -98,7 +98,7 @@ impl UserService {
             nickname,
             avatar,
             signature,
-            account_status: Default::default(),
+            account_status: existing_account_status,
         };
 
         self.repo.upsert_user(&profile).await?;

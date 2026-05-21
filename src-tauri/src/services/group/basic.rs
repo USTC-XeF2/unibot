@@ -216,7 +216,7 @@ impl GroupService {
         let mute_until = if duration_seconds == 0 {
             None
         } else {
-            Some(now_ts() + duration_seconds)
+            Some(now_ts() + duration_seconds * 1000)
         };
 
         let updated = self
@@ -281,7 +281,7 @@ impl GroupService {
 
         let muted = duration_seconds > 0;
         let mute_until = if muted {
-            Some(now_ts() + duration_seconds)
+            Some(now_ts() + duration_seconds * 1000)
         } else {
             None
         };
