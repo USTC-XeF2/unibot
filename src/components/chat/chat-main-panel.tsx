@@ -122,9 +122,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   const [groupMembersById, setGroupMembersById] = useState<
     Record<string, GroupMemberProfile>
   >({});
-  const [currentUnixTime, setCurrentUnixTime] = useState(
-    Date.now(),
-  );
+  const [currentUnixTime, setCurrentUnixTime] = useState(Date.now());
   const sendMessageMutation = useSendMessageMutation();
   const recallMessageMutation = useRecallMessageMutation();
   const pokeUserMutation = usePokeUserMutation();
@@ -341,7 +339,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
 
     const remainingMs = Math.max(
       0,
-      (currentUserMuteUntil - currentUnixTime) + 50,
+      currentUserMuteUntil - currentUnixTime + 50,
     );
     const timer = window.setTimeout(() => {
       setCurrentUnixTime(Date.now());
@@ -573,9 +571,10 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
           : "管理员";
         const targetName = targetUserId ? resolveName(targetUserId) : "成员";
         const muted = muteUntil !== null && muteUntil > item.createdAt;
-        const durationSeconds = muteUntil
+        const durationMs = muteUntil
           ? Math.max(0, muteUntil - item.createdAt)
           : 0;
+        const durationSeconds = Math.round(durationMs / 1000);
         const durationText =
           durationSeconds > 0
             ? `${durationSeconds}秒`
