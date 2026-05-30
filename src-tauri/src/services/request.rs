@@ -17,8 +17,8 @@ impl RequestService {
     pub async fn create_friend_request(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        target_user_id: u64,
+        user_id: String,
+        target_user_id: String,
         comment: String,
     ) -> AppResult<FriendRequestEntity> {
         if user_id == target_user_id {
@@ -27,17 +27,20 @@ impl RequestService {
             ));
         }
 
-        core.require_user_context(user_id)?;
-        core.require_user_context(target_user_id)?;
+        core.require_user_context(&user_id)?;
+        core.require_user_context(&target_user_id)?;
 
-        let already_friends = self.user_repo.are_friends(user_id, target_user_id).await?;
+        let already_friends = self
+            .user_repo
+            .are_friends(&user_id, &target_user_id)
+            .await?;
         if already_friends {
             return Err(AppError::conflict("users are already friends"));
         }
 
         let has_pending = self
             .user_repo
-            .has_pending_friend_request_between(user_id, target_user_id)
+            .has_pending_friend_request_between(&user_id, &target_user_id)
             .await?;
         if has_pending {
             return Err(AppError::conflict(
@@ -48,8 +51,8 @@ impl RequestService {
         let created = self
             .user_repo
             .create_friend_request(NewFriendRequestRecord {
-                initiator_user_id: user_id,
-                target_user_id,
+                initiator_user_id: user_id.clone(),
+                target_user_id: target_user_id.clone(),
                 comment,
                 created_at: now_ts(),
             })
@@ -57,11 +60,11 @@ impl RequestService {
 
         emit_to_users(
             core,
-            [created.initiator_user_id, created.target_user_id],
+            [&created.initiator_user_id, &created.target_user_id],
             InternalEvent::FriendRequestCreated {
-                request_id: created.request_id,
-                initiator_user_id: created.initiator_user_id,
-                target_user_id: created.target_user_id,
+                request_id: created.request_id.clone(),
+                initiator_user_id: created.initiator_user_id.clone(),
+                target_user_id: created.target_user_id.clone(),
                 time: created.created_at,
             },
         );
@@ -69,9 +72,12 @@ impl RequestService {
         Ok(created)
     }
 
-    pub async fn list_friend_requests(&self, user_id: u64) -> AppResult<Vec<FriendRequestEntity>> {
+    pub async fn list_friend_requests(
+        &self,
+        user_id: String,
+    ) -> AppResult<Vec<FriendRequestEntity>> {
         self.user_repo
-            .list_friend_requests(user_id)
+            .list_friend_requests(&user_id)
             .await
             .map_err(Into::into)
     }
@@ -79,21 +85,21 @@ impl RequestService {
     pub async fn handle_friend_request(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        request_id: i64,
+        user_id: String,
+        request_id: String,
         state: RequestState,
     ) -> AppResult<FriendRequestEntity> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         let updated = self
             .user_repo
-            .handle_friend_request_for_target(request_id, state, user_id, user_id, now_ts())
+            .handle_friend_request_for_target(&request_id, state, &user_id, now_ts())
             .await?;
 
         let updated = if let Some(updated) = updated {
             updated
         } else {
-            let current = self.user_repo.get_friend_request_by_id(request_id).await?;
+            let current = self.user_repo.get_friend_request_by_id(&request_id).await?;
             match current {
                 None => {
                     return Err(AppError::not_found(format!(
@@ -116,12 +122,12 @@ impl RequestService {
 
         emit_to_users(
             core,
-            [updated.initiator_user_id, updated.target_user_id],
+            [&updated.initiator_user_id, &updated.target_user_id],
             InternalEvent::FriendRequestHandled {
-                request_id: updated.request_id,
-                initiator_user_id: updated.initiator_user_id,
-                target_user_id: updated.target_user_id,
-                operator_user_id: user_id,
+                request_id: updated.request_id.clone(),
+                initiator_user_id: updated.initiator_user_id.clone(),
+                target_user_id: updated.target_user_id.clone(),
+                operator_user_id: user_id.clone(),
                 state,
                 time: now_ts(),
             },
@@ -133,19 +139,19 @@ impl RequestService {
     pub async fn delete_friend(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        friend_user_id: u64,
+        user_id: String,
+        friend_user_id: String,
     ) -> AppResult<()> {
         if user_id == friend_user_id {
             return Err(AppError::validation("cannot delete yourself from friends"));
         }
 
-        core.require_user_context(user_id)?;
-        core.require_user_context(friend_user_id)?;
+        core.require_user_context(&user_id)?;
+        core.require_user_context(&friend_user_id)?;
 
         let deleted = self
             .user_repo
-            .remove_friendship_pair(user_id, friend_user_id)
+            .remove_friendship_pair(&user_id, &friend_user_id)
             .await?;
         if !deleted {
             return Err(AppError::not_found("users are not friends"));

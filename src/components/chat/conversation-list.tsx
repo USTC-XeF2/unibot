@@ -67,7 +67,7 @@ type ConversationListProps = {
 function buildConversationPreview(
   latestMessage: ChatMessage | null,
   users: UserProfile[],
-  currentUserId: number,
+  currentUserId: string,
 ) {
   if (!latestMessage) {
     return "";
@@ -92,7 +92,7 @@ function buildConversationPreview(
 function ConversationList({
   onSelectedConversationChange,
 }: ConversationListProps) {
-  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? "");
   useChatEventBus(currentUserId);
 
   const deleteFriendMutation = useDeleteFriendMutation();
@@ -118,7 +118,7 @@ function ConversationList({
   const friendIds = friendsQuery.data ?? [];
 
   const conversations = useMemo<ConversationItem[]>(() => {
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+    if (!currentUserId) {
       return [];
     }
 
@@ -148,7 +148,7 @@ function ConversationList({
   }, [currentUserId, friendIds, groups, users]);
 
   const resolveMyGroupRole = async (
-    groupId: number,
+    groupId: string,
   ): Promise<GroupRole | null> => {
     const members = await invoke<GroupMemberProfile[]>("list_group_members", {
       userId: currentUserId,
@@ -159,7 +159,7 @@ function ConversationList({
     );
   };
 
-  const handleDeleteFriend = async (peerUserId: number) => {
+  const handleDeleteFriend = async (peerUserId: string) => {
     const confirmed = await confirmDialog({
       title: "确认删除好友",
       description: "确认删除该好友？",
@@ -181,7 +181,7 @@ function ConversationList({
     }
   };
 
-  const handleSetWholeMute = async (groupId: number) => {
+  const handleSetWholeMute = async (groupId: string) => {
     const input = await promptDialog({
       title: "设置全体禁言",
       description: "请输入全体禁言时长（秒，0为解除）",
@@ -208,7 +208,7 @@ function ConversationList({
     }
   };
 
-  const handleRenameGroup = async (groupId: number) => {
+  const handleRenameGroup = async (groupId: string) => {
     const input = await promptDialog({
       title: "修改群昵称",
       description: "请输入新的群昵称",
@@ -235,7 +235,7 @@ function ConversationList({
     }
   };
 
-  const handleDissolveGroup = async (groupId: number) => {
+  const handleDissolveGroup = async (groupId: string) => {
     const confirmed = await confirmDialog({
       title: "确认解散群聊",
       description: "确认解散该群聊？该操作不可恢复。",
@@ -255,7 +255,7 @@ function ConversationList({
     }
   };
 
-  const handleLeaveGroup = async (groupId: number) => {
+  const handleLeaveGroup = async (groupId: string) => {
     const confirmed = await confirmDialog({
       title: "确认退出群聊",
       description: "确认退出该群聊？",

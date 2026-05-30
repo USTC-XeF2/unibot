@@ -20,9 +20,9 @@ type AddFriendDialogProps = {
 };
 
 function AddFriendDialog({ open, onOpenChange, users }: AddFriendDialogProps) {
-  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? "");
   const [sendingFriendRequestIds, setSendingFriendRequestIds] = useState<
-    number[]
+    string[]
   >([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const createFriendRequestMutation = useCreateFriendRequestMutation();
@@ -32,7 +32,7 @@ function AddFriendDialog({ open, onOpenChange, users }: AddFriendDialogProps) {
   const friendRequests = friendRequestsQuery.data ?? [];
 
   const pendingFriendIds = useMemo(() => {
-    const set = new Set<number>();
+    const set = new Set<string>();
     for (const request of friendRequests) {
       if (request.state !== "pending") {
         continue;
@@ -47,12 +47,12 @@ function AddFriendDialog({ open, onOpenChange, users }: AddFriendDialogProps) {
     return set;
   }, [currentUserId, friendRequests]);
 
-  const handleSendFriendRequest = async (targetUserId: number) => {
+  const handleSendFriendRequest = async (targetUserId: string) => {
     if (sendingFriendRequestIds.includes(targetUserId)) {
       return;
     }
 
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+    if (!currentUserId) {
       setActionError("当前用户无效，无法发送好友请求");
       return;
     }

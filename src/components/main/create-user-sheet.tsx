@@ -36,13 +36,10 @@ export function CreateUserSheet({ open, onOpenChange }: CreateUserSheetProps) {
   };
 
   const handleCreateUser = async () => {
-    const parsedUserId = Number(formUserId);
-    if (
-      !Number.isInteger(parsedUserId) ||
-      parsedUserId <= 10000 ||
-      parsedUserId > 4294967295
-    ) {
-      setSubmitError("用户 ID 必须是 10001 至 4294967295 的整数");
+    const trimmedUserId = formUserId.trim();
+    const numericId = Number(trimmedUserId);
+    if (!trimmedUserId || !Number.isInteger(numericId) || numericId < 10000) {
+      setSubmitError("用户 ID 必须是 10000 及以上的整数");
       return;
     }
     if (!formNickname.trim()) {
@@ -55,7 +52,7 @@ export function CreateUserSheet({ open, onOpenChange }: CreateUserSheetProps) {
 
     try {
       await invoke<UserProfile>("register_user", {
-        userId: parsedUserId,
+        userId: trimmedUserId,
         nickname: formNickname.trim(),
         avatar: formAvatar.trim(),
         signature: "",

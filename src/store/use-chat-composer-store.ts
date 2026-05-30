@@ -3,7 +3,7 @@ import type { MessageSegment } from "@/types/chat";
 
 type ConversationComposerState = {
   segments: MessageSegment[];
-  quotedMessageId: number | null;
+  quotedMessageId: string | null;
 };
 
 type ChatComposerStore = {
@@ -11,7 +11,7 @@ type ChatComposerStore = {
   setSegments: (conversationKey: string, segments: MessageSegment[]) => void;
   setQuotedMessage: (
     conversationKey: string,
-    quotedMessageId: number | null,
+    quotedMessageId: string | null,
   ) => void;
   clearConversationState: (conversationKey: string) => void;
 };

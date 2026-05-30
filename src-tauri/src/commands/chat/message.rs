@@ -10,10 +10,10 @@ use super::super::IntoCommandResult;
 pub async fn send_message(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
     source: MessageSource,
     content: Vec<MessageSegment>,
-    quoted_message_id: Option<i64>,
+    quoted_message_id: Option<String>,
 ) -> Result<SendMessageResult, String> {
     services
         .message
@@ -25,7 +25,7 @@ pub async fn send_message(
 #[tauri::command]
 pub async fn list_message_history(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
     source: MessageSource,
     limit: Option<usize>,
 ) -> Result<Vec<SendMessageResult>, String> {
@@ -40,8 +40,8 @@ pub async fn list_message_history(
 pub async fn recall_message(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    message_id: i64,
+    user_id: String,
+    message_id: String,
 ) -> Result<MessageEntity, String> {
     services
         .message
@@ -54,8 +54,8 @@ pub async fn recall_message(
 pub async fn react_to_message(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    message_id: i64,
+    user_id: String,
+    message_id: String,
     face_id: String,
     is_add: bool,
 ) -> Result<MessageReactionEntity, String> {
@@ -70,9 +70,9 @@ pub async fn react_to_message(
 pub async fn poke_user(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
     source: MessageSource,
-    target_user_id: u64,
+    target_user_id: String,
 ) -> Result<PokeEntity, String> {
     services
         .interaction
@@ -84,7 +84,7 @@ pub async fn poke_user(
 #[tauri::command]
 pub async fn list_poke_history(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
     source: MessageSource,
     limit: Option<usize>,
 ) -> Result<Vec<PokeEntity>, String> {

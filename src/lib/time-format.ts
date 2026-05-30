@@ -8,7 +8,7 @@ function isSameDay(date: Date, now = new Date()): boolean {
   );
 }
 
-function withUnixSeconds(
+function withTimestamp(
   ts: number,
   formatter: (date: Date) => string,
 ): string {
@@ -16,11 +16,11 @@ function withUnixSeconds(
     return "";
   }
 
-  return formatter(new Date(ts * 1000));
+  return formatter(new Date(ts));
 }
 
 export function formatConversationPreviewTime(ts: number): string {
-  return withUnixSeconds(ts, (date) => {
+  return withTimestamp(ts, (date) => {
     if (isSameDay(date)) {
       return date.toLocaleTimeString(LOCALE, {
         hour: "2-digit",
@@ -36,7 +36,7 @@ export function formatConversationPreviewTime(ts: number): string {
 }
 
 export function formatMessageTimestamp(ts: number): string {
-  return withUnixSeconds(ts, (date) => {
+  return withTimestamp(ts, (date) => {
     if (isSameDay(date)) {
       return date.toLocaleTimeString(LOCALE, {
         hour: "2-digit",
@@ -60,7 +60,7 @@ export function formatMessageTimestamp(ts: number): string {
 }
 
 export function formatMonthDayTime(ts: number): string {
-  return withUnixSeconds(ts, (date) =>
+  return withTimestamp(ts, (date) =>
     date.toLocaleString(LOCALE, {
       month: "2-digit",
       day: "2-digit",

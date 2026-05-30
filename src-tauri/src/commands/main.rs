@@ -8,7 +8,7 @@ use super::IntoCommandResult;
 pub async fn register_user(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
     nickname: String,
     avatar: String,
     signature: String,
@@ -38,7 +38,7 @@ pub async fn list_groups(
 pub async fn delete_user(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
 ) -> Result<(), String> {
     services
         .user
@@ -52,11 +52,11 @@ pub async fn open_user_chat_window(
     app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
 ) -> Result<(), String> {
     let inferred_nickname = services
         .user
-        .get_user_by_id(user_id)
+        .get_user_by_id(&user_id)
         .await
         .map_err(|err| err.to_string())?
         .map(|profile| profile.nickname);

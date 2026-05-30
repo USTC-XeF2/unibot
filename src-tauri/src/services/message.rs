@@ -3,18 +3,18 @@ use serde::Serialize;
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupRole, InternalEvent, MessageEntity, MessageRecallInfo, MessageSegment, MessageSource,
+    DbId, GroupRole, InternalEvent, MessageEntity, MessageRecallInfo, MessageSegment, MessageSource,
 };
 use crate::persistence::{GroupRepo, MessageRecord, MessageRepo, NewMessageRecord};
 use crate::utils::{emit_to_users, now_ts, recipients_for_source};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SendMessageResult {
-    pub id: i64,
-    pub sender_user_id: u64,
+    pub id: DbId,
+    pub sender_user_id: DbId,
     pub source: MessageSource,
     pub content: Vec<MessageSegment>,
-    pub quoted_message_id: Option<i64>,
+    pub quoted_message_id: Option<DbId>,
     pub recall: MessageRecallInfo,
     pub created_at: u64,
 }
@@ -33,19 +33,19 @@ impl MessageService {
     pub async fn send(
         &self,
         core: &CoreContainer,
-        user_id: u64,
+        user_id: String,
         source: MessageSource,
         content: Vec<MessageSegment>,
-        quoted_message_id: Option<i64>,
+        quoted_message_id: Option<String>,
     ) -> AppResult<SendMessageResult> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         let now = now_ts();
 
         if let MessageSource::Group { group_id } = &source {
             let member = self
                 .group_repo
-                .get_group_member(*group_id, user_id)
+                .get_group_member(group_id, &user_id)
                 .await?
                 .ok_or_else(|| {
                     AppError::not_found(format!("user {} is not in group {}", user_id, group_id))
@@ -70,7 +70,7 @@ impl MessageService {
                 ));
             }
 
-            let whole_mute = self.group_repo.get_group_whole_mute(*group_id).await?;
+            let whole_mute = self.group_repo.get_group_whole_mute(group_id).await?;
 
             if let Some(state) = whole_mute {
                 let active = state.muted
@@ -87,11 +87,11 @@ impl MessageService {
             }
 
             self.group_repo
-                .update_group_member_last_sent_at(*group_id, user_id, now)
+                .update_group_member_last_sent_at(group_id, &user_id, now)
                 .await?;
         }
 
-        if let Some(quoted_id) = quoted_message_id {
+        if let Some(ref quoted_id) = quoted_message_id {
             let quoted_message =
                 self.repo
                     .get_message_by_id(quoted_id)
@@ -100,7 +100,7 @@ impl MessageService {
                         AppError::validation(format!("quoted message {} not found", quoted_id))
                     })?;
 
-            if !message_in_same_session(&quoted_message, user_id, &source) {
+            if !message_in_same_session(&quoted_message, &user_id, &source) {
                 return Err(AppError::validation(
                     "quoted message is not in current conversation",
                 ));
@@ -114,26 +114,27 @@ impl MessageService {
         let saved = self
             .repo
             .insert_message(NewMessageRecord {
-                sender_user_id: user_id,
+                owner_user_id: user_id.clone(),
+                sender_user_id: user_id.clone(),
                 source_type: source_type.to_string(),
-                source_id,
+                source_id: source_id.to_string(),
                 content_json,
-                quoted_message_id,
+                quoted_message_id: quoted_message_id.clone(),
                 created_at: now,
             })
             .await?;
 
         let event = InternalEvent::Message {
-            sender: user_id,
-            group_id: match source {
-                MessageSource::Group { group_id } => Some(group_id),
+            sender: user_id.clone(),
+            group_id: match &source {
+                MessageSource::Group { group_id } => Some(group_id.clone()),
                 _ => None,
             },
             content: content.clone(),
             time: now,
         };
         let recipients =
-            recipients_for_source(core, &self.group_repo, &source, user_id, Some(user_id)).await;
+            recipients_for_source(core, &self.group_repo, &source, &user_id, Some(&user_id)).await;
         emit_to_users(core, recipients, event);
 
         Ok(SendMessageResult {
@@ -152,7 +153,7 @@ impl MessageService {
 
     pub async fn list_history(
         &self,
-        user_id: u64,
+        user_id: String,
         source: MessageSource,
         limit: usize,
     ) -> AppResult<Vec<SendMessageResult>> {
@@ -161,7 +162,7 @@ impl MessageService {
         let (source_type, source_id) = source.to_db_parts();
         let rows = self
             .repo
-            .list_messages(user_id, source_type, source_id, limit_i64)
+            .list_messages(&user_id, source_type, source_id, limit_i64)
             .await?;
 
         rows.into_iter().map(TryInto::try_into).collect()
@@ -170,14 +171,14 @@ impl MessageService {
     pub async fn recall_message(
         &self,
         core: &CoreContainer,
-        user_id: u64,
-        message_id: i64,
+        user_id: String,
+        message_id: String,
     ) -> AppResult<MessageEntity> {
-        core.require_user_context(user_id)?;
+        core.require_user_context(&user_id)?;
 
         let current = self
             .repo
-            .get_message_by_id(message_id)
+            .get_message_by_id(&message_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("message {} not found", message_id)))?;
 
@@ -189,10 +190,10 @@ impl MessageService {
         if !is_sender {
             match current.source_type.as_str() {
                 "group" => {
-                    let group_id = current.source_id;
+                    let group_id = &current.source_id;
                     let operator_member = self
                         .group_repo
-                        .get_group_member(group_id, user_id)
+                        .get_group_member(group_id, &user_id)
                         .await?
                         .ok_or_else(|| AppError::validation("operator is not in group"))?;
                     if matches!(operator_member.role, GroupRole::Member) {
@@ -211,7 +212,7 @@ impl MessageService {
 
         let row = self
             .repo
-            .mark_message_recalled(message_id, user_id)
+            .mark_message_recalled(&message_id, &user_id)
             .await?
             .ok_or_else(|| AppError::conflict("message already recalled"))?;
 
@@ -220,15 +221,15 @@ impl MessageService {
             core,
             &self.group_repo,
             &entity.source,
-            user_id,
-            Some(entity.sender_user_id),
+            &user_id,
+            Some(&entity.sender_user_id),
         )
         .await;
         emit_to_users(
             core,
             recipients,
             InternalEvent::MessageRecalled {
-                message_id: entity.message_id,
+                message_id: entity.message_id.clone(),
                 source: entity.source.clone(),
                 recalled_by_user_id: user_id,
                 time: now_ts(),
@@ -287,7 +288,7 @@ impl TryFrom<MessageRecord> for MessageEntity {
     }
 }
 
-fn message_in_same_session(message: &MessageRecord, user_id: u64, source: &MessageSource) -> bool {
+fn message_in_same_session(message: &MessageRecord, user_id: &str, source: &MessageSource) -> bool {
     match source {
         MessageSource::Private { peer_user_id } => {
             if message.source_type != "private" {

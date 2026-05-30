@@ -14,7 +14,7 @@ export function useGroupsQuery() {
   });
 }
 
-export function useUserGroupsQuery(userId: number) {
+export function useUserGroupsQuery(userId: string) {
   return useQuery({
     queryKey: queryKeys.groups.byUser(userId),
     enabled: isValidUserId(userId),
@@ -24,8 +24,8 @@ export function useUserGroupsQuery(userId: number) {
 }
 
 export function useGroupMembersQuery(
-  userId: number,
-  groupId: number,
+  userId: string,
+  groupId: string,
   enabled: boolean,
 ) {
   return useQuery({
@@ -33,13 +33,13 @@ export function useGroupMembersQuery(
     queryFn: () =>
       invoke<GroupMemberProfile[]>("list_group_members", { userId, groupId }),
     retry: false,
-    enabled: enabled && isValidUserId(userId) && groupId > 0,
+    enabled: enabled && isValidUserId(userId) && groupId.length > 0,
   });
 }
 
 export function useGroupEventHistoryQuery(
-  userId: number,
-  groupId: number,
+  userId: string,
+  groupId: string,
   limit: number,
   enabled: boolean,
 ) {
@@ -60,15 +60,15 @@ export function invalidateGroupsQuery() {
   return queryClient.invalidateQueries({ queryKey: queryKeys.groups.root() });
 }
 
-export function invalidateGroupMembersQuery(userId: number, groupId: number) {
+export function invalidateGroupMembersQuery(userId: string, groupId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.members(userId, groupId),
   });
 }
 
 export function invalidateGroupEventHistoryQuery(
-  userId: number,
-  groupId: number,
+  userId: string,
+  groupId: string,
 ) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.eventHistoryPrefix(userId, groupId),

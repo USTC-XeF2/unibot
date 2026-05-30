@@ -1,6 +1,5 @@
 use crate::core::CoreContainer;
-use crate::models::FriendRequestEntity;
-use crate::models::RequestState;
+use crate::models::{FriendRequestEntity, RequestState};
 use crate::services::ServiceHub;
 
 use super::super::IntoCommandResult;
@@ -9,8 +8,8 @@ use super::super::IntoCommandResult;
 pub async fn create_friend_request(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    target_user_id: u64,
+    user_id: String,
+    target_user_id: String,
     comment: String,
 ) -> Result<FriendRequestEntity, String> {
     services
@@ -23,7 +22,7 @@ pub async fn create_friend_request(
 #[tauri::command]
 pub async fn list_friend_requests(
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
+    user_id: String,
 ) -> Result<Vec<FriendRequestEntity>, String> {
     services
         .request
@@ -36,8 +35,8 @@ pub async fn list_friend_requests(
 pub async fn handle_friend_request(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    request_id: i64,
+    user_id: String,
+    request_id: String,
     state: RequestState,
 ) -> Result<FriendRequestEntity, String> {
     services
@@ -51,8 +50,8 @@ pub async fn handle_friend_request(
 pub async fn delete_friend(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
-    user_id: u64,
-    friend_user_id: u64,
+    user_id: String,
+    friend_user_id: String,
 ) -> Result<(), String> {
     services
         .request

@@ -31,7 +31,7 @@ import { cn, faceById } from "@/lib/utils";
 import type { MessageSegment } from "@/types/chat";
 
 export interface MentionableUser {
-  id: number | "all";
+  id: string | "all";
   name: string;
   avatar?: string;
 }
@@ -58,7 +58,7 @@ export type ChatComposerHandle = {
   focus: () => void;
   moveCaretToEnd: () => void;
   insertFace: (faceId: string) => void;
-  insertMention: (target: number | "all") => void;
+  insertMention: (target: string | "all") => void;
   clear: () => void;
 };
 
@@ -121,11 +121,11 @@ function messageSegmentsToEditorContent(
   segments: MessageSegment[],
   mentionableMembers: MentionableUser[],
 ): JSONContent {
-  const mentionLabelById = new Map<number, string>(
+  const mentionLabelById = new Map<string, string>(
     mentionableMembers
       .filter(
-        (member): member is MentionableUser & { id: number } =>
-          typeof member.id === "number",
+        (member): member is MentionableUser & { id: string } =>
+          typeof member.id === "string",
       )
       .map((member) => [member.id, member.name]),
   );
@@ -237,8 +237,8 @@ function appendSegmentsFromNode(
       return;
     }
 
-    const userId = Number(mentionId);
-    if (mentionSupport !== "none" && Number.isInteger(userId) && userId > 0) {
+    const userId = mentionId;
+    if (mentionSupport !== "none" && userId && userId !== "all") {
       segments.push({ type: "At", data: { target: userId } });
       return;
     }
@@ -592,8 +592,8 @@ const ChatComposer = React.forwardRef<ChatComposerHandle, ChatComposerProps>(
           }
 
           const targetMember = mentionCandidatesRef.current.find(
-            (member): member is MentionableUser & { id: number } =>
-              typeof member.id === "number" && member.id === target,
+            (member): member is MentionableUser & { id: string } =>
+              typeof member.id === "string" && member.id === target,
           );
           const label = targetMember?.name ?? String(target);
 

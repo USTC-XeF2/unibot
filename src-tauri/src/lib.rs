@@ -45,7 +45,7 @@ pub fn run() {
             let persisted_users = tauri::async_runtime::block_on(service_hub.user.list_users())
                 .map_err(|err| format!("failed to load users from db: {err}"))?;
             for profile in persisted_users {
-                if core.user_context(profile.user_id).is_none() {
+                if core.user_context(&profile.user_id).is_none() {
                     core.register_user(profile)
                         .map_err(|err| format!("failed to restore user to memory: {err}"))?;
                 }

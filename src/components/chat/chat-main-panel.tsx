@@ -62,14 +62,14 @@ type ChatTimelineItem =
       kind: "message";
       key: string;
       createdAt: number;
-      senderUserId: number;
+      senderUserId: string;
       message: ChatMessage;
     }
   | {
       kind: "poke";
       key: string;
       createdAt: number;
-      senderUserId: number;
+      senderUserId: string;
       poke: ChatPoke;
     }
   | {
@@ -90,7 +90,7 @@ function hasSendableSegments(segments: MessageSegment[]): boolean {
 }
 
 function ChatMainPanel({ conversation }: ChatMainPanelProps) {
-  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? "");
   const usersQuery = useUsersQuery();
   const groupsQuery = useUserGroupsQuery(currentUserId);
   const users = usersQuery.data ?? [];
@@ -120,11 +120,9 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   const composerSegments = conversationComposerState.segments;
   const quotedMessageId = conversationComposerState.quotedMessageId;
   const [groupMembersById, setGroupMembersById] = useState<
-    Record<number, GroupMemberProfile>
+    Record<string, GroupMemberProfile>
   >({});
-  const [currentUnixTime, setCurrentUnixTime] = useState(
-    Math.floor(Date.now() / 1000),
-  );
+  const [currentUnixTime, setCurrentUnixTime] = useState(Date.now());
   const sendMessageMutation = useSendMessageMutation();
   const recallMessageMutation = useRecallMessageMutation();
   const pokeUserMutation = usePokeUserMutation();
@@ -135,7 +133,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
 
   const groupMembersQuery = useGroupMembersQuery(
     currentUserId,
-    conversation.scene === "group" ? conversation.group_id : 0,
+    conversation.scene === "group" ? conversation.group_id : "",
     conversation.scene === "group",
   );
 
@@ -174,7 +172,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   const pokesQuery = usePokeHistoryQuery(currentUserId, conversation, 100);
   const groupEventsQuery = useGroupEventHistoryQuery(
     currentUserId,
-    conversation.scene === "group" ? conversation.group_id : 0,
+    conversation.scene === "group" ? conversation.group_id : "",
     100,
     conversation.scene === "group",
   );
@@ -341,10 +339,10 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
 
     const remainingMs = Math.max(
       0,
-      (currentUserMuteUntil - currentUnixTime) * 1000 + 50,
+      currentUserMuteUntil - currentUnixTime + 50,
     );
     const timer = window.setTimeout(() => {
-      setCurrentUnixTime(Math.floor(Date.now() / 1000));
+      setCurrentUnixTime(Date.now());
     }, remainingMs);
 
     return () => {
@@ -427,7 +425,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
     });
   };
 
-  const handleRecallMessage = async (messageId: number) => {
+  const handleRecallMessage = async (messageId: string) => {
     try {
       await recallMessageMutation.mutateAsync({
         userId: currentUserId,
@@ -439,7 +437,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
     }
   };
 
-  const handlePokeUser = async (targetUserId: number) => {
+  const handlePokeUser = async (targetUserId: string) => {
     try {
       await pokeUserMutation.mutateAsync({
         userId: currentUserId,
@@ -452,7 +450,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   };
 
   const handleAtUser = useCallback(
-    (targetUserId: number) => {
+    (targetUserId: string) => {
       if (conversation.scene !== "group") {
         return;
       }
@@ -463,7 +461,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   );
 
   const handleMuteMember = async (
-    targetUserId: number,
+    targetUserId: string,
     durationSeconds: number,
   ) => {
     if (conversation.scene !== "group") {
@@ -481,7 +479,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
     }
   };
 
-  const handleKickMember = async (targetUserId: number) => {
+  const handleKickMember = async (targetUserId: string) => {
     if (conversation.scene !== "group") {
       return;
     }
@@ -507,7 +505,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   };
 
   const handleToggleAdmin = async (
-    targetUserId: number,
+    targetUserId: string,
     makeAdmin: boolean,
   ) => {
     if (conversation.scene !== "group") {
@@ -526,7 +524,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
     }
   };
 
-  const handleSetTitle = async (targetUserId: number, title: string) => {
+  const handleSetTitle = async (targetUserId: string, title: string) => {
     if (conversation.scene !== "group") {
       return;
     }
@@ -545,7 +543,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
 
   const contents = timeline.map((item) => {
     if (item.kind === "group_event") {
-      const resolveName = (userId: number) => {
+      const resolveName = (userId: string) => {
         if (userId === currentUserId) {
           return "你";
         }
@@ -573,9 +571,10 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
           : "管理员";
         const targetName = targetUserId ? resolveName(targetUserId) : "成员";
         const muted = muteUntil !== null && muteUntil > item.createdAt;
-        const durationSeconds = muteUntil
+        const durationMs = muteUntil
           ? Math.max(0, muteUntil - item.createdAt)
           : 0;
+        const durationSeconds = Math.round(durationMs / 1000);
         const durationText =
           durationSeconds > 0
             ? `${durationSeconds}秒`

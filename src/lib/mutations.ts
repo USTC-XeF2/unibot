@@ -20,8 +20,8 @@ export function useDeleteFriendMutation() {
       userId,
       friendUserId,
     }: {
-      userId: number;
-      friendUserId: number;
+      userId: string;
+      friendUserId: string;
     }) =>
       invoke("delete_friend", {
         userId,
@@ -44,8 +44,8 @@ export function useSetGroupWholeMuteMutation() {
       groupId,
       durationSeconds,
     }: {
-      userId: number;
-      groupId: number;
+      userId: string;
+      groupId: string;
       durationSeconds: number;
     }) =>
       invoke("set_group_whole_mute", {
@@ -63,8 +63,8 @@ export function useRenameGroupMutation() {
       groupId,
       groupName,
     }: {
-      userId: number;
-      groupId: number;
+      userId: string;
+      groupId: string;
       groupName: string;
     }) =>
       invoke("rename_group", {
@@ -78,7 +78,7 @@ export function useRenameGroupMutation() {
 
 export function useDissolveGroupMutation() {
   return useMutation({
-    mutationFn: ({ userId, groupId }: { userId: number; groupId: number }) =>
+    mutationFn: ({ userId, groupId }: { userId: string; groupId: string }) =>
       invoke("dissolve_group", {
         userId,
         groupId,
@@ -89,7 +89,7 @@ export function useDissolveGroupMutation() {
 
 export function useLeaveGroupMutation() {
   return useMutation({
-    mutationFn: ({ userId, groupId }: { userId: number; groupId: number }) =>
+    mutationFn: ({ userId, groupId }: { userId: string; groupId: string }) =>
       invoke("leave_group", {
         userId,
         groupId,
@@ -105,8 +105,8 @@ export function useCreateFriendRequestMutation() {
       targetUserId,
       comment,
     }: {
-      userId: number;
-      targetUserId: number;
+      userId: string;
+      targetUserId: string;
       comment?: string;
     }) =>
       invoke("create_friend_request", {
@@ -127,10 +127,10 @@ export function useCreateGroupMutation() {
       groupName,
       initialMemberUserIds,
     }: {
-      userId: number;
-      groupId: number;
+      userId: string;
+      groupId: string;
       groupName: string;
-      initialMemberUserIds: number[];
+      initialMemberUserIds: string[];
     }) =>
       invoke("upsert_group", {
         userId,
@@ -150,8 +150,8 @@ export function useHandleFriendRequestMutation() {
       requestId,
       state,
     }: {
-      userId: number;
-      requestId: number;
+      userId: string;
+      requestId: string;
       state: RequestActionState;
     }) =>
       invoke("handle_friend_request", {
@@ -176,8 +176,8 @@ export function useHandleGroupRequestMutation() {
       requestId,
       state,
     }: {
-      userId: number;
-      requestId: number;
+      userId: string;
+      requestId: string;
       state: RequestActionState;
     }) =>
       invoke("handle_group_request", {
@@ -202,10 +202,10 @@ export function useSendMessageMutation() {
       content,
       quotedMessageId,
     }: {
-      userId: number;
+      userId: string;
       source: MessageSource;
       content: MessageSegment[];
-      quotedMessageId: number | null;
+      quotedMessageId: string | null;
     }) =>
       invoke("send_message", {
         userId,
@@ -225,8 +225,8 @@ export function useRecallMessageMutation() {
       messageId,
       source: _source,
     }: {
-      userId: number;
-      messageId: number;
+      userId: string;
+      messageId: string;
       source: MessageSource;
     }) =>
       invoke("recall_message", {
@@ -245,9 +245,9 @@ export function usePokeUserMutation() {
       source,
       targetUserId,
     }: {
-      userId: number;
+      userId: string;
       source: MessageSource;
-      targetUserId: number;
+      targetUserId: string;
     }) =>
       invoke("poke_user", {
         userId,
@@ -267,9 +267,9 @@ export function useMuteGroupMemberMutation() {
       targetUserId,
       durationSeconds,
     }: {
-      userId: number;
-      groupId: number;
-      targetUserId: number;
+      userId: string;
+      groupId: string;
+      targetUserId: string;
       durationSeconds: number;
     }) =>
       invoke("mute_group_member", {
@@ -288,9 +288,9 @@ export function useKickGroupMemberMutation() {
       groupId,
       targetUserId,
     }: {
-      userId: number;
-      groupId: number;
-      targetUserId: number;
+      userId: string;
+      groupId: string;
+      targetUserId: string;
     }) =>
       invoke("kick_group_member", {
         userId,
@@ -308,9 +308,9 @@ export function useSetGroupMemberRoleMutation() {
       targetUserId,
       isAdmin,
     }: {
-      userId: number;
-      groupId: number;
-      targetUserId: number;
+      userId: string;
+      groupId: string;
+      targetUserId: string;
       isAdmin: boolean;
     }) =>
       invoke("set_group_member_role", {
@@ -330,9 +330,9 @@ export function useSetGroupMemberTitleMutation() {
       targetUserId,
       title,
     }: {
-      userId: number;
-      groupId: number;
-      targetUserId: number;
+      userId: string;
+      groupId: string;
+      targetUserId: string;
       title: string;
     }) =>
       invoke("set_group_member_title", {

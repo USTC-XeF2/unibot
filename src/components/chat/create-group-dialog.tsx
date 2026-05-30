@@ -28,9 +28,9 @@ function CreateGroupDialog({
   users,
   groups,
 }: CreateGroupDialogProps) {
-  const currentUserId = useAuthStore((state) => state.currentUserId ?? -1);
+  const currentUserId = useAuthStore((state) => state.currentUserId ?? "");
   const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState<
-    number[]
+    string[]
   >([]);
   const [groupIdInput, setGroupIdInput] = useState("");
   const [groupNameInput, setGroupNameInput] = useState("");
@@ -43,7 +43,7 @@ function CreateGroupDialog({
     [currentUserId, users],
   );
 
-  const toggleGroupMember = (userId: number) => {
+  const toggleGroupMember = (userId: string) => {
     setSelectedGroupMemberIds((ids) => {
       if (ids.includes(userId)) {
         return ids.filter((id) => id !== userId);
@@ -57,14 +57,14 @@ function CreateGroupDialog({
       return;
     }
 
-    if (!Number.isInteger(currentUserId) || currentUserId <= 0) {
+    if (!currentUserId) {
       setActionError("当前用户无效，无法创建群聊");
       return;
     }
 
-    const parsedGroupId = Number(groupIdInput.trim());
-    if (!Number.isInteger(parsedGroupId) || parsedGroupId <= 0) {
-      setActionError("群聊 ID 必须是大于 0 的整数");
+    const parsedGroupId = groupIdInput.trim();
+    if (!parsedGroupId) {
+      setActionError("群聊 ID 不能为空");
       return;
     }
     const parsedGroupName = groupNameInput.trim();
@@ -79,7 +79,7 @@ function CreateGroupDialog({
 
     try {
       const initialMemberUserIds = [...selectedGroupMemberIds].sort(
-        (a, b) => a - b,
+        (a, b) => a.localeCompare(b),
       );
 
       await createGroupMutation.mutateAsync({
