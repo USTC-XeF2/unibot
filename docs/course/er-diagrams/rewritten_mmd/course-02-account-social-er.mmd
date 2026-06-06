@@ -1,0 +1,47 @@
+flowchart LR
+    %% 账号与社交域 ER 图（Chen 风格）
+
+    IM["IM_ACCOUNT<br/>账号"]
+    BOT["BOT<br/>机器人"]
+    FS["FRIENDSHIP<br/>好友关系"]
+    FC["FRIEND_CATEGORY<br/>好友分组"]
+    GC["GROUP_CATEGORY<br/>群分类"]
+    CG["CHAT_GROUP<br/>群组"]
+    UG["USER_GROUP<br/>账号群关系"]
+
+    IM_UID(["user_id PK"])
+    BOT_ID(["bot_id PK"])
+    FS_KEY(["owner_user_id + friend_user_id PK"])
+    GC_ID(["category_id PK"])
+    UG_KEY(["owner_user_id + group_id PK"])
+
+    IM --- IM_UID
+    BOT --- BOT_ID
+    FS --- FS_KEY
+    GC --- GC_ID
+    UG --- UG_KEY
+
+    R_BIND{"绑定"}
+    R_OWN_CONTACT{"拥有好友视图"}
+    R_OWN_FC{"拥有"}
+    R_OWN_GC{"拥有"}
+    R_HAS_VIEW{"拥有群视图"}
+    R_APPEARS{"出现在"}
+    R_CLASSIFY_G{"分类"}
+    R_CLASSIFY_F{"分组"}
+
+    IM ---|"1"| R_BIND ---|"0..1"| BOT
+    IM ---|"1"| R_OWN_CONTACT ---|"N"| FS
+    IM ---|"1"| R_OWN_FC ---|"N"| FC
+    IM ---|"1"| R_OWN_GC ---|"N"| GC
+    IM ---|"1"| R_HAS_VIEW ---|"N"| UG
+    CG ---|"1"| R_APPEARS ---|"N"| UG
+    GC ---|"1"| R_CLASSIFY_G ---|"N"| UG
+    FC ---|"1"| R_CLASSIFY_F ---|"N"| FS
+
+    classDef entity fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    classDef relation fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    classDef attr fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    class IM,BOT,FS,FC,GC,CG,UG entity;
+    class R_BIND,R_OWN_CONTACT,R_OWN_FC,R_OWN_GC,R_HAS_VIEW,R_APPEARS,R_CLASSIFY_G,R_CLASSIFY_F relation;
+    class IM_UID,BOT_ID,FS_KEY,GC_ID,UG_KEY attr;

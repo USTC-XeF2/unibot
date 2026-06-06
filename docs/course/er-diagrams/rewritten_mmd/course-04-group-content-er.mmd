@@ -1,0 +1,34 @@
+flowchart LR
+    %% 群组与内容域 ER 图（Chen 风格）
+
+    IM["IM_ACCOUNT<br/>账号"]
+    CG["CHAT_GROUP<br/>群组"]
+    GM["GROUP_MEMBER<br/>群成员"]
+    GE["GROUP_EVENT<br/>群事件"]
+
+    IM_UID(["user_id PK"])
+    CG_ID(["group_id PK"])
+    GM_KEY(["group_id + user_id PK"])
+    GE_ID(["event_id PK"])
+
+    IM --- IM_UID
+    CG --- CG_ID
+    GM --- GM_KEY
+    GE --- GE_ID
+
+    R_OWNER{"担任群主"}
+    R_MEMBER{"拥有成员"}
+    R_JOIN{"加入"}
+    R_RECORD{"记录"}
+
+    IM ---|"1"| R_OWNER ---|"N"| CG
+    CG ---|"1"| R_MEMBER ---|"N"| GM
+    IM ---|"1"| R_JOIN ---|"N"| GM
+    CG ---|"1"| R_RECORD ---|"N"| GE
+
+    classDef entity fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    classDef relation fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    classDef attr fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    class IM,CG,GM,GE entity;
+    class R_OWNER,R_MEMBER,R_JOIN,R_RECORD relation;
+    class IM_UID,CG_ID,GM_KEY,GE_ID attr;
