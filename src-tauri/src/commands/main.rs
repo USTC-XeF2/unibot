@@ -3,6 +3,8 @@ use crate::models::{GroupProfile, UserProfile};
 use crate::services::ServiceHub;
 
 use super::IntoCommandResult;
+use sqlx::SqlitePool;
+use tauri::Manager;
 
 #[tauri::command]
 pub async fn register_user(
@@ -65,4 +67,65 @@ pub async fn open_user_chat_window(
         .map_err(|err| err.to_string())?;
 
     Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct DbStatus {
+    schema_version: String,
+    table_count: i64,
+    db_size_bytes: u64,
+    integrity_check: String,
+    foreign_key_check: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn get_db_status(app: tauri::AppHandle) -> Result<DbStatus, String> {
+    let result: crate::error::AppResult<DbStatus> = async {
+        let pool = app.state::<SqlitePool>().inner().clone();
+
+        let schema_version: String = sqlx::query_scalar(
+            "SELECT setting_value FROM app_settings WHERE setting_key = 'schema.version'",
+        )
+        .fetch_one(&pool)
+        .await?;
+
+        let table_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'")
+                .fetch_one(&pool)
+                .await?;
+
+        let db_path = app
+            .path()
+            .app_data_dir()
+            .map_err(|err| {
+                crate::error::AppError::internal(format!("failed to get app data dir: {err}"))
+            })?
+            .join("unibot.db");
+        let db_size_bytes = std::fs::metadata(&db_path)
+            .map(|m| m.len())
+            .map_err(|err| {
+                crate::error::AppError::internal(format!("failed to read db metadata: {err}"))
+            })?;
+
+        let integrity_check: String = sqlx::query_scalar("PRAGMA integrity_check")
+            .fetch_one(&pool)
+            .await?;
+
+        // PRAGMA foreign_key_check returns (table, rowid, parent, fkid) for each violation.
+        // query_scalar returns the first column (table name) for each row.
+        let fk_issues: Vec<String> = sqlx::query_scalar("PRAGMA foreign_key_check")
+            .fetch_all(&pool)
+            .await?;
+
+        Ok(DbStatus {
+            schema_version,
+            table_count,
+            db_size_bytes,
+            integrity_check,
+            foreign_key_check: fk_issues,
+        })
+    }
+    .await;
+
+    result.into_command_result()
 }

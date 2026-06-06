@@ -51,6 +51,7 @@ pub fn run() {
                 }
             }
 
+            app.manage(pool.clone());
             app.manage(core);
             app.manage(service_hub);
 
@@ -85,6 +86,7 @@ pub fn run() {
             main::list_groups,
             main::delete_user,
             main::open_user_chat_window,
+            main::get_db_status,
             user::update_user_profile,
             user::list_friends,
             user::list_user_groups,
