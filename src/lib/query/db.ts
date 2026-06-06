@@ -10,6 +10,7 @@ export function useDbStatusQuery() {
     queryFn: () => invoke<DbStatus>("get_db_status"),
     retry: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
