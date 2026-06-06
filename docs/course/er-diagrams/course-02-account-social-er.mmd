@@ -1,0 +1,58 @@
+erDiagram
+    IM_ACCOUNT {
+        TEXT user_id PK
+        TEXT nickname
+        TEXT account_source "simulated/real"
+    }
+
+    BOT {
+        TEXT bot_id PK
+        TEXT bound_user_id FK "UNIQUE, 绑定唯一账号"
+        TEXT display_name
+    }
+
+    FRIENDSHIP {
+        TEXT owner_user_id PK "好友持有者"
+        TEXT friend_user_id PK "好友方"
+        TEXT friend_category_id FK "分组"
+        TEXT remark "备注名"
+        INTEGER is_pinned
+    }
+
+    FRIEND_CATEGORY {
+        TEXT category_id PK
+        TEXT owner_user_id FK "per-user"
+        TEXT name
+        INTEGER sort_order
+    }
+
+    GROUP_CATEGORY {
+        TEXT category_id PK
+        TEXT owner_user_id FK "per-user"
+        TEXT name
+        INTEGER sort_order
+    }
+
+    CHAT_GROUP {
+        TEXT group_id PK
+        TEXT group_name
+        TEXT group_source "simulated/real"
+        TEXT group_owner_user_id FK
+    }
+
+    USER_GROUP {
+        TEXT owner_user_id PK "账号视角"
+        TEXT group_id PK "群"
+        TEXT category_id FK "该账号的群分类"
+        INTEGER is_pinned
+        INTEGER is_muted
+    }
+
+    IM_ACCOUNT ||--o{ BOT : "binds, 1:0..1"
+    IM_ACCOUNT ||--o{ FRIENDSHIP : "owns_contact, 1:N"
+    IM_ACCOUNT ||--o{ FRIEND_CATEGORY : "owns, 1:N"
+    IM_ACCOUNT ||--o{ GROUP_CATEGORY : "owns, 1:N"
+    IM_ACCOUNT ||--o{ USER_GROUP : "has_view, 1:N"
+    CHAT_GROUP ||--o{ USER_GROUP : "appears_in, 1:N"
+    GROUP_CATEGORY ||--o{ USER_GROUP : "classifies, 1:N"
+    FRIEND_CATEGORY ||--o{ FRIENDSHIP : "categorizes, 1:N"
