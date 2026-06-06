@@ -9,25 +9,19 @@ impl GroupRepo {
         &self,
         record: NewGroupRequestRecord,
     ) -> Result<GroupRequestEntity, sqlx::Error> {
+        let id = crate::utils::new_db_id();
         let row = sqlx::query_as::<_, GroupRequestRow>(
             r#"
-            WITH next_id(value) AS (
-                SELECT CAST(COALESCE(MAX(CAST(notification_seq AS INTEGER)), 0) + 1 AS TEXT)
-                FROM group_requests
-            )
             INSERT INTO group_requests (
                 group_id, notification_seq, notification_type, initiator_user_id,
                 target_user_id, comment, state, created_at
-            ) SELECT
-                ?1,
-                value,
-                ?2, ?3, ?4, ?5, 'pending', ?6
-            FROM next_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7)
             RETURNING notification_seq AS id, group_id, notification_type AS request_type,
                       initiator_user_id, target_user_id, comment, state, created_at, handled_at, operator_user_id
             "#,
         )
         .bind(&record.group_id)
+        .bind(&id)
         .bind(codecs::group_request_type_to_db(record.request_type))
         .bind(&record.initiator_user_id)
         .bind(record.target_user_id.as_deref())

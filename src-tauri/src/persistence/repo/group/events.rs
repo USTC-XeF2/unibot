@@ -5,18 +5,15 @@ impl GroupRepo {
         &self,
         record: NewGroupEventRecord,
     ) -> Result<GroupEventRecord, sqlx::Error> {
+        let id = crate::utils::new_db_id();
         sqlx::query_as::<_, GroupEventRecord>(
             r#"
-            WITH next_id(value) AS (
-                SELECT CAST(COALESCE(MAX(CAST(event_id AS INTEGER)), 0) + 1 AS TEXT)
-                FROM group_events
-            )
             INSERT INTO group_events (event_id, group_id, event_type, payload_json, created_at)
-            SELECT value, ?1, 'generic', ?2, ?3
-            FROM next_id
+            VALUES (?1, ?2, 'generic', ?3, ?4)
             RETURNING event_id AS id, group_id, payload_json AS payload, created_at
             "#,
         )
+        .bind(&id)
         .bind(&record.group_id)
         .bind(&record.payload)
         .bind(record.created_at as i64)

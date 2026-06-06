@@ -34,6 +34,9 @@ export const queryKeys = {
     manageableGroup: (userId: string, groupIdsKey: string) =>
       ["requests", "group-manageable", userId, groupIdsKey] as const,
   },
+  db: {
+    status: () => ["db", "status"] as const,
+  },
   chat: {
     historyByUser: (userId: string) => ["chat", "history", userId] as const,
     historyPrefix: (userId: string, source: MessageSource) => {

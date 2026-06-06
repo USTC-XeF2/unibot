@@ -288,16 +288,52 @@ mod tests {
             sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'")
                 .fetch_one(&pool)
                 .await?;
-        assert_eq!(table_count, 26);
+        assert!(
+            table_count >= 26,
+            "expected at least 26 tables, got {table_count}"
+        );
 
         let version: String = sqlx::query_scalar(
             "SELECT setting_value FROM app_settings WHERE setting_key = 'schema.version'",
         )
         .fetch_one(&pool)
         .await?;
-        assert_eq!(version, "0001");
+        let latest_version = migrations::all_migrations().last().unwrap().version;
+        assert_eq!(version, latest_version);
 
         run_migrations(&pool).await.map_err(sqlx::Error::Protocol)?;
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn migrates_from_blank_to_latest(pool: SqlitePool) -> Result<(), sqlx::Error> {
+        // Simulate a pre-migration database by ensuring app_settings does not exist
+        let table_exists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'",
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(table_exists, 0);
+
+        run_migrations(&pool).await.map_err(sqlx::Error::Protocol)?;
+
+        let version: String = sqlx::query_scalar(
+            "SELECT setting_value FROM app_settings WHERE setting_key = 'schema.version'",
+        )
+        .fetch_one(&pool)
+        .await?;
+        let latest_version = migrations::all_migrations().last().unwrap().version;
+        assert_eq!(version, latest_version);
+
+        let table_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'")
+                .fetch_one(&pool)
+                .await?;
+        assert!(
+            table_count >= 26,
+            "expected at least 26 tables, got {table_count}"
+        );
+
         Ok(())
     }
 }

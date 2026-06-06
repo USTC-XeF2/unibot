@@ -12,6 +12,10 @@ pub fn now_ts() -> u64 {
         .as_millis() as u64
 }
 
+pub fn new_db_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
 pub fn emit_to_users<I, S>(core: &CoreContainer, user_ids: I, event: InternalEvent)
 where
     I: IntoIterator<Item = S>,

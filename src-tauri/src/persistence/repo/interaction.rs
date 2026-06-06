@@ -61,19 +61,16 @@ impl InteractionRepo {
         &self,
         record: NewMessageReactionRecord,
     ) -> Result<MessageReactionEntity, sqlx::Error> {
+        let id = crate::utils::new_db_id();
         let row = sqlx::query_as::<_, MessageReactionIdRow>(
             r#"
-            WITH next_id(value) AS (
-                SELECT CAST(COALESCE(MAX(CAST(reaction_id AS INTEGER)), 0) + 1 AS TEXT)
-                FROM message_reactions
-            )
             INSERT INTO message_reactions (
                 reaction_id, message_id, operator_user_id, face_id, is_add, created_at
-            ) SELECT value, ?1, ?2, ?3, ?4, ?5
-            FROM next_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             RETURNING reaction_id AS id
             "#,
         )
+        .bind(&id)
         .bind(&record.message_id)
         .bind(&record.operator_user_id)
         .bind(&record.face_id)
@@ -110,24 +107,17 @@ impl InteractionRepo {
     }
 
     pub async fn insert_poke(&self, record: NewPokeRecord) -> Result<PokeEntity, sqlx::Error> {
+        let id = crate::utils::new_db_id();
         let row = sqlx::query_as::<_, PokeRow>(
             r#"
-            WITH next_id(value) AS (
-                SELECT CAST(COALESCE(MAX(CAST(poke_id AS INTEGER)), 0) + 1 AS TEXT)
-                FROM pokes
-            )
             INSERT INTO pokes (
                 poke_id, message_scene, peer_id, sender_user_id, target_user_id, created_at
-            ) SELECT value, ?1, ?2, ?3, ?4, ?5
-            FROM next_id
-            RETURNING poke_id AS id,
-                      message_scene AS source_type,
-                      peer_id AS source_id,
-                      sender_user_id,
-                      target_user_id,
-                      created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            RETURNING poke_id AS id, message_scene AS source_type, peer_id AS source_id,
+                      sender_user_id, target_user_id, created_at
             "#,
         )
+        .bind(&id)
         .bind(&record.source_type)
         .bind(&record.source_id)
         .bind(&record.sender_user_id)

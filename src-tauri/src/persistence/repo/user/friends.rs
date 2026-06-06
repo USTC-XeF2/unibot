@@ -80,19 +80,16 @@ impl UserRepo {
         &self,
         record: NewFriendRequestRecord,
     ) -> Result<FriendRequestEntity, sqlx::Error> {
+        let id = crate::utils::new_db_id();
         let row = sqlx::query_as::<_, FriendRequestRow>(
             r#"
-            WITH next_id(value) AS (
-                SELECT CAST(COALESCE(MAX(CAST(request_id AS INTEGER)), 0) + 1 AS TEXT)
-                FROM friend_requests
-            )
             INSERT INTO friend_requests (
                 request_id, initiator_user_id, target_user_id, comment, state, created_at
-            ) SELECT value, ?1, ?2, ?3, 'pending', ?4
-            FROM next_id
+            ) VALUES (?1, ?2, ?3, ?4, 'pending', ?5)
             RETURNING request_id, initiator_user_id, target_user_id, comment, state, created_at, handled_at
             "#,
         )
+        .bind(&id)
         .bind(&record.initiator_user_id)
         .bind(&record.target_user_id)
         .bind(&record.comment)
