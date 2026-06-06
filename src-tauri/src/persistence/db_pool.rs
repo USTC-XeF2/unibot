@@ -7,6 +7,8 @@ use tauri::Manager;
 
 use super::migrator;
 
+pub const DB_FILE_NAME: &str = "unibot.db";
+
 pub async fn init_sqlite_pool(app: &tauri::AppHandle) -> Result<SqlitePool, String> {
     let app_data_dir = app
         .path()
@@ -16,7 +18,7 @@ pub async fn init_sqlite_pool(app: &tauri::AppHandle) -> Result<SqlitePool, Stri
     fs::create_dir_all(&app_data_dir)
         .map_err(|err| format!("failed to create app data dir: {err}"))?;
 
-    let db_path = app_data_dir.join("unibot.db");
+    let db_path = app_data_dir.join(DB_FILE_NAME);
     let connect_options = SqliteConnectOptions::new()
         .filename(db_path)
         .create_if_missing(true)

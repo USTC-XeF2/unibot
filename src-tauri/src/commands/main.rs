@@ -1,5 +1,6 @@
 use crate::core::CoreContainer;
 use crate::models::{GroupProfile, UserProfile};
+use crate::persistence::db_pool::DB_FILE_NAME;
 use crate::services::ServiceHub;
 
 use super::IntoCommandResult;
@@ -100,7 +101,7 @@ pub async fn get_db_status(app: tauri::AppHandle) -> Result<DbStatus, String> {
             .map_err(|err| {
                 crate::error::AppError::internal(format!("failed to get app data dir: {err}"))
             })?
-            .join("unibot.db");
+            .join(DB_FILE_NAME);
         let db_size_bytes = tokio::fs::metadata(&db_path)
             .await
             .map(|m| m.len())
