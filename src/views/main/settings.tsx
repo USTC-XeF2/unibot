@@ -35,8 +35,8 @@ function SettingsView() {
           ) : dbStatus.isError ? (
             <p className="text-destructive text-sm">
               读取失败:{" "}
-              {"message" in (dbStatus.error as Error)
-                ? (dbStatus.error as Error).message
+              {dbStatus.error instanceof Error
+                ? dbStatus.error.message
                 : String(dbStatus.error)}
             </p>
           ) : data ? (
