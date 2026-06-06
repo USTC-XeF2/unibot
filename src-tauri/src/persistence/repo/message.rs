@@ -57,27 +57,13 @@ impl MessageRepo {
             None
         };
 
+        let id = crate::utils::new_db_id();
         let row = sqlx::query_as::<_, MessageRecord>(
             r#"
-            WITH next_id(value) AS (
-                SELECT CAST(COALESCE(MAX(CAST(message_id AS INTEGER)), 0) + 1 AS TEXT)
-                FROM messages
-            )
             INSERT INTO messages (
                 message_id, message_scene, peer_id, message_seq, sender_user_id,
                 receiver_user_id, group_id, content_json, quoted_message_id, created_at
-            ) SELECT
-                value,
-                ?1,
-                ?2,
-                value,
-                ?3,
-                ?4,
-                ?5,
-                ?6,
-                ?7,
-                ?8
-            FROM next_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             RETURNING message_id AS id,
                       sender_user_id,
                       message_scene AS source_type,
@@ -91,8 +77,10 @@ impl MessageRepo {
                       created_at
             "#,
         )
+        .bind(&id)
         .bind(&record.source_type)
         .bind(&record.source_id)
+        .bind(&id) // message_seq = message_id
         .bind(&record.sender_user_id)
         .bind(receiver_user_id)
         .bind(group_id)
