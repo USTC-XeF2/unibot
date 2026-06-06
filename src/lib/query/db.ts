@@ -9,6 +9,7 @@ export function useDbStatusQuery() {
     queryKey: queryKeys.db.status(),
     queryFn: () => invoke<DbStatus>("get_db_status"),
     retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 

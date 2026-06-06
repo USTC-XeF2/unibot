@@ -25,7 +25,7 @@ impl GroupRepo {
         .bind(codecs::group_request_type_to_db(record.request_type))
         .bind(&record.initiator_user_id)
         .bind(record.target_user_id.as_deref())
-        .bind(&record.comment)
+        .bind(record.comment.as_deref())
         .bind(record.created_at as i64)
         .fetch_one(&self.pool)
         .await?;

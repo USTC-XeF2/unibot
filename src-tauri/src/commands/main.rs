@@ -101,15 +101,17 @@ pub async fn get_db_status(app: tauri::AppHandle) -> Result<DbStatus, String> {
                 crate::error::AppError::internal(format!("failed to get app data dir: {err}"))
             })?
             .join("unibot.db");
-        let db_size_bytes = std::fs::metadata(&db_path)
+        let db_size_bytes = tokio::fs::metadata(&db_path)
+            .await
             .map(|m| m.len())
             .map_err(|err| {
                 crate::error::AppError::internal(format!("failed to read db metadata: {err}"))
             })?;
 
-        let integrity_check: String = sqlx::query_scalar("PRAGMA integrity_check")
-            .fetch_one(&pool)
+        let integrity_rows: Vec<String> = sqlx::query_scalar("PRAGMA integrity_check")
+            .fetch_all(&pool)
             .await?;
+        let integrity_check = integrity_rows.join(", ");
 
         // PRAGMA foreign_key_check returns (table, rowid, parent, fkid) for each violation.
         // query_scalar returns the first column (table name) for each row.
