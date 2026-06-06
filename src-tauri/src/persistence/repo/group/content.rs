@@ -175,17 +175,12 @@ impl GroupRepo {
         created_at: u64,
     ) -> Result<GroupEssenceMessageEntity, sqlx::Error> {
         if is_set {
+            let id = crate::utils::new_db_id();
             let row = sqlx::query_as::<_, GroupEssenceRow>(
                 r#"
-                WITH next_id(value) AS (
-                    SELECT CAST(COALESCE(MAX(CAST(essence_id AS INTEGER)), 0) + 1 AS TEXT)
-                    FROM group_essence_messages
-                )
                 INSERT INTO group_essence_messages (
                     essence_id, group_id, message_id, sender_user_id, operator_user_id, created_at
-                ) SELECT value, ?1, ?2, ?3, ?4, ?5
-                FROM next_id
-                WHERE true
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 ON CONFLICT(group_id, message_id) DO UPDATE SET
                     sender_user_id = excluded.sender_user_id,
                     operator_user_id = excluded.operator_user_id,
@@ -193,6 +188,7 @@ impl GroupRepo {
                 RETURNING essence_id AS id, group_id, message_id, sender_user_id, operator_user_id, 1 AS is_set, created_at
                 "#,
             )
+            .bind(&id)
             .bind(group_id)
             .bind(message_id)
             .bind(sender_user_id)
