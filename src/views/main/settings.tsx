@@ -34,7 +34,10 @@ function SettingsView() {
             <p className="text-muted-foreground text-sm">读取中...</p>
           ) : dbStatus.isError ? (
             <p className="text-destructive text-sm">
-              读取失败: {String(dbStatus.error)}
+              读取失败:{" "}
+              {"message" in (dbStatus.error as Error)
+                ? (dbStatus.error as Error).message
+                : String(dbStatus.error)}
             </p>
           ) : data ? (
             <>
