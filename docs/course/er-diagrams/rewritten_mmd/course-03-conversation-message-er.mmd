@@ -1,0 +1,48 @@
+flowchart LR
+    %% 会话与消息域 ER 图（Chen 风格）
+
+    IM["IM_ACCOUNT<br/>账号"]
+    CG["CHAT_GROUP<br/>群组"]
+    CV["CONVERSATION<br/>会话"]
+    MSG["MESSAGE<br/>消息"]
+    MR["MESSAGE_REACTION<br/>消息互动"]
+    POKE["POKE<br/>戳一戳"]
+
+    CV_ID(["conversation_id PK"])
+    MSG_ID(["message_id PK"])
+    MSG_SEQ(["message_scene + peer_id + message_seq UNIQUE"])
+    MR_ID(["reaction_id PK"])
+    POKE_ID(["poke_id PK"])
+
+    CV --- CV_ID
+    MSG --- MSG_ID
+    MSG --- MSG_SEQ
+    MR --- MR_ID
+    POKE --- POKE_ID
+
+    R_OWN{"拥有"}
+    R_SEND{"发送"}
+    R_PEER{"作为会话对象"}
+    R_HOST{"承载"}
+    R_DISPLAY{"展示"}
+    R_QUOTE{"引用"}
+    R_HAS_REACTION{"拥有互动"}
+    R_OPERATE{"操作"}
+    R_SEND_POKE{"发送戳一戳"}
+
+    IM ---|"1"| R_OWN ---|"N"| CV
+    IM ---|"1"| R_SEND ---|"N"| MSG
+    CG ---|"1"| R_PEER ---|"N"| CV
+    CG ---|"1"| R_HOST ---|"N"| MSG
+    CV ---|"1"| R_DISPLAY ---|"N"| MSG
+    MSG ---|"1"| R_QUOTE ---|"N"| MSG
+    MSG ---|"1"| R_HAS_REACTION ---|"N"| MR
+    IM ---|"1"| R_OPERATE ---|"N"| MR
+    IM ---|"1"| R_SEND_POKE ---|"N"| POKE
+
+    classDef entity fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    classDef relation fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    classDef attr fill:#ffffff,stroke:#1677ff,stroke-width:2px,color:#000000;
+    class IM,CG,CV,MSG,MR,POKE entity;
+    class R_OWN,R_SEND,R_PEER,R_HOST,R_DISPLAY,R_QUOTE,R_HAS_REACTION,R_OPERATE,R_SEND_POKE relation;
+    class CV_ID,MSG_ID,MSG_SEQ,MR_ID,POKE_ID attr;
