@@ -295,7 +295,8 @@ mod tests {
         )
         .fetch_one(&pool)
         .await?;
-        assert_eq!(version, "0001");
+        let latest_version = migrations::all_migrations().last().unwrap().version;
+        assert_eq!(version, latest_version);
 
         run_migrations(&pool).await.map_err(sqlx::Error::Protocol)?;
         Ok(())
@@ -318,7 +319,8 @@ mod tests {
         )
         .fetch_one(&pool)
         .await?;
-        assert_eq!(version, "0001");
+        let latest_version = migrations::all_migrations().last().unwrap().version;
+        assert_eq!(version, latest_version);
 
         let table_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'")
