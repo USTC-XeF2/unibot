@@ -5073,6 +5073,7 @@ dependencies = [
  "tauri-plugin-os",
  "tauri-plugin-prevent-default",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
