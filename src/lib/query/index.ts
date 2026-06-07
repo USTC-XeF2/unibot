@@ -1,3 +1,4 @@
+export * from "@/lib/query/bots";
 export * from "@/lib/query/chat";
 export * from "@/lib/query/common";
 export * from "@/lib/query/db";

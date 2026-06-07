@@ -37,6 +37,10 @@ export const queryKeys = {
   db: {
     status: () => ["db", "status"] as const,
   },
+  bots: {
+    all: () => ["bots"] as const,
+    stats: () => ["stats"] as const,
+  },
   chat: {
     historyByUser: (userId: string) => ["chat", "history", userId] as const,
     historyPrefix: (userId: string, source: MessageSource) => {

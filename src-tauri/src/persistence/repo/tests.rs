@@ -1,6 +1,6 @@
 use crate::models::{GroupMemberProfile, GroupProfile, GroupRequestType, GroupRole, RequestState};
 use crate::persistence::{
-    GroupRepo, InteractionRepo, MessageRepo, NewFriendRequestRecord, NewGroupEventRecord,
+    BotRepo, GroupRepo, InteractionRepo, MessageRepo, NewFriendRequestRecord, NewGroupEventRecord,
     NewGroupRequestRecord, NewMessageReactionRecord, NewMessageRecord, NewPokeRecord, UserRepo,
     migrator,
 };
@@ -223,6 +223,7 @@ async fn smoke_crud_messages(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> 
             content_json: "[]".to_string(),
             quoted_message_id: None,
             created_at: 100,
+            bot_id: None,
         })
         .await?;
     assert!(!priv_msg.id.is_empty());
@@ -237,9 +238,11 @@ async fn smoke_crud_messages(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> 
             content_json: "[]".to_string(),
             quoted_message_id: None,
             created_at: 200,
+            bot_id: Some("bot_10001".to_string()),
         })
         .await?;
     assert!(!grp_msg.id.is_empty());
+    assert_eq!(grp_msg.bot_id.as_deref(), Some("bot_10001"));
 
     let essence = group_repo
         .create_group_essence_message("20001", &grp_msg.id, "10001", "10001", true, 300)
@@ -263,6 +266,9 @@ async fn smoke_crud_messages(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> 
         .list_messages("10001", "group", "20001", 50)
         .await?;
     assert!(!grp_history.is_empty());
+    assert_eq!(grp_history[0].bot_id.as_deref(), Some("bot_10001"));
+
+    assert_eq!(msg_repo.get_message_count().await?, 2);
 
     // Recall
     let recalled = msg_repo
@@ -294,6 +300,7 @@ async fn smoke_crud_interactions(pool: sqlx::SqlitePool) -> Result<(), sqlx::Err
             content_json: "[]".to_string(),
             quoted_message_id: None,
             created_at: 100,
+            bot_id: None,
         })
         .await?;
 
@@ -407,6 +414,7 @@ async fn smoke_account_deletion_retains_rows(pool: sqlx::SqlitePool) -> Result<(
             content_json: "[]".to_string(),
             quoted_message_id: None,
             created_at: 100,
+            bot_id: None,
         })
         .await?;
 
@@ -435,6 +443,93 @@ async fn smoke_account_deletion_retains_rows(pool: sqlx::SqlitePool) -> Result<(
         .list_messages("10001", "group", "20001", 50)
         .await?;
     assert!(!history.is_empty());
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn smoke_crud_bots_and_debug_sessions(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+
+    let repo = BotRepo::new(pool);
+    let bot = repo
+        .insert_bot("bot_10001", "10001", "Alice Bot", "/tmp/bot.json")
+        .await?;
+    assert_eq!(bot.bot_id, "bot_10001");
+    assert_eq!(bot.runtime_status, "stopped");
+
+    let duplicate = repo
+        .insert_bot("bot_duplicate", "10001", "Duplicate", "/tmp/dup.json")
+        .await;
+    assert!(duplicate.is_err());
+
+    let listed = repo.list_bots().await?;
+    assert_eq!(listed.len(), 1);
+
+    let found = repo.find_bot_by_bound_user_id("10001").await?;
+    assert!(found.is_some());
+
+    let session = repo
+        .start_session("session_1", "bot_10001", "Debug Session")
+        .await?;
+    assert_eq!(session.bot_id, "bot_10001");
+    assert!(session.ended_at.is_none());
+
+    assert!(repo.has_active_session("bot_10001").await?);
+    assert_eq!(repo.get_online_bot_count().await?, 1);
+
+    repo.stop_active_sessions("bot_10001").await?;
+    assert!(!repo.has_active_session("bot_10001").await?);
+    assert_eq!(repo.get_online_bot_count().await?, 0);
+
+    let sessions = repo.list_sessions_by_bot("bot_10001").await?;
+    assert_eq!(sessions.len(), 1);
+    assert!(sessions[0].ended_at.is_some());
+
+    assert!(repo.delete_bot("bot_10001").await?);
+    assert!(repo.get_bot_by_id("bot_10001").await?.is_none());
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn bot_session_lifecycle_updates_status_atomically(
+    pool: sqlx::SqlitePool,
+) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+
+    let repo = BotRepo::new(pool);
+    repo.insert_bot("bot_10001", "10001", "Alice Bot", "/tmp/bot.json")
+        .await?;
+
+    let session = repo
+        .start_session("session_1", "bot_10001", "Debug Session")
+        .await?;
+    assert_eq!(session.session_id, "session_1");
+
+    let running = repo.get_bot_by_id("bot_10001").await?.unwrap();
+    assert_eq!(running.runtime_status, "running");
+    assert!(repo.has_active_session("bot_10001").await?);
+
+    let duplicate = repo
+        .start_session("session_2", "bot_10001", "Duplicate Session")
+        .await;
+    assert!(duplicate.is_err());
+
+    repo.stop_active_sessions("bot_10001").await?;
+    let stopped = repo.get_bot_by_id("bot_10001").await?.unwrap();
+    assert_eq!(stopped.runtime_status, "stopped");
+    assert!(!repo.has_active_session("bot_10001").await?);
 
     Ok(())
 }

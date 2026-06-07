@@ -1,6 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  invalidateBotStatsQuery,
+  invalidateBotsQuery,
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
   invalidateGroupRequestsQueries,
@@ -9,6 +11,7 @@ import {
   invalidatePokeHistoryQuery,
   invalidateUsersQuery,
 } from "@/lib/query";
+import type { BotProfile, DebugSession } from "@/types/bot";
 import type { MessageSegment, MessageSource } from "@/types/chat";
 import type { RequestState } from "@/types/request";
 
@@ -341,5 +344,53 @@ export function useSetGroupMemberTitleMutation() {
         targetUserId,
         title,
       }),
+  });
+}
+
+export function useCreateBotMutation() {
+  return useMutation({
+    mutationFn: ({
+      boundUserId,
+      displayName,
+    }: {
+      boundUserId: string;
+      displayName: string;
+    }) =>
+      invoke<BotProfile>("create_bot", {
+        boundUserId,
+        displayName,
+      }),
+    onSuccess: async () => {
+      await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
+    },
+  });
+}
+
+export function useDeleteBotMutation() {
+  return useMutation({
+    mutationFn: ({ botId }: { botId: string }) =>
+      invoke("delete_bot", { botId }),
+    onSuccess: async () => {
+      await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
+    },
+  });
+}
+
+export function useStartBotMutation() {
+  return useMutation({
+    mutationFn: ({ botId }: { botId: string }) =>
+      invoke<DebugSession>("start_bot", { botId }),
+    onSuccess: async () => {
+      await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
+    },
+  });
+}
+
+export function useStopBotMutation() {
+  return useMutation({
+    mutationFn: ({ botId }: { botId: string }) => invoke("stop_bot", { botId }),
+    onSuccess: async () => {
+      await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
+    },
   });
 }

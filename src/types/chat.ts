@@ -20,6 +20,7 @@ export type ChatMessage = {
     recalled_by_user_id?: string | null;
   };
   created_at: number;
+  bot_id?: string | null;
 };
 
 export type ChatPoke = {

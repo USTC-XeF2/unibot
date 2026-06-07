@@ -119,10 +119,31 @@ pub struct MessageEntity {
     pub message_id: DbId,
     pub sender_user_id: DbId,
     pub source: MessageSource,
+    pub bot_id: Option<DbId>,
     pub content: Vec<MessageSegment>,
     pub quoted_message_id: Option<DbId>,
     pub created_at: u64,
     pub recall: MessageRecallInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BotProfile {
+    pub bot_id: DbId,
+    pub bound_user_id: DbId,
+    pub display_name: String,
+    pub runtime_status: String,
+    pub config_path: String,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DebugSession {
+    pub session_id: DbId,
+    pub bot_id: DbId,
+    pub session_name: String,
+    pub description: Option<String>,
+    pub started_at: u64,
+    pub ended_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

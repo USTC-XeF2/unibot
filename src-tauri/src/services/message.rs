@@ -13,6 +13,7 @@ pub struct SendMessageResult {
     pub id: DbId,
     pub sender_user_id: DbId,
     pub source: MessageSource,
+    pub bot_id: Option<DbId>,
     pub content: Vec<MessageSegment>,
     pub quoted_message_id: Option<DbId>,
     pub recall: MessageRecallInfo,
@@ -37,6 +38,7 @@ impl MessageService {
         source: MessageSource,
         content: Vec<MessageSegment>,
         quoted_message_id: Option<String>,
+        bot_id: Option<String>,
     ) -> AppResult<SendMessageResult> {
         core.require_user_context(&user_id)?;
 
@@ -121,6 +123,7 @@ impl MessageService {
                 content_json,
                 quoted_message_id: quoted_message_id.clone(),
                 created_at: now,
+                bot_id: bot_id.clone(),
             })
             .await?;
 
@@ -141,6 +144,7 @@ impl MessageService {
             id: saved.id,
             sender_user_id: user_id,
             source,
+            bot_id,
             content,
             quoted_message_id,
             recall: MessageRecallInfo {
@@ -166,6 +170,10 @@ impl MessageService {
             .await?;
 
         rows.into_iter().map(TryInto::try_into).collect()
+    }
+
+    pub async fn get_message_count(&self) -> AppResult<i64> {
+        self.repo.get_message_count().await.map_err(Into::into)
     }
 
     pub async fn recall_message(
@@ -253,6 +261,7 @@ impl TryFrom<MessageRecord> for SendMessageResult {
             id: row.id,
             sender_user_id: row.sender_user_id,
             source,
+            bot_id: row.bot_id,
             content,
             quoted_message_id: row.quoted_message_id,
             recall: MessageRecallInfo {
@@ -277,6 +286,7 @@ impl TryFrom<MessageRecord> for MessageEntity {
             message_id: row.id,
             sender_user_id: row.sender_user_id,
             source,
+            bot_id: row.bot_id,
             content,
             quoted_message_id: row.quoted_message_id,
             created_at: row.created_at,
