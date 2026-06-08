@@ -263,14 +263,29 @@ function DashboardView() {
   const stats = statsQuery.data;
   const boundUserIds = new Set(bots.map((bot) => bot.bound_user_id));
 
-  const renderBot = (bot: BotProfile) => {
+  type BotCardProps = {
+    bot: BotProfile;
+    onStart: (botId: string) => void;
+    onStop: (botId: string) => void;
+    onDelete: (botId: string) => void;
+    isStartPending: boolean;
+    isStopPending: boolean;
+    isDeletePending: boolean;
+  };
+
+  function BotCard({
+    bot,
+    onStart,
+    onStop,
+    onDelete,
+    isStartPending,
+    isStopPending,
+    isDeletePending,
+  }: BotCardProps) {
     const statusConfig = botStatusConfig[bot.runtime_status];
 
     return (
-      <div
-        key={bot.bot_id}
-        className="flex items-center justify-between gap-3 rounded-lg border p-3"
-      >
+      <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
         <div className="min-w-0 space-y-1">
           <p className="truncate font-medium text-sm">{bot.display_name}</p>
           <p className="truncate text-muted-foreground text-xs">
@@ -284,8 +299,8 @@ function DashboardView() {
               type="button"
               size="icon-xs"
               variant="ghost"
-              disabled={stopBot.isPending}
-              onClick={() => stopBot.mutate({ botId: bot.bot_id })}
+              disabled={isStopPending}
+              onClick={() => onStop(bot.bot_id)}
             >
               <Power className="size-4 text-red-500" />
             </Button>
@@ -294,8 +309,8 @@ function DashboardView() {
               type="button"
               size="icon-xs"
               variant="ghost"
-              disabled={startBot.isPending}
-              onClick={() => startBot.mutate({ botId: bot.bot_id })}
+              disabled={isStartPending}
+              onClick={() => onStart(bot.bot_id)}
             >
               <Play className="size-4 text-green-500" />
             </Button>
@@ -306,7 +321,7 @@ function DashboardView() {
                 type="button"
                 size="icon-xs"
                 variant="ghost"
-                disabled={deleteBot.isPending}
+                disabled={isDeletePending}
               >
                 <Trash2 className="size-4 text-destructive" />
               </Button>
@@ -319,13 +334,13 @@ function DashboardView() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={deleteBot.isPending}>
+                <AlertDialogCancel disabled={isDeletePending}>
                   取消
                 </AlertDialogCancel>
                 <AlertDialogAction
                   variant="destructive"
-                  disabled={deleteBot.isPending}
-                  onClick={() => deleteBot.mutate({ botId: bot.bot_id })}
+                  disabled={isDeletePending}
+                  onClick={() => onDelete(bot.bot_id)}
                 >
                   删除
                 </AlertDialogAction>
@@ -335,7 +350,7 @@ function DashboardView() {
         </div>
       </div>
     );
-  };
+  }
 
   return (
     <div className="space-y-4">
@@ -410,7 +425,20 @@ function DashboardView() {
           {bots.length === 0 ? (
             <p className="text-muted-foreground text-sm">暂无 Bot</p>
           ) : (
-            <div className="space-y-2">{bots.map(renderBot)}</div>
+            <div className="space-y-2">
+              {bots.map((bot) => (
+                <BotCard
+                  key={bot.bot_id}
+                  bot={bot}
+                  onStart={(botId) => startBot.mutate({ botId })}
+                  onStop={(botId) => stopBot.mutate({ botId })}
+                  onDelete={(botId) => deleteBot.mutate({ botId })}
+                  isStartPending={startBot.isPending}
+                  isStopPending={stopBot.isPending}
+                  isDeletePending={deleteBot.isPending}
+                />
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

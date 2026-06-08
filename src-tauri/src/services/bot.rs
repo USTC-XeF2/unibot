@@ -90,28 +90,31 @@ impl BotService {
     pub async fn delete_bot(&self, bot_id: String) -> AppResult<()> {
         let bot = self
             .repo
-            .delete_bot_with_sessions(&bot_id)
+            .get_bot_by_id(&bot_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
 
+        // Delete config file first. If this fails (non-NotFound), abort before
+        // touching the database, avoiding orphan files.
         match tokio::fs::remove_file(&bot.config_path).await {
             Ok(()) => {}
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => {
-                return Err(AppError::internal(format!("delete bot config: {err}")));
+                return Err(AppError::internal(format!(
+                    "failed to delete bot config file at {}: {err}",
+                    bot.config_path
+                )));
             }
         }
 
+        self.repo.delete_bot_with_sessions(&bot_id).await?;
         Ok(())
     }
 
     pub async fn start_bot(&self, bot_id: String) -> AppResult<DebugSession> {
-        if self.repo.get_bot_by_id(&bot_id).await?.is_none() {
-            return Err(AppError::not_found(format!("bot {bot_id} not found")));
-        }
-
         let session_id = new_db_id();
         let session_name = format!("调试会话 {}", now_ts());
+
         let row = match self
             .repo
             .start_session(&session_id, &bot_id, &session_name)
@@ -119,7 +122,19 @@ impl BotService {
         {
             Ok(row) => row,
             Err(sqlx::Error::RowNotFound) => {
-                return Err(AppError::conflict("bot is already running"));
+                // start_session returns RowNotFound when:
+                // - bot does not exist, OR
+                // - bot is already running (runtime_status == 'running' or active session exists)
+                // Distinguish them to give accurate error message.
+                match self.repo.get_bot_by_id(&bot_id).await {
+                    Ok(None) => {
+                        return Err(AppError::not_found(format!("bot {bot_id} not found")));
+                    }
+                    Ok(Some(_)) => {
+                        return Err(AppError::conflict("bot is already running"));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
             }
             Err(err) => return Err(err.into()),
         };

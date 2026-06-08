@@ -116,7 +116,7 @@ impl BotRepo {
         .await?;
 
         let Some(bot) = bot else {
-            tx.commit().await?;
+            drop(tx);
             return Ok(None);
         };
 
