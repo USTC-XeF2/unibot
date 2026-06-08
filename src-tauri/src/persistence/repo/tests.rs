@@ -491,8 +491,39 @@ async fn smoke_crud_bots_and_debug_sessions(pool: sqlx::SqlitePool) -> Result<()
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
 
-    assert!(repo.delete_bot("bot_10001").await?);
+    assert!(repo.delete_bot_with_sessions("bot_10001").await?.is_some());
     assert!(repo.get_bot_by_id("bot_10001").await?.is_none());
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn delete_bot_with_sessions_removes_running_bot_atomically(
+    pool: sqlx::SqlitePool,
+) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+
+    let repo = BotRepo::new(pool);
+    repo.insert_bot("bot_10001", "10001", "Alice Bot", "/tmp/bot.json")
+        .await?;
+    repo.start_session("session_1", "bot_10001", "Debug Session")
+        .await?;
+
+    let deleted = repo
+        .delete_bot_with_sessions("bot_10001")
+        .await?
+        .expect("running bot should be deleted");
+
+    assert_eq!(deleted.bot_id, "bot_10001");
+    assert_eq!(deleted.config_path, "/tmp/bot.json");
+    assert!(repo.get_bot_by_id("bot_10001").await?.is_none());
+    assert_eq!(repo.get_online_bot_count().await?, 0);
+    assert!(repo.delete_bot_with_sessions("bot_10001").await?.is_none());
 
     Ok(())
 }

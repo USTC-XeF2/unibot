@@ -126,12 +126,33 @@ pub struct MessageEntity {
     pub recall: MessageRecallInfo,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BotRuntimeStatus {
+    Stopped,
+    Running,
+    Error,
+}
+
+impl TryFrom<&str> for BotRuntimeStatus {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, String> {
+        match value {
+            "stopped" => Ok(Self::Stopped),
+            "running" => Ok(Self::Running),
+            "error" => Ok(Self::Error),
+            _ => Err(format!("unknown bot runtime status: {value}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BotProfile {
     pub bot_id: DbId,
     pub bound_user_id: DbId,
     pub display_name: String,
-    pub runtime_status: String,
+    pub runtime_status: BotRuntimeStatus,
     pub config_path: String,
     pub created_at: u64,
 }

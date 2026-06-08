@@ -9,6 +9,17 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +50,29 @@ import {
   useGroupsQuery,
   useUsersQuery,
 } from "@/lib/query";
+import type { BotProfile } from "@/types/bot";
 import type { UserProfile } from "@/types/user";
+
+const botStatusConfig = {
+  running: {
+    label: "运行中",
+    className:
+      "inline-flex rounded bg-green-100 px-1.5 py-0.5 text-green-700 text-xs",
+  },
+  error: {
+    label: "异常",
+    className:
+      "inline-flex rounded bg-red-100 px-1.5 py-0.5 text-red-700 text-xs",
+  },
+  stopped: {
+    label: "已停止",
+    className:
+      "inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-gray-700 text-xs",
+  },
+} satisfies Record<
+  BotProfile["runtime_status"],
+  { label: string; className: string }
+>;
 
 type CreateBotSheetProps = {
   open: boolean;
@@ -80,12 +113,17 @@ function CreateBotSheet({
       setSubmitError("请选择要绑定的用户");
       return;
     }
+    const displayName = selectedUser.nickname.trim();
+    if (!displayName) {
+      setSubmitError("绑定用户名称不能为空");
+      return;
+    }
 
     setSubmitError(null);
     createBot.mutate(
       {
         boundUserId: selectedUser.user_id,
-        displayName: selectedUser.nickname,
+        displayName,
       },
       {
         onSuccess: () => {
@@ -225,6 +263,80 @@ function DashboardView() {
   const stats = statsQuery.data;
   const boundUserIds = new Set(bots.map((bot) => bot.bound_user_id));
 
+  const renderBot = (bot: BotProfile) => {
+    const statusConfig = botStatusConfig[bot.runtime_status];
+
+    return (
+      <div
+        key={bot.bot_id}
+        className="flex items-center justify-between gap-3 rounded-lg border p-3"
+      >
+        <div className="min-w-0 space-y-1">
+          <p className="truncate font-medium text-sm">{bot.display_name}</p>
+          <p className="truncate text-muted-foreground text-xs">
+            绑定用户: {bot.bound_user_id}
+          </p>
+          <span className={statusConfig.className}>{statusConfig.label}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {bot.runtime_status === "running" ? (
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              disabled={stopBot.isPending}
+              onClick={() => stopBot.mutate({ botId: bot.bot_id })}
+            >
+              <Power className="size-4 text-red-500" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              disabled={startBot.isPending}
+              onClick={() => startBot.mutate({ botId: bot.bot_id })}
+            >
+              <Play className="size-4 text-green-500" />
+            </Button>
+          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                disabled={deleteBot.isPending}
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>删除 Bot</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {`将删除 ${bot.display_name}，并停止关联的调试会话。`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteBot.isPending}>
+                  取消
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  disabled={deleteBot.isPending}
+                  onClick={() => deleteBot.mutate({ botId: bot.bot_id })}
+                >
+                  删除
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -298,70 +410,7 @@ function DashboardView() {
           {bots.length === 0 ? (
             <p className="text-muted-foreground text-sm">暂无 Bot</p>
           ) : (
-            <div className="space-y-2">
-              {bots.map((bot) => (
-                <div
-                  key={bot.bot_id}
-                  className="flex items-center justify-between gap-3 rounded-lg border p-3"
-                >
-                  <div className="min-w-0 space-y-1">
-                    <p className="truncate font-medium text-sm">
-                      {bot.display_name}
-                    </p>
-                    <p className="truncate text-muted-foreground text-xs">
-                      绑定用户: {bot.bound_user_id}
-                    </p>
-                    <span
-                      className={
-                        bot.runtime_status === "running"
-                          ? "inline-flex rounded bg-green-100 px-1.5 py-0.5 text-green-700 text-xs"
-                          : bot.runtime_status === "error"
-                            ? "inline-flex rounded bg-red-100 px-1.5 py-0.5 text-red-700 text-xs"
-                            : "inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-gray-700 text-xs"
-                      }
-                    >
-                      {bot.runtime_status === "running"
-                        ? "运行中"
-                        : bot.runtime_status === "error"
-                          ? "异常"
-                          : "已停止"}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {bot.runtime_status === "running" ? (
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        disabled={stopBot.isPending}
-                        onClick={() => stopBot.mutate({ botId: bot.bot_id })}
-                      >
-                        <Power className="size-4 text-red-500" />
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        disabled={startBot.isPending}
-                        onClick={() => startBot.mutate({ botId: bot.bot_id })}
-                      >
-                        <Play className="size-4 text-green-500" />
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      disabled={deleteBot.isPending}
-                      onClick={() => deleteBot.mutate({ botId: bot.bot_id })}
-                    >
-                      <Trash2 className="size-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <div className="space-y-2">{bots.map(renderBot)}</div>
           )}
         </CardContent>
       </Card>

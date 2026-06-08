@@ -98,27 +98,42 @@ impl BotRepo {
         .await
     }
 
-    pub async fn delete_bot(&self, bot_id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query("DELETE FROM bots WHERE bot_id = ?1")
-            .bind(bot_id)
-            .execute(&self.pool)
-            .await?;
-        Ok(result.rows_affected() > 0)
-    }
-
-    pub async fn update_runtime_status(
+    pub async fn delete_bot_with_sessions(
         &self,
         bot_id: &str,
-        status: &str,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "UPDATE bots SET runtime_status = ?1, updated_at = unixepoch() * 1000 WHERE bot_id = ?2",
+    ) -> Result<Option<BotRow>, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let bot = sqlx::query_as::<_, BotRow>(
+            r#"
+            SELECT bot_id, bound_user_id, display_name, runtime_status, config_path, created_at
+            FROM bots
+            WHERE bot_id = ?1
+            "#,
         )
-        .bind(status)
         .bind(bot_id)
-        .execute(&self.pool)
+        .fetch_optional(&mut *tx)
         .await?;
-        Ok(())
+
+        let Some(bot) = bot else {
+            tx.commit().await?;
+            return Ok(None);
+        };
+
+        sqlx::query(
+            "UPDATE debug_sessions SET ended_at = unixepoch() * 1000 WHERE bot_id = ?1 AND ended_at IS NULL",
+        )
+        .bind(bot_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query("DELETE FROM bots WHERE bot_id = ?1")
+            .bind(bot_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(Some(bot))
     }
 
     pub async fn start_session(
@@ -192,16 +207,6 @@ impl BotRepo {
         Ok(())
     }
 
-    pub async fn end_active_sessions(&self, bot_id: &str) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "UPDATE debug_sessions SET ended_at = unixepoch() * 1000 WHERE bot_id = ?1 AND ended_at IS NULL",
-        )
-        .bind(bot_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     pub async fn has_active_session(&self, bot_id: &str) -> Result<bool, sqlx::Error> {
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM debug_sessions WHERE bot_id = ?1 AND ended_at IS NULL",
@@ -242,11 +247,17 @@ impl TryFrom<BotRow> for crate::models::BotProfile {
     type Error = crate::error::AppError;
 
     fn try_from(row: BotRow) -> Result<Self, Self::Error> {
+        let runtime_status = row
+            .runtime_status
+            .as_str()
+            .try_into()
+            .map_err(crate::error::AppError::internal)?;
+
         Ok(Self {
             bot_id: row.bot_id,
             bound_user_id: row.bound_user_id,
             display_name: row.display_name,
-            runtime_status: row.runtime_status,
+            runtime_status,
             config_path: row.config_path,
             created_at: row.created_at as u64,
         })
