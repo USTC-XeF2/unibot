@@ -216,8 +216,12 @@ export function useSendMessageMutation() {
         content,
         quotedMessageId,
       }),
-    onSuccess: (_, variables) =>
-      invalidateMessageHistoryQuery(variables.userId, variables.source),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateMessageHistoryQuery(variables.userId, variables.source),
+        invalidateBotStatsQuery(),
+      ]);
+    },
   });
 }
 

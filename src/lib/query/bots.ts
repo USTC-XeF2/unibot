@@ -16,6 +16,7 @@ export function useBotStatsQuery() {
   return useQuery({
     queryKey: queryKeys.bots.stats(),
     queryFn: () => invoke<StatsResult>("get_stats"),
+    refetchInterval: 1000,
     retry: false,
   });
 }

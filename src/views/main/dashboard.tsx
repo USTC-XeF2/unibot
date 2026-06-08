@@ -9,8 +9,10 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -37,6 +39,152 @@ import {
   useGroupsQuery,
   useUsersQuery,
 } from "@/lib/query";
+import type { UserProfile } from "@/types/user";
+
+type CreateBotSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  users: UserProfile[];
+  boundUserIds: Set<string>;
+};
+
+function CreateBotSheet({
+  open,
+  onOpenChange,
+  users,
+  boundUserIds,
+}: CreateBotSheetProps) {
+  const createBot = useCreateBotMutation();
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const unboundUsers = users.filter((user) => !boundUserIds.has(user.user_id));
+  const selectedUser = users.find((user) => user.user_id === selectedUserId);
+  const selectedUserLabel =
+    selectedUser?.nickname.trim() || selectedUser?.user_id || "?";
+
+  const resetForm = () => {
+    setSelectedUserId("");
+    setSubmitError(null);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    onOpenChange(nextOpen);
+    if (!nextOpen) {
+      resetForm();
+    }
+  };
+
+  const handleCreateBot = () => {
+    if (!selectedUser) {
+      setSubmitError("请选择要绑定的用户");
+      return;
+    }
+
+    setSubmitError(null);
+    createBot.mutate(
+      {
+        boundUserId: selectedUser.user_id,
+        displayName: selectedUser.nickname,
+      },
+      {
+        onSuccess: () => {
+          handleOpenChange(false);
+        },
+        onError: (err) => {
+          setSubmitError(String(err));
+        },
+      },
+    );
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger asChild>
+        <Button type="button" size="sm" variant="outline">
+          <Plus className="size-4" />
+          创建 Bot
+        </Button>
+      </SheetTrigger>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>创建 Bot</SheetTitle>
+        </SheetHeader>
+
+        <FieldGroup className="px-4">
+          <div className="flex justify-start">
+            <Avatar className="size-16">
+              <AvatarImage src={selectedUser?.avatar} alt="绑定用户头像预览" />
+              <AvatarFallback className="text-lg">
+                {selectedUserLabel.slice(0, 1).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+
+          <Field>
+            <FieldLabel htmlFor="create-bot-user">绑定用户</FieldLabel>
+            <Select
+              value={selectedUserId}
+              onValueChange={(value) => {
+                setSelectedUserId(value);
+                setSubmitError(null);
+              }}
+              disabled={unboundUsers.length === 0}
+            >
+              <SelectTrigger id="create-bot-user" className="w-full">
+                <SelectValue
+                  placeholder={
+                    unboundUsers.length === 0
+                      ? "没有可绑定的用户"
+                      : "选择要绑定的用户"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {unboundUsers.map((user) => (
+                  <SelectItem key={user.user_id} value={user.user_id}>
+                    {user.nickname} ({user.user_id})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {selectedUser ? (
+            <p className="text-muted-foreground text-xs">
+              将创建名为 {selectedUser.nickname} 的 Bot，并绑定到用户{" "}
+              {selectedUser.user_id}。
+            </p>
+          ) : null}
+
+          {submitError ? (
+            <p className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-destructive text-xs">
+              {submitError}
+            </p>
+          ) : null}
+
+          <Field orientation="horizontal">
+            <Button
+              type="button"
+              onClick={handleCreateBot}
+              disabled={!selectedUserId || createBot.isPending}
+            >
+              {createBot.isPending ? "创建中..." : "创建 Bot"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={createBot.isPending}
+            >
+              取消
+            </Button>
+          </Field>
+        </FieldGroup>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 function StatValue({
   value,
@@ -66,40 +214,16 @@ function DashboardView() {
   const statsQuery = useBotStatsQuery();
   const botsQuery = useBotsQuery();
 
-  const createBot = useCreateBotMutation();
   const deleteBot = useDeleteBotMutation();
   const startBot = useStartBotMutation();
   const stopBot = useStopBotMutation();
 
-  const [selectedUserId, setSelectedUserId] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const users = usersQuery.data ?? [];
   const bots = botsQuery.data ?? [];
   const stats = statsQuery.data;
-  const unboundUsers = users.filter(
-    (user) => !bots.some((bot) => bot.bound_user_id === user.user_id),
-  );
-
-  const handleCreateBot = () => {
-    const user = users.find((item) => item.user_id === selectedUserId);
-    if (!user) {
-      return;
-    }
-
-    createBot.mutate(
-      {
-        boundUserId: selectedUserId,
-        displayName: user.nickname,
-      },
-      {
-        onSuccess: () => {
-          setSelectedUserId("");
-          setSheetOpen(false);
-        },
-      },
-    );
-  };
+  const boundUserIds = new Set(bots.map((bot) => bot.bound_user_id));
 
   return (
     <div className="space-y-4">
@@ -163,47 +287,12 @@ function DashboardView() {
           <CardTitle className="flex items-center gap-2 text-sm">
             <Bot className="size-4" /> Bot 管理
           </CardTitle>
-          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetTrigger asChild>
-              <Button type="button" size="sm" variant="outline">
-                <Plus className="size-4" />
-                创建 Bot
-              </Button>
-            </SheetTrigger>
-            <SheetContent>
-              <SheetHeader>
-                <SheetTitle>创建 Bot</SheetTitle>
-              </SheetHeader>
-              <div className="mt-4 space-y-4">
-                <div className="space-y-2">
-                  <p className="font-medium text-sm">选择用户</p>
-                  <Select
-                    value={selectedUserId}
-                    onValueChange={setSelectedUserId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择要绑定的用户" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {unboundUsers.map((user) => (
-                        <SelectItem key={user.user_id} value={user.user_id}>
-                          {user.nickname} ({user.user_id})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={!selectedUserId || createBot.isPending}
-                  onClick={handleCreateBot}
-                >
-                  {createBot.isPending ? "创建中..." : "确认创建"}
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
+          <CreateBotSheet
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
+            users={users}
+            boundUserIds={boundUserIds}
+          />
         </CardHeader>
         <CardContent>
           {bots.length === 0 ? (
