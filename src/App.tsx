@@ -9,6 +9,7 @@ import ChatWindowView from "@/views/chat/chat-window";
 import AboutView from "@/views/main/about";
 import DashboardView from "@/views/main/dashboard";
 import LogsView from "@/views/main/logs";
+import PacketsView from "@/views/main/packets";
 import SettingsView from "@/views/main/settings";
 import UserSettingsView from "@/views/main/user-settings";
 import UserManagementView from "@/views/main/users";
@@ -23,6 +24,7 @@ function App() {
         { path: "users", element: <UserManagementView /> },
         { path: "user/:userId", element: <UserSettingsView /> },
         { path: "logs", element: <LogsView /> },
+        { path: "packets", element: <PacketsView /> },
         { path: "settings", element: <SettingsView /> },
         { path: "about", element: <AboutView /> },
       ],

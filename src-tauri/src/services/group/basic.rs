@@ -98,6 +98,10 @@ impl GroupService {
             .map_err(Into::into)
     }
 
+    pub async fn get_group(&self, group_id: &str) -> AppResult<Option<GroupProfile>> {
+        self.repo.get_group(group_id).await.map_err(Into::into)
+    }
+
     pub async fn ensure_group_member(
         &self,
         group_id: &str,

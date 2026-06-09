@@ -50,8 +50,9 @@ impl UserContext {
     }
 }
 
+#[derive(Clone)]
 pub struct CoreContainer {
-    users: RwLock<HashMap<String, UserContext>>,
+    users: Arc<RwLock<HashMap<String, UserContext>>>,
 }
 
 impl Default for CoreContainer {
@@ -63,7 +64,7 @@ impl Default for CoreContainer {
 impl CoreContainer {
     pub fn new() -> Self {
         Self {
-            users: RwLock::new(HashMap::new()),
+            users: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 

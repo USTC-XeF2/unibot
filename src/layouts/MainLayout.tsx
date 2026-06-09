@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Logs,
   MessageCircle,
+  Network,
   Settings,
   Users,
 } from "lucide-react";
@@ -36,7 +37,13 @@ const footerNavItems = [
   { value: "about", to: "/about", label: "关于", icon: Info },
 ];
 
-const navValues = new Set(["dashboard", "logs", "settings", "about"]);
+const navValues = new Set([
+  "dashboard",
+  "logs",
+  "packets",
+  "settings",
+  "about",
+]);
 
 function MainLayout() {
   const [usersOpen, setUsersOpen] = useState(true);
@@ -189,6 +196,17 @@ function MainLayout() {
                 >
                   <Logs className="size-4" />
                   日志
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={tabValue === "packets"}
+                  onClick={() => navigate("/packets")}
+                  tooltip="接口调试"
+                >
+                  <Network className="size-4" />
+                  接口调试
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

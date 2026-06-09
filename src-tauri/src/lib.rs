@@ -1,20 +1,22 @@
 mod commands;
-mod core;
-mod error;
-mod models;
-mod persistence;
-mod services;
-mod utils;
+pub mod core;
+pub mod error;
+pub mod models;
+pub mod persistence;
+pub mod protocol;
+pub mod services;
+pub mod utils;
 
 use tauri::Manager;
 
 use commands::{
     bot,
     chat::{group, message, request, user},
-    main,
+    main, packet,
 };
 use core::CoreContainer;
 use persistence::{BotRepo, GroupRepo, InteractionRepo, MessageRepo, UserRepo, init_sqlite_pool};
+use protocol::ProtocolRuntimeManager;
 use services::{
     BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
     UserService,
@@ -42,7 +44,7 @@ pub fn run() {
                 GroupService::new(group_repo, message_repo.clone()),
                 RequestService::new(request_user_repo),
                 UserService::new(user_repo.clone()),
-                BotService::new(bot_repo),
+                BotService::new(bot_repo.clone()),
             );
 
             let core = CoreContainer::new();
@@ -55,9 +57,27 @@ pub fn run() {
                 }
             }
 
+            // Reset any bots that were left in "running" state from a previous
+            // unclean shutdown (e.g. app crashed or was force-killed).
+            tauri::async_runtime::block_on(bot_repo.reset_all_running_bots())
+                .map_err(|err| format!("failed to reset running bots: {err}"))?;
+
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|err| format!("failed to get app data dir: {err}"))?;
+            let protocol_runtime = protocol::ProtocolRuntimeManager::new(
+                bot_repo.clone(),
+                service_hub.clone(),
+                core.clone(),
+                app_data_dir,
+                pool.clone(),
+            );
+
             app.manage(pool.clone());
             app.manage(core);
             app.manage(service_hub);
+            app.manage(protocol_runtime);
 
             if let Some(main_window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
@@ -66,6 +86,28 @@ pub fn run() {
                         event,
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
                     ) {
+                        // Gracefully shut down all protocol servers before exit.
+                        // Spawn a dedicated thread and block_on so shutdown actually
+                        // completes before the process exits. Cap wait at 3s so UI
+                        // doesn't freeze if servers hang.
+                        let app_handle_shutdown = app_handle.clone();
+                        let handle = std::thread::spawn(move || {
+                            tauri::async_runtime::block_on(async move {
+                                let runtime = app_handle_shutdown.state::<ProtocolRuntimeManager>();
+                                runtime.shutdown_all().await;
+                            });
+                        });
+                        let start = std::time::Instant::now();
+                        while start.elapsed() < std::time::Duration::from_secs(3) {
+                            if handle.is_finished() {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                        if !handle.is_finished() {
+                            eprintln!("shutdown thread timed out after 3s, exiting anyway");
+                        }
+
                         let core_state = app_handle.state::<CoreContainer>();
                         for context in core_state.list_user_contexts() {
                             if let Some(label) = context.chat_window_label() {
@@ -93,7 +135,9 @@ pub fn run() {
             main::get_db_status,
             main::get_stats,
             bot::create_bot,
+            bot::get_bot_config,
             bot::list_bots,
+            bot::rename_bot,
             bot::delete_bot,
             bot::start_bot,
             bot::stop_bot,
@@ -135,6 +179,8 @@ pub fn run() {
             group::list_group_files,
             group::set_group_essence_message,
             group::list_group_essence_messages,
+            packet::list_protocol_packets,
+            packet::read_protocol_packet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

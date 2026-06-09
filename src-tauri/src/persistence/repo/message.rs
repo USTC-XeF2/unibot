@@ -15,6 +15,7 @@ pub struct MessageRecord {
     pub is_recalled: bool,
     pub recalled_by_user_id: Option<String>,
     pub created_at: u64,
+    pub message_seq: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +60,16 @@ impl MessageRepo {
             None
         };
 
+        let mut tx = self.pool.begin().await?;
+
         let id = crate::utils::new_db_id();
+
+        let seq: i64 = sqlx::query_scalar(
+            "UPDATE message_seq_counter SET next_seq = next_seq + 1 WHERE id = 1 RETURNING next_seq - 1",
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
         let row = sqlx::query_as::<_, MessageRecord>(
             r#"
             INSERT INTO messages (
@@ -77,13 +87,14 @@ impl MessageRepo {
                       quoted_message_id,
                       is_recalled,
                       recalled_by_user_id,
-                      created_at
+                      created_at,
+                      message_seq
             "#,
         )
         .bind(&id)
         .bind(&record.source_type)
         .bind(&record.source_id)
-        .bind(&id) // message_seq = message_id
+        .bind(seq)
         .bind(&record.sender_user_id)
         .bind(receiver_user_id)
         .bind(group_id)
@@ -91,7 +102,7 @@ impl MessageRepo {
         .bind(&record.content_json)
         .bind(record.quoted_message_id.as_deref())
         .bind(record.created_at as i64)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
         let conversation_id = if is_private {
@@ -123,7 +134,7 @@ impl MessageRepo {
             .bind(&record.source_id)
             .bind(&row.id)
             .bind(record.created_at as i64)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         } else {
             sqlx::query(
@@ -144,9 +155,11 @@ impl MessageRepo {
             .bind(&record.source_id)
             .bind(&row.id)
             .bind(record.created_at as i64)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         }
+
+        tx.commit().await?;
 
         Ok(row)
     }
@@ -174,7 +187,8 @@ impl MessageRepo {
                       quoted_message_id,
                       is_recalled,
                       recalled_by_user_id,
-                      created_at
+                      created_at,
+                      message_seq
             "#,
         )
         .bind(message_id)
@@ -200,7 +214,8 @@ impl MessageRepo {
                    quoted_message_id,
                    is_recalled,
                    recalled_by_user_id,
-                   created_at
+                   created_at,
+                   message_seq
             FROM messages
             WHERE message_id = ?1
             "#,
@@ -234,7 +249,8 @@ impl MessageRepo {
                        quoted_message_id,
                        is_recalled,
                        recalled_by_user_id,
-                       created_at
+                       created_at,
+                       message_seq
                 FROM messages
                 WHERE message_scene = 'private'
                   AND (
@@ -265,7 +281,8 @@ impl MessageRepo {
                    quoted_message_id,
                    is_recalled,
                    recalled_by_user_id,
-                   created_at
+                   created_at,
+                   message_seq
             FROM messages
             WHERE message_scene = 'group' AND group_id = ?1
             ORDER BY created_at DESC
@@ -281,6 +298,16 @@ impl MessageRepo {
     pub async fn get_message_count(&self) -> Result<i64, sqlx::Error> {
         sqlx::query_scalar("SELECT COUNT(*) FROM messages")
             .fetch_one(&self.pool)
+            .await
+    }
+
+    pub async fn get_seq_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> Result<Option<i64>, sqlx::Error> {
+        sqlx::query_scalar("SELECT message_seq FROM messages WHERE message_id = ?1")
+            .bind(message_id)
+            .fetch_optional(&self.pool)
             .await
     }
 }

@@ -1,7 +1,8 @@
 use crate::error::{AppError, AppResult};
 use crate::models::{BotProfile, DebugSession};
 use crate::persistence::BotRepo;
-use crate::utils::{new_db_id, now_ts};
+use crate::protocol::types::{BotConfig, HttpConfig};
+use crate::utils::new_db_id;
 use serde::Serialize;
 use std::io::ErrorKind;
 use tauri::Manager;
@@ -56,10 +57,25 @@ impl BotService {
             .ok_or_else(|| AppError::internal("bot config path is not valid UTF-8"))?
             .to_string();
 
+        // 分配最小可用端口（从 3001 开始）
+        let port = self.allocate_port().await?;
+        let config = BotConfig {
+            version: 1,
+            protocol: "milky".to_string(),
+            http: HttpConfig {
+                host: "127.0.0.1".to_string(),
+                port,
+            },
+            access_token: uuid::Uuid::new_v4().to_string(),
+            event_transport: "sse".to_string(),
+        };
+        let config_json = serde_json::to_string_pretty(&config)
+            .map_err(|e| AppError::internal(format!("serialize config: {e}")))?;
+
         tokio::fs::create_dir_all(&bots_dir)
             .await
             .map_err(|err| AppError::internal(format!("create bots dir: {err}")))?;
-        tokio::fs::write(&config_path, "{}")
+        tokio::fs::write(&config_path, config_json)
             .await
             .map_err(|err| AppError::internal(format!("write config: {err}")))?;
 
@@ -87,7 +103,18 @@ impl BotService {
             .collect()
     }
 
-    pub async fn delete_bot(&self, bot_id: String) -> AppResult<()> {
+    pub async fn delete_bot(
+        &self,
+        runtime: &crate::protocol::ProtocolRuntimeManager,
+        bot_id: String,
+    ) -> AppResult<()> {
+        // If bot is running, stop it first via runtime
+        if runtime.is_running(&bot_id).await {
+            runtime.stop_bot(&bot_id).await.map_err(|e| {
+                AppError::internal(format!("failed to stop bot before deletion: {e}"))
+            })?;
+        }
+
         let bot = self
             .repo
             .delete_bot_with_sessions(&bot_id)
@@ -108,49 +135,29 @@ impl BotService {
         Ok(())
     }
 
-    pub async fn start_bot(&self, bot_id: String) -> AppResult<DebugSession> {
-        let session_id = new_db_id();
-        let session_name = format!("调试会话 {}", now_ts());
+    pub async fn start_bot(
+        &self,
+        runtime: &crate::protocol::ProtocolRuntimeManager,
+        bot_id: String,
+    ) -> AppResult<DebugSession> {
+        // Start runtime (it creates the session)
+        let _addr = runtime.start_bot(&bot_id).await?;
 
-        let row = match self
-            .repo
-            .start_session(&session_id, &bot_id, &session_name)
-            .await
-        {
-            Ok(row) => row,
-            Err(sqlx::Error::RowNotFound) => {
-                // start_session returns RowNotFound when:
-                // - bot does not exist, OR
-                // - bot is already running (runtime_status == 'running' or active session exists)
-                // Distinguish them to give accurate error message.
-                match self.repo.get_bot_by_id(&bot_id).await {
-                    Ok(None) => {
-                        return Err(AppError::not_found(format!("bot {bot_id} not found")));
-                    }
-                    Ok(Some(_)) => {
-                        return Err(AppError::conflict("bot is already running"));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Err(err) => return Err(err.into()),
-        };
-        row.try_into()
+        // Return the latest active session
+        let sessions = self.repo.list_sessions_by_bot(&bot_id).await?;
+        let session = sessions
+            .into_iter()
+            .find(|s| s.ended_at.is_none())
+            .ok_or_else(|| AppError::internal("session not found after start"))?;
+        session.try_into()
     }
 
-    pub async fn stop_bot(&self, bot_id: String) -> AppResult<()> {
-        let bot = self
-            .repo
-            .get_bot_by_id(&bot_id)
-            .await?
-            .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
-
-        if bot.runtime_status != "running" && !self.repo.has_active_session(&bot_id).await? {
-            return Err(AppError::validation("bot is not running"));
-        }
-
-        self.repo.stop_active_sessions(&bot_id).await?;
-        Ok(())
+    pub async fn stop_bot(
+        &self,
+        runtime: &crate::protocol::ProtocolRuntimeManager,
+        bot_id: String,
+    ) -> AppResult<()> {
+        runtime.stop_bot(&bot_id).await
     }
 
     pub async fn list_sessions(&self, bot_id: String) -> AppResult<Vec<DebugSession>> {
@@ -165,6 +172,49 @@ impl BotService {
     pub async fn get_online_bot_count(&self) -> AppResult<i64> {
         self.repo.get_online_bot_count().await.map_err(Into::into)
     }
+
+    pub async fn get_bot_config(&self, bot_id: &str) -> AppResult<String> {
+        let bot = self
+            .repo
+            .get_bot_by_id(bot_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
+        tokio::fs::read_to_string(&bot.config_path)
+            .await
+            .map_err(|e| AppError::internal(format!("read bot config: {e}")))
+    }
+
+    pub async fn rename_bot(&self, bot_id: String, display_name: String) -> AppResult<BotProfile> {
+        if display_name.trim().is_empty() {
+            return Err(AppError::validation("display name cannot be empty"));
+        }
+        let bot = self
+            .repo
+            .update_display_name(&bot_id, &display_name)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
+        bot.try_into()
+    }
+
+    async fn allocate_port(&self) -> AppResult<u16> {
+        let bots = self.repo.list_bots().await?;
+        let mut used = Vec::new();
+        for bot in bots {
+            if let Ok(text) = tokio::fs::read_to_string(&bot.config_path).await {
+                if let Ok(cfg) = serde_json::from_str::<BotConfig>(&text) {
+                    used.push(cfg.http.port);
+                }
+            }
+        }
+        for port in 3001..=65535 {
+            if !used.contains(&port) {
+                return Ok(port);
+            }
+        }
+        Err(AppError::validation(
+            "no available port in range 3001-65535",
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -177,11 +227,18 @@ mod tests {
     async fn delete_bot_removes_database_record_when_config_cleanup_fails(
         pool: sqlx::SqlitePool,
     ) -> Result<(), sqlx::Error> {
+        use crate::persistence::{GroupRepo, InteractionRepo, MessageRepo};
+        use crate::services::{
+            GroupService, InteractionService, MessageService, RequestService, ServiceHub,
+            UserService,
+        };
+
         migrator::run_migrations(&pool)
             .await
             .map_err(sqlx::Error::Protocol)?;
 
-        UserRepo::new(pool.clone())
+        let user_repo = UserRepo::new(pool.clone());
+        user_repo
             .upsert_user(&UserProfile {
                 user_id: "10001".to_string(),
                 nickname: "Alice".to_string(),
@@ -196,7 +253,7 @@ mod tests {
             .await
             .expect("test config directory should be created");
 
-        let repo = BotRepo::new(pool);
+        let repo = BotRepo::new(pool.clone());
         repo.insert_bot(
             "bot_10001",
             "10001",
@@ -207,8 +264,32 @@ mod tests {
         )
         .await?;
 
+        let message_repo = MessageRepo::new(pool.clone());
+        let group_repo = GroupRepo::new(pool.clone());
+        let service_hub = ServiceHub::new(
+            MessageService::new(message_repo.clone(), group_repo.clone()),
+            InteractionService::new(
+                InteractionRepo::new(pool.clone()),
+                message_repo.clone(),
+                group_repo.clone(),
+            ),
+            GroupService::new(group_repo, message_repo),
+            RequestService::new(user_repo.clone()),
+            UserService::new(user_repo),
+            BotService::new(repo.clone()),
+        );
+
         let result = BotService::new(repo.clone())
-            .delete_bot("bot_10001".to_string())
+            .delete_bot(
+                &crate::protocol::ProtocolRuntimeManager::new(
+                    repo.clone(),
+                    service_hub,
+                    crate::core::CoreContainer::new(),
+                    std::env::temp_dir(),
+                    pool.clone(),
+                ),
+                "bot_10001".to_string(),
+            )
             .await;
         let bot = repo.get_bot_by_id("bot_10001").await?;
 
