@@ -1,7 +1,7 @@
 use crate::core::CoreContainer;
 use crate::models::{GroupProfile, UserProfile};
 use crate::persistence::db_pool::DB_FILE_NAME;
-use crate::services::ServiceHub;
+use crate::services::{ServiceHub, StatsResult};
 
 use super::IntoCommandResult;
 use sqlx::SqlitePool;
@@ -131,4 +131,23 @@ pub async fn get_db_status(app: tauri::AppHandle) -> Result<DbStatus, String> {
     .await;
 
     result.into_command_result()
+}
+
+#[tauri::command]
+pub async fn get_stats(services: tauri::State<'_, ServiceHub>) -> Result<StatsResult, String> {
+    let total_messages = services
+        .message
+        .get_message_count()
+        .await
+        .into_command_result()?;
+    let online_bots = services
+        .bot
+        .get_online_bot_count()
+        .await
+        .into_command_result()?;
+
+    Ok(StatsResult {
+        total_messages,
+        online_bots,
+    })
 }

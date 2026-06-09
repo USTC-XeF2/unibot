@@ -9,13 +9,15 @@ mod utils;
 use tauri::Manager;
 
 use commands::{
+    bot,
     chat::{group, message, request, user},
     main,
 };
 use core::CoreContainer;
-use persistence::{GroupRepo, InteractionRepo, MessageRepo, UserRepo, init_sqlite_pool};
+use persistence::{BotRepo, GroupRepo, InteractionRepo, MessageRepo, UserRepo, init_sqlite_pool};
 use services::{
-    GroupService, InteractionService, MessageService, RequestService, ServiceHub, UserService,
+    BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
+    UserService,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,6 +29,7 @@ pub fn run() {
             let message_repo = MessageRepo::new(pool.clone());
             let interaction_repo = InteractionRepo::new(pool.clone());
             let group_repo = GroupRepo::new(pool.clone());
+            let bot_repo = BotRepo::new(pool.clone());
             let request_user_repo = user_repo.clone();
             let message_repo_for_interaction = message_repo.clone();
             let service_hub = ServiceHub::new(
@@ -39,6 +42,7 @@ pub fn run() {
                 GroupService::new(group_repo, message_repo.clone()),
                 RequestService::new(request_user_repo),
                 UserService::new(user_repo.clone()),
+                BotService::new(bot_repo),
             );
 
             let core = CoreContainer::new();
@@ -87,6 +91,13 @@ pub fn run() {
             main::delete_user,
             main::open_user_chat_window,
             main::get_db_status,
+            main::get_stats,
+            bot::create_bot,
+            bot::list_bots,
+            bot::delete_bot,
+            bot::start_bot,
+            bot::stop_bot,
+            bot::list_debug_sessions,
             user::update_user_profile,
             user::list_friends,
             user::list_user_groups,

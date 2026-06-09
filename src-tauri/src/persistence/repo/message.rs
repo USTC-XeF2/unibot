@@ -9,6 +9,7 @@ pub struct MessageRecord {
     pub source_id: String,
     pub receiver_user_id: Option<String>,
     pub group_id: Option<String>,
+    pub bot_id: Option<String>,
     pub content_json: String,
     pub quoted_message_id: Option<String>,
     pub is_recalled: bool,
@@ -25,6 +26,7 @@ pub struct NewMessageRecord {
     pub content_json: String,
     pub quoted_message_id: Option<String>,
     pub created_at: u64,
+    pub bot_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -62,14 +64,15 @@ impl MessageRepo {
             r#"
             INSERT INTO messages (
                 message_id, message_scene, peer_id, message_seq, sender_user_id,
-                receiver_user_id, group_id, content_json, quoted_message_id, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                receiver_user_id, group_id, bot_id, content_json, quoted_message_id, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             RETURNING message_id AS id,
                       sender_user_id,
                       message_scene AS source_type,
                       peer_id AS source_id,
                       receiver_user_id,
                       group_id,
+                      bot_id,
                       content_json,
                       quoted_message_id,
                       is_recalled,
@@ -84,6 +87,7 @@ impl MessageRepo {
         .bind(&record.sender_user_id)
         .bind(receiver_user_id)
         .bind(group_id)
+        .bind(record.bot_id.as_deref())
         .bind(&record.content_json)
         .bind(record.quoted_message_id.as_deref())
         .bind(record.created_at as i64)
@@ -165,6 +169,7 @@ impl MessageRepo {
                       peer_id AS source_id,
                       receiver_user_id,
                       group_id,
+                      bot_id,
                       content_json,
                       quoted_message_id,
                       is_recalled,
@@ -190,6 +195,7 @@ impl MessageRepo {
                    COALESCE(group_id, peer_id) AS source_id,
                    receiver_user_id,
                    group_id,
+                   bot_id,
                    content_json,
                    quoted_message_id,
                    is_recalled,
@@ -223,6 +229,7 @@ impl MessageRepo {
                        END AS source_id,
                        receiver_user_id,
                        group_id,
+                       bot_id,
                        content_json,
                        quoted_message_id,
                        is_recalled,
@@ -253,6 +260,7 @@ impl MessageRepo {
                    group_id AS source_id,
                    receiver_user_id,
                    group_id,
+                   bot_id,
                    content_json,
                    quoted_message_id,
                    is_recalled,
@@ -268,5 +276,11 @@ impl MessageRepo {
         .bind(limit)
         .fetch_all(&self.pool)
         .await
+    }
+
+    pub async fn get_message_count(&self) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+            .fetch_one(&self.pool)
+            .await
     }
 }

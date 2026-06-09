@@ -14,10 +14,11 @@ pub async fn send_message(
     source: MessageSource,
     content: Vec<MessageSegment>,
     quoted_message_id: Option<String>,
+    bot_id: Option<String>,
 ) -> Result<SendMessageResult, String> {
     services
         .message
-        .send(&core, user_id, source, content, quoted_message_id)
+        .send(&core, user_id, source, content, quoted_message_id, bot_id)
         .await
         .into_command_result()
 }
