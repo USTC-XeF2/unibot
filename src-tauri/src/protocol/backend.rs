@@ -61,6 +61,14 @@ impl ProtocolBackend for VirtualBackend {
         &self,
         bot: &BotRuntimeContext,
     ) -> AppResult<broadcast::Receiver<InternalEvent>> {
+        // Defensive validation: reject empty identifiers that could indicate
+        // tampering or incomplete setup.
+        if bot.bot_id.is_empty() {
+            return Err(AppError::validation("bot_id is empty"));
+        }
+        if bot.bound_user_id.is_empty() {
+            return Err(AppError::validation("bound_user_id is empty"));
+        }
         let ctx = self
             .core
             .user_context(&bot.bound_user_id)

@@ -204,7 +204,9 @@ impl ProtocolRuntimeManager {
         }
 
         for (_, running) in entries {
-            let _ = running.join_handle.await;
+            // Wait up to 1s per server so shutdown_all doesn't hang on a stuck connection.
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(1), running.join_handle).await;
         }
     }
 
