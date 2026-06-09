@@ -103,7 +103,16 @@ impl BotService {
             .collect()
     }
 
-    pub async fn delete_bot(&self, bot_id: String) -> AppResult<()> {
+    pub async fn delete_bot(
+        &self,
+        runtime: &crate::protocol::ProtocolRuntimeManager,
+        bot_id: String,
+    ) -> AppResult<()> {
+        // If bot is running, stop it first via runtime
+        if runtime.is_running(&bot_id).await {
+            let _ = runtime.stop_bot(&bot_id).await;
+        }
+
         let bot = self
             .repo
             .delete_bot_with_sessions(&bot_id)
@@ -124,49 +133,29 @@ impl BotService {
         Ok(())
     }
 
-    pub async fn start_bot(&self, bot_id: String) -> AppResult<DebugSession> {
-        let session_id = new_db_id();
-        let session_name = format!("调试会话 {}", now_ts());
+    pub async fn start_bot(
+        &self,
+        runtime: &crate::protocol::ProtocolRuntimeManager,
+        bot_id: String,
+    ) -> AppResult<DebugSession> {
+        // Start runtime (it creates the session)
+        let _addr = runtime.start_bot(&bot_id).await?;
 
-        let row = match self
-            .repo
-            .start_session(&session_id, &bot_id, &session_name)
-            .await
-        {
-            Ok(row) => row,
-            Err(sqlx::Error::RowNotFound) => {
-                // start_session returns RowNotFound when:
-                // - bot does not exist, OR
-                // - bot is already running (runtime_status == 'running' or active session exists)
-                // Distinguish them to give accurate error message.
-                match self.repo.get_bot_by_id(&bot_id).await {
-                    Ok(None) => {
-                        return Err(AppError::not_found(format!("bot {bot_id} not found")));
-                    }
-                    Ok(Some(_)) => {
-                        return Err(AppError::conflict("bot is already running"));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Err(err) => return Err(err.into()),
-        };
-        row.try_into()
+        // Return the latest active session
+        let sessions = self.repo.list_sessions_by_bot(&bot_id).await?;
+        let session = sessions
+            .into_iter()
+            .find(|s| s.ended_at.is_none())
+            .ok_or_else(|| AppError::internal("session not found after start"))?;
+        session.try_into()
     }
 
-    pub async fn stop_bot(&self, bot_id: String) -> AppResult<()> {
-        let bot = self
-            .repo
-            .get_bot_by_id(&bot_id)
-            .await?
-            .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
-
-        if bot.runtime_status != "running" && !self.repo.has_active_session(&bot_id).await? {
-            return Err(AppError::validation("bot is not running"));
-        }
-
-        self.repo.stop_active_sessions(&bot_id).await?;
-        Ok(())
+    pub async fn stop_bot(
+        &self,
+        runtime: &crate::protocol::ProtocolRuntimeManager,
+        bot_id: String,
+    ) -> AppResult<()> {
+        runtime.stop_bot(&bot_id).await
     }
 
     pub async fn list_sessions(&self, bot_id: String) -> AppResult<Vec<DebugSession>> {
@@ -213,11 +202,18 @@ mod tests {
     async fn delete_bot_removes_database_record_when_config_cleanup_fails(
         pool: sqlx::SqlitePool,
     ) -> Result<(), sqlx::Error> {
+        use crate::persistence::{GroupRepo, InteractionRepo, MessageRepo};
+        use crate::services::{
+            GroupService, InteractionService, MessageService, RequestService, ServiceHub,
+            UserService,
+        };
+
         migrator::run_migrations(&pool)
             .await
             .map_err(sqlx::Error::Protocol)?;
 
-        UserRepo::new(pool.clone())
+        let user_repo = UserRepo::new(pool.clone());
+        user_repo
             .upsert_user(&UserProfile {
                 user_id: "10001".to_string(),
                 nickname: "Alice".to_string(),
@@ -232,7 +228,7 @@ mod tests {
             .await
             .expect("test config directory should be created");
 
-        let repo = BotRepo::new(pool);
+        let repo = BotRepo::new(pool.clone());
         repo.insert_bot(
             "bot_10001",
             "10001",
@@ -243,8 +239,31 @@ mod tests {
         )
         .await?;
 
+        let message_repo = MessageRepo::new(pool.clone());
+        let group_repo = GroupRepo::new(pool.clone());
+        let service_hub = ServiceHub::new(
+            MessageService::new(message_repo.clone(), group_repo.clone()),
+            InteractionService::new(
+                InteractionRepo::new(pool.clone()),
+                message_repo.clone(),
+                group_repo.clone(),
+            ),
+            GroupService::new(group_repo, message_repo),
+            RequestService::new(user_repo.clone()),
+            UserService::new(user_repo),
+            BotService::new(repo.clone()),
+        );
+
         let result = BotService::new(repo.clone())
-            .delete_bot("bot_10001".to_string())
+            .delete_bot(
+                &crate::protocol::ProtocolRuntimeManager::new(
+                    repo.clone(),
+                    service_hub,
+                    crate::core::CoreContainer::new(),
+                    std::env::temp_dir(),
+                ),
+                "bot_10001".to_string(),
+            )
             .await;
         let bot = repo.get_bot_by_id("bot_10001").await?;
 

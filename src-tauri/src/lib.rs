@@ -43,7 +43,7 @@ pub fn run() {
                 GroupService::new(group_repo, message_repo.clone()),
                 RequestService::new(request_user_repo),
                 UserService::new(user_repo.clone()),
-                BotService::new(bot_repo),
+                BotService::new(bot_repo.clone()),
             );
 
             let core = CoreContainer::new();
@@ -56,9 +56,21 @@ pub fn run() {
                 }
             }
 
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|err| format!("failed to get app data dir: {err}"))?;
+            let protocol_runtime = protocol::ProtocolRuntimeManager::new(
+                bot_repo.clone(),
+                service_hub.clone(),
+                core.clone(),
+                app_data_dir,
+            );
+
             app.manage(pool.clone());
             app.manage(core);
             app.manage(service_hub);
+            app.manage(protocol_runtime);
 
             if let Some(main_window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
