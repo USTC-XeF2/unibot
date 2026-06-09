@@ -193,6 +193,85 @@ impl ProtocolAdapter for MilkyAdapter {
                     data,
                 })
             }
+            InternalEvent::FriendRequestCreated {
+                request_id,
+                initiator_user_id,
+                target_user_id,
+                time,
+            } => {
+                let _self_id = target_user_id.parse::<i64>().ok()?;
+                let data = serde_json::json!({
+                    "request_id": request_id,
+                    "user_id": initiator_user_id.parse::<i64>().ok()?,
+                    "comment": "",
+                });
+                Some(ProtocolEvent {
+                    time: *time / 1000,
+                    self_id: bot.bot_id.clone(),
+                    event_type: "friend_request".to_string(),
+                    data,
+                })
+            }
+            InternalEvent::GroupRequestCreated {
+                request_id,
+                group_id,
+                request_type: _,
+                initiator_user_id,
+                target_user_id,
+                time,
+            } => {
+                let _self_id = target_user_id.as_ref()?.parse::<i64>().ok()?;
+                let data = serde_json::json!({
+                    "request_id": request_id,
+                    "group_id": group_id.parse::<i64>().ok()?,
+                    "user_id": initiator_user_id.parse::<i64>().ok()?,
+                    "comment": "",
+                });
+                Some(ProtocolEvent {
+                    time: *time / 1000,
+                    self_id: bot.bot_id.clone(),
+                    event_type: "group_join_request".to_string(),
+                    data,
+                })
+            }
+            InternalEvent::GroupMemberJoined {
+                group_id,
+                operator_user_id,
+                target_user_id,
+                time,
+            } => {
+                let _self_id = target_user_id.parse::<i64>().ok()?;
+                let data = serde_json::json!({
+                    "group_id": group_id.parse::<i64>().ok()?,
+                    "user_id": target_user_id.parse::<i64>().ok()?,
+                    "operator_id": operator_user_id.parse::<i64>().ok()?,
+                });
+                Some(ProtocolEvent {
+                    time: *time / 1000,
+                    self_id: bot.bot_id.clone(),
+                    event_type: "group_member_increase".to_string(),
+                    data,
+                })
+            }
+            InternalEvent::GroupMemberLeft {
+                group_id,
+                operator_user_id,
+                target_user_id,
+                time,
+            } => {
+                let _self_id = target_user_id.parse::<i64>().ok()?;
+                let data = serde_json::json!({
+                    "group_id": group_id.parse::<i64>().ok()?,
+                    "user_id": target_user_id.parse::<i64>().ok()?,
+                    "operator_id": operator_user_id.as_ref().and_then(|id| id.parse::<i64>().ok()),
+                });
+                Some(ProtocolEvent {
+                    time: *time / 1000,
+                    self_id: bot.bot_id.clone(),
+                    event_type: "group_member_decrease".to_string(),
+                    data,
+                })
+            }
             _ => None,
         }
     }
