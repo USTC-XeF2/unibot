@@ -97,8 +97,12 @@ impl ProtocolBackend for VirtualBackend {
                     .ok_or_else(|| AppError::validation("missing message"))?;
                 let milky_segments: Vec<crate::protocol::types::MilkySegment> = message
                     .iter()
-                    .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                    .collect();
+                    .map(|v| {
+                        serde_json::from_value(v.clone()).map_err(|e| {
+                            AppError::validation(format!("invalid message segment: {e}"))
+                        })
+                    })
+                    .collect::<AppResult<Vec<_>>>()?;
                 let segments = milky_to_internal_segments(&milky_segments);
                 let result = self
                     .service_hub
@@ -119,7 +123,7 @@ impl ProtocolBackend for VirtualBackend {
                     .message
                     .get_seq_by_message_id(&result.id)
                     .await
-                    .unwrap_or(0);
+                    .map_err(|e| AppError::internal(format!("failed to get message seq: {e}")))?;
                 Ok(self.adapter.adapt_message_send(&result.id, message_seq))
             }
             "send_group_message" => {
@@ -136,8 +140,12 @@ impl ProtocolBackend for VirtualBackend {
                     .ok_or_else(|| AppError::validation("missing message"))?;
                 let milky_segments: Vec<crate::protocol::types::MilkySegment> = message
                     .iter()
-                    .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                    .collect();
+                    .map(|v| {
+                        serde_json::from_value(v.clone()).map_err(|e| {
+                            AppError::validation(format!("invalid message segment: {e}"))
+                        })
+                    })
+                    .collect::<AppResult<Vec<_>>>()?;
                 let segments = milky_to_internal_segments(&milky_segments);
                 let result = self
                     .service_hub
@@ -156,7 +164,7 @@ impl ProtocolBackend for VirtualBackend {
                     .message
                     .get_seq_by_message_id(&result.id)
                     .await
-                    .unwrap_or(0);
+                    .map_err(|e| AppError::internal(format!("failed to get message seq: {e}")))?;
                 Ok(self.adapter.adapt_message_send(&result.id, message_seq))
             }
             "get_friend_list" => {
@@ -168,8 +176,11 @@ impl ProtocolBackend for VirtualBackend {
                 let mut data = Vec::new();
                 for friend_id in friend_ids {
                     if let Some(profile) = self.service_hub.user.get_user_by_id(&friend_id).await? {
+                        let user_id = profile.user_id.parse::<i64>().map_err(|_| {
+                            AppError::internal(format!("invalid user_id: {}", profile.user_id))
+                        })?;
                         data.push(serde_json::json!({
-                            "user_id": profile.user_id.parse::<i64>().unwrap_or(0),
+                            "user_id": user_id,
                             "nickname": profile.nickname,
                             "remark": "",
                         }));
@@ -186,14 +197,17 @@ impl ProtocolBackend for VirtualBackend {
                 let data: Vec<serde_json::Value> = groups
                     .into_iter()
                     .map(|g| {
-                        serde_json::json!({
-                            "group_id": g.group_id.parse::<i64>().unwrap_or(0),
+                        let group_id = g.group_id.parse::<i64>().map_err(|_| {
+                            AppError::internal(format!("invalid group_id: {}", g.group_id))
+                        })?;
+                        Ok::<_, AppError>(serde_json::json!({
+                            "group_id": group_id,
                             "group_name": g.group_name,
                             "member_count": g.member_count,
                             "max_member_count": g.max_member_count,
-                        })
+                        }))
                     })
-                    .collect();
+                    .collect::<AppResult<Vec<_>>>()?;
                 Ok(serde_json::json!({ "data": data }))
             }
             "get_group_info" => {
@@ -209,9 +223,12 @@ impl ProtocolBackend for VirtualBackend {
                     .get_group(&group_id)
                     .await?
                     .ok_or_else(|| AppError::not_found("group not found"))?;
+                let group_id_num = group.group_id.parse::<i64>().map_err(|_| {
+                    AppError::internal(format!("invalid group_id: {}", group.group_id))
+                })?;
                 Ok(serde_json::json!({
                     "data": {
-                        "group_id": group.group_id.parse::<i64>().unwrap_or(0),
+                        "group_id": group_id_num,
                         "group_name": group.group_name,
                         "member_count": group.member_count,
                         "max_member_count": group.max_member_count,
@@ -233,8 +250,11 @@ impl ProtocolBackend for VirtualBackend {
                 let data: Vec<serde_json::Value> = members
                     .into_iter()
                     .map(|m| {
-                        serde_json::json!({
-                            "user_id": m.user_id.parse::<i64>().unwrap_or(0),
+                        let user_id = m.user_id.parse::<i64>().map_err(|_| {
+                            AppError::internal(format!("invalid user_id: {}", m.user_id))
+                        })?;
+                        Ok::<_, AppError>(serde_json::json!({
+                            "user_id": user_id,
                             "nickname": m.card,
                             "card": m.card,
                             "role": match m.role {
@@ -242,9 +262,9 @@ impl ProtocolBackend for VirtualBackend {
                                 crate::models::GroupRole::Admin => "admin",
                                 crate::models::GroupRole::Member => "member",
                             },
-                        })
+                        }))
                     })
-                    .collect();
+                    .collect::<AppResult<Vec<_>>>()?;
                 Ok(serde_json::json!({ "data": data }))
             }
             _ => Err(AppError::not_found(format!(

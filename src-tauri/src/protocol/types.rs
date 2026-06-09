@@ -119,7 +119,7 @@ pub trait ProtocolAdapter: Send + Sync {
 // ========== Milky 1.2 specific types ==========
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type", content = "data")]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum MilkySegment {
     Text { text: String },
     Image { file: String, url: String },
@@ -172,7 +172,8 @@ impl ProtocolAdapter for MilkyAdapter {
                     MessageSource::Private { peer_user_id } => {
                         serde_json::json!({
                             "message_type": "private",
-                            "user_id": peer_user_id.parse::<i64>().ok()?,
+                            "user_id": self_id,
+                            "peer_user_id": peer_user_id.parse::<i64>().ok()?,
                             "message_seq": message_seq,
                             "message": segments,
                         })

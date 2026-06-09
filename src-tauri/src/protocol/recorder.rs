@@ -118,7 +118,8 @@ impl PacketRecorder {
             .await
             .map_err(|e| AppError::Storage(format!("failed to create packets dir: {e}")))?;
 
-        let file_path = packets_dir.join(format!("{packet_id}.json"));
+        let relative_path = format!("packets/{today}/{packet_id}.json");
+        let file_path = self.app_data_dir.join(&relative_path);
         let temp_path = packets_dir.join(format!(".{packet_id}.tmp"));
 
         // Serialize JSON
@@ -137,9 +138,8 @@ impl PacketRecorder {
                 AppError::Storage(format!("failed to rename packet file: {e}"))
             })?;
 
-        let file_path_str = file_path
-            .to_str()
-            .ok_or_else(|| AppError::Internal("packet file path is not valid UTF-8".to_string()))?;
+        // Store relative path so the file remains locatable even if app_data_dir moves.
+        let file_path_str = &relative_path;
 
         // Insert index record into database
         let result = sqlx::query(
@@ -168,7 +168,12 @@ impl PacketRecorder {
 
         if let Err(e) = result {
             // Best-effort cleanup of the written file on DB failure
-            let _ = tokio::fs::remove_file(&file_path).await;
+            if let Err(remove_err) = tokio::fs::remove_file(&file_path).await {
+                eprintln!(
+                    "failed to remove orphan packet file {} after db error: {remove_err}",
+                    file_path.display()
+                );
+            }
             return Err(AppError::Storage(format!(
                 "failed to index packet in database: {e}"
             )));

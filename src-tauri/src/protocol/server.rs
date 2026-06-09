@@ -113,7 +113,11 @@ async fn event_handler(
                             Event::default().event("milky_event").data(json),
                         ))
                     }
-                    Err(_) => None,
+                    Err(e) => {
+                        eprintln!("SSE event stream dropped messages for bot {bot_id}: {e}");
+                        // Skip and continue receiving new events.
+                        None
+                    }
                 }
             }
         })
