@@ -90,24 +90,21 @@ impl BotService {
     pub async fn delete_bot(&self, bot_id: String) -> AppResult<()> {
         let bot = self
             .repo
-            .get_bot_by_id(&bot_id)
+            .delete_bot_with_sessions(&bot_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
 
-        // Delete config file first. If this fails (non-NotFound), abort before
-        // touching the database, avoiding orphan files.
         match tokio::fs::remove_file(&bot.config_path).await {
             Ok(()) => {}
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => {
-                return Err(AppError::internal(format!(
-                    "failed to delete bot config file at {}: {err}",
+                eprintln!(
+                    "failed to delete bot config file at {} after deleting bot {bot_id}: {err}",
                     bot.config_path
-                )));
+                );
             }
         }
 
-        self.repo.delete_bot_with_sessions(&bot_id).await?;
         Ok(())
     }
 
@@ -167,5 +164,60 @@ impl BotService {
 
     pub async fn get_online_bot_count(&self) -> AppResult<i64> {
         self.repo.get_online_bot_count().await.map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::UserProfile;
+    use crate::persistence::{UserRepo, migrator};
+
+    #[sqlx::test]
+    async fn delete_bot_removes_database_record_when_config_cleanup_fails(
+        pool: sqlx::SqlitePool,
+    ) -> Result<(), sqlx::Error> {
+        migrator::run_migrations(&pool)
+            .await
+            .map_err(sqlx::Error::Protocol)?;
+
+        UserRepo::new(pool.clone())
+            .upsert_user(&UserProfile {
+                user_id: "10001".to_string(),
+                nickname: "Alice".to_string(),
+                avatar: String::new(),
+                signature: String::new(),
+                account_status: Default::default(),
+            })
+            .await?;
+
+        let config_path = std::env::temp_dir().join(format!("unibot-config-dir-{}", new_db_id()));
+        tokio::fs::create_dir(&config_path)
+            .await
+            .expect("test config directory should be created");
+
+        let repo = BotRepo::new(pool);
+        repo.insert_bot(
+            "bot_10001",
+            "10001",
+            "Alice Bot",
+            config_path
+                .to_str()
+                .expect("temporary path should be valid UTF-8"),
+        )
+        .await?;
+
+        let result = BotService::new(repo.clone())
+            .delete_bot("bot_10001".to_string())
+            .await;
+        let bot = repo.get_bot_by_id("bot_10001").await?;
+
+        tokio::fs::remove_dir(&config_path)
+            .await
+            .expect("test config directory should be removed");
+
+        assert!(result.is_ok());
+        assert!(bot.is_none());
+        Ok(())
     }
 }

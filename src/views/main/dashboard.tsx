@@ -246,6 +246,95 @@ function StatValue({
   );
 }
 
+type BotCardProps = {
+  bot: BotProfile;
+  onStart: (botId: string) => void;
+  onStop: (botId: string) => void;
+  onDelete: (botId: string) => void;
+  isStartPending: boolean;
+  isStopPending: boolean;
+  isDeletePending: boolean;
+};
+
+function BotCard({
+  bot,
+  onStart,
+  onStop,
+  onDelete,
+  isStartPending,
+  isStopPending,
+  isDeletePending,
+}: BotCardProps) {
+  const statusConfig = botStatusConfig[bot.runtime_status];
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+      <div className="min-w-0 space-y-1">
+        <p className="truncate font-medium text-sm">{bot.display_name}</p>
+        <p className="truncate text-muted-foreground text-xs">
+          绑定用户: {bot.bound_user_id}
+        </p>
+        <span className={statusConfig.className}>{statusConfig.label}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {bot.runtime_status === "running" ? (
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            disabled={isStopPending}
+            onClick={() => onStop(bot.bot_id)}
+          >
+            <Power className="size-4 text-red-500" />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            disabled={isStartPending}
+            onClick={() => onStart(bot.bot_id)}
+          >
+            <Play className="size-4 text-green-500" />
+          </Button>
+        )}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              disabled={isDeletePending}
+            >
+              <Trash2 className="size-4 text-destructive" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>删除 Bot</AlertDialogTitle>
+              <AlertDialogDescription>
+                {`将删除 ${bot.display_name}，并停止关联的调试会话。`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeletePending}>
+                取消
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={isDeletePending}
+                onClick={() => onDelete(bot.bot_id)}
+              >
+                删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}
+
 function DashboardView() {
   const usersQuery = useUsersQuery();
   const groupsQuery = useGroupsQuery();
@@ -262,95 +351,6 @@ function DashboardView() {
   const bots = botsQuery.data ?? [];
   const stats = statsQuery.data;
   const boundUserIds = new Set(bots.map((bot) => bot.bound_user_id));
-
-  type BotCardProps = {
-    bot: BotProfile;
-    onStart: (botId: string) => void;
-    onStop: (botId: string) => void;
-    onDelete: (botId: string) => void;
-    isStartPending: boolean;
-    isStopPending: boolean;
-    isDeletePending: boolean;
-  };
-
-  function BotCard({
-    bot,
-    onStart,
-    onStop,
-    onDelete,
-    isStartPending,
-    isStopPending,
-    isDeletePending,
-  }: BotCardProps) {
-    const statusConfig = botStatusConfig[bot.runtime_status];
-
-    return (
-      <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-        <div className="min-w-0 space-y-1">
-          <p className="truncate font-medium text-sm">{bot.display_name}</p>
-          <p className="truncate text-muted-foreground text-xs">
-            绑定用户: {bot.bound_user_id}
-          </p>
-          <span className={statusConfig.className}>{statusConfig.label}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {bot.runtime_status === "running" ? (
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              disabled={isStopPending}
-              onClick={() => onStop(bot.bot_id)}
-            >
-              <Power className="size-4 text-red-500" />
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              disabled={isStartPending}
-              onClick={() => onStart(bot.bot_id)}
-            >
-              <Play className="size-4 text-green-500" />
-            </Button>
-          )}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                size="icon-xs"
-                variant="ghost"
-                disabled={isDeletePending}
-              >
-                <Trash2 className="size-4 text-destructive" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent size="sm">
-              <AlertDialogHeader>
-                <AlertDialogTitle>删除 Bot</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {`将删除 ${bot.display_name}，并停止关联的调试会话。`}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeletePending}>
-                  取消
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  variant="destructive"
-                  disabled={isDeletePending}
-                  onClick={() => onDelete(bot.bot_id)}
-                >
-                  删除
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
