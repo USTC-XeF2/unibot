@@ -1,4 +1,5 @@
 import type { MessageSource } from "@/types/chat";
+import type { PacketFilters } from "@/types/packet";
 
 function sourceTuple(
   source: MessageSource,
@@ -40,6 +41,11 @@ export const queryKeys = {
   bots: {
     all: () => ["bots"] as const,
     stats: () => ["stats"] as const,
+  },
+  packets: {
+    all: () => ["packets"] as const,
+    list: (filters: PacketFilters) => ["packets", "list", filters] as const,
+    detail: (id: string) => ["packets", "detail", id] as const,
   },
   chat: {
     historyByUser: (userId: string) => ["chat", "history", userId] as const,
