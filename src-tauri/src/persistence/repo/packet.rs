@@ -1,6 +1,6 @@
 use sqlx::{QueryBuilder, SqlitePool};
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 pub struct ProtocolPacketRecord {
     pub packet_id: String,
     pub bot_id: String,

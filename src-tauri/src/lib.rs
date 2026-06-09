@@ -12,7 +12,7 @@ use tauri::Manager;
 use commands::{
     bot,
     chat::{group, message, request, user},
-    main,
+    main, packet,
 };
 use core::CoreContainer;
 use persistence::{BotRepo, GroupRepo, InteractionRepo, MessageRepo, UserRepo, init_sqlite_pool};
@@ -149,6 +149,8 @@ pub fn run() {
             group::list_group_files,
             group::set_group_essence_message,
             group::list_group_essence_messages,
+            packet::list_protocol_packets,
+            packet::read_protocol_packet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

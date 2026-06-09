@@ -1,6 +1,7 @@
 pub mod bot;
 pub mod chat;
 pub mod main;
+pub mod packet;
 
 use crate::error::AppResult;
 
