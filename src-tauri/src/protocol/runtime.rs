@@ -131,6 +131,7 @@ impl ProtocolRuntimeManager {
             adapter,
             Arc::new(self.recorder.clone()),
             session.session_id.clone(),
+            self.bot_repo.clone(),
         )
         .await
         {

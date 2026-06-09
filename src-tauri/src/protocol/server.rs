@@ -14,6 +14,7 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::error::AppResult;
 use crate::models::InternalEvent;
+use crate::persistence::BotRepo;
 use crate::protocol::PacketRecorder;
 use crate::protocol::backend::ProtocolBackend;
 use crate::protocol::types::{ApiRequest, ApiResponse, BotRuntimeContext, ProtocolAdapter};
@@ -26,6 +27,7 @@ struct ServerState {
     adapter: Arc<dyn ProtocolAdapter>,
     recorder: Arc<PacketRecorder>,
     session_id: String,
+    bot_repo: BotRepo,
 }
 
 /// Query parameters used for auth token extraction.
@@ -58,6 +60,17 @@ async fn event_handler(
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, StatusCode> {
     let token = extract_token(&headers, &query).ok_or(StatusCode::UNAUTHORIZED)?;
     if token != state.context.access_token {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Verify the binding between bot_id and bound_user_id hasn't been tampered with.
+    let bot_record = state
+        .bot_repo
+        .get_bot_by_id(&state.context.bot_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    if bot_record.bound_user_id != state.context.bound_user_id {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
@@ -219,6 +232,7 @@ pub async fn spawn_server(
     adapter: Arc<dyn ProtocolAdapter>,
     recorder: Arc<PacketRecorder>,
     session_id: String,
+    bot_repo: BotRepo,
 ) -> AppResult<(
     tokio::sync::oneshot::Sender<()>,
     tokio::task::JoinHandle<()>,
@@ -229,6 +243,7 @@ pub async fn spawn_server(
         adapter,
         recorder,
         session_id,
+        bot_repo,
     });
 
     let app = Router::new()

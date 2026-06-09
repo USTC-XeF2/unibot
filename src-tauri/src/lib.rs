@@ -87,12 +87,17 @@ pub fn run() {
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
                     ) {
                         // Gracefully shut down all protocol servers before exit.
-                        // Use spawn instead of block_on to avoid blocking the main thread.
+                        // Spawn a dedicated thread and block_on so shutdown actually
+                        // completes before the process exits.
                         let app_handle_shutdown = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let runtime = app_handle_shutdown.state::<ProtocolRuntimeManager>();
-                            runtime.shutdown_all().await;
-                        });
+                        std::thread::spawn(move || {
+                            tauri::async_runtime::block_on(async move {
+                                let runtime = app_handle_shutdown.state::<ProtocolRuntimeManager>();
+                                runtime.shutdown_all().await;
+                            });
+                        })
+                        .join()
+                        .ok();
 
                         let core_state = app_handle.state::<CoreContainer>();
                         for context in core_state.list_user_contexts() {
