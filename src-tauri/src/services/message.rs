@@ -128,12 +128,12 @@ impl MessageService {
             .await?;
 
         let event = InternalEvent::Message {
-            sender: user_id.clone(),
-            group_id: match &source {
-                MessageSource::Group { group_id } => Some(group_id.clone()),
-                _ => None,
-            },
+            message_id: saved.id.clone(),
+            message_seq: saved.message_seq,
+            sender_user_id: user_id.clone(),
+            source: source.clone(),
             content: content.clone(),
+            origin_bot_id: bot_id.clone(),
             time: now,
         };
         let recipients =

@@ -24,9 +24,12 @@ pub enum NoticeType {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InternalEvent {
     Message {
-        sender: DbId,
-        group_id: Option<DbId>,
+        message_id: DbId,
+        message_seq: i64,
+        sender_user_id: DbId,
+        source: MessageSource,
         content: Vec<MessageSegment>,
+        origin_bot_id: Option<DbId>,
         time: u64,
     },
     MessageRecalled {
@@ -93,6 +96,12 @@ pub enum InternalEvent {
     GroupMemberJoined {
         group_id: DbId,
         operator_user_id: DbId,
+        target_user_id: DbId,
+        time: u64,
+    },
+    GroupMemberLeft {
+        group_id: DbId,
+        operator_user_id: Option<DbId>,
         target_user_id: DbId,
         time: u64,
     },
