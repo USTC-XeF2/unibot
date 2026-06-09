@@ -21,10 +21,25 @@ export function useBotStatsQuery() {
   });
 }
 
+export function useBotConfigQuery(botId: string) {
+  return useQuery({
+    queryKey: queryKeys.bots.config(botId),
+    queryFn: () => invoke<string>("get_bot_config", { botId }),
+    enabled: botId.length > 0,
+    retry: false,
+  });
+}
+
 export function invalidateBotsQuery() {
   return queryClient.invalidateQueries({ queryKey: queryKeys.bots.all() });
 }
 
 export function invalidateBotStatsQuery() {
   return queryClient.invalidateQueries({ queryKey: queryKeys.bots.stats() });
+}
+
+export function invalidateBotConfigQuery(botId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.bots.config(botId),
+  });
 }

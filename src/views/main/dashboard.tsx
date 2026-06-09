@@ -1,12 +1,17 @@
 import {
   Bot,
+  Check,
+  Copy,
+  Eye,
   MessageCircle,
+  Pencil,
   Play,
   Plus,
   Power,
   SquareUser,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -24,6 +29,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -41,10 +47,12 @@ import {
 import {
   useCreateBotMutation,
   useDeleteBotMutation,
+  useRenameBotMutation,
   useStartBotMutation,
   useStopBotMutation,
 } from "@/lib/mutations";
 import {
+  useBotConfigQuery,
   useBotStatsQuery,
   useBotsQuery,
   useGroupsQuery,
@@ -89,6 +97,7 @@ function CreateBotSheet({
 }: CreateBotSheetProps) {
   const createBot = useCreateBotMutation();
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const unboundUsers = users.filter((user) => !boundUserIds.has(user.user_id));
@@ -98,6 +107,7 @@ function CreateBotSheet({
 
   const resetForm = () => {
     setSelectedUserId("");
+    setDisplayName("");
     setSubmitError(null);
   };
 
@@ -108,14 +118,23 @@ function CreateBotSheet({
     }
   };
 
+  const handleSelectUser = (value: string) => {
+    setSelectedUserId(value);
+    const user = users.find((u) => u.user_id === value);
+    if (user) {
+      setDisplayName(user.nickname.trim());
+    }
+    setSubmitError(null);
+  };
+
   const handleCreateBot = () => {
     if (!selectedUser) {
       setSubmitError("请选择要绑定的用户");
       return;
     }
-    const displayName = selectedUser.nickname.trim();
-    if (!displayName) {
-      setSubmitError("绑定用户名称不能为空");
+    const name = displayName.trim();
+    if (!name) {
+      setSubmitError("Bot 名称不能为空");
       return;
     }
 
@@ -123,7 +142,7 @@ function CreateBotSheet({
     createBot.mutate(
       {
         boundUserId: selectedUser.user_id,
-        displayName,
+        displayName: name,
       },
       {
         onSuccess: () => {
@@ -163,10 +182,7 @@ function CreateBotSheet({
             <FieldLabel htmlFor="create-bot-user">绑定用户</FieldLabel>
             <Select
               value={selectedUserId}
-              onValueChange={(value) => {
-                setSelectedUserId(value);
-                setSubmitError(null);
-              }}
+              onValueChange={handleSelectUser}
               disabled={unboundUsers.length === 0}
             >
               <SelectTrigger id="create-bot-user" className="w-full">
@@ -188,12 +204,19 @@ function CreateBotSheet({
             </Select>
           </Field>
 
-          {selectedUser ? (
-            <p className="text-muted-foreground text-xs">
-              将创建名为 {selectedUser.nickname} 的 Bot，并绑定到用户{" "}
-              {selectedUser.user_id}。
-            </p>
-          ) : null}
+          <Field>
+            <FieldLabel htmlFor="create-bot-name">Bot 名称</FieldLabel>
+            <Input
+              id="create-bot-name"
+              value={displayName}
+              onChange={(e) => {
+                setDisplayName(e.target.value);
+                setSubmitError(null);
+              }}
+              placeholder="输入 Bot 显示名称"
+              disabled={!selectedUserId}
+            />
+          </Field>
 
           {submitError ? (
             <p className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-destructive text-xs">
@@ -256,6 +279,111 @@ type BotCardProps = {
   isDeletePending: boolean;
 };
 
+function BotConfigSheet({
+  botId,
+  displayName,
+}: {
+  botId: string;
+  displayName: string;
+}) {
+  const { data: configJson, isLoading } = useBotConfigQuery(botId);
+  const [copied, setCopied] = useState(false);
+
+  const config = configJson
+    ? (JSON.parse(configJson) as {
+        protocol: string;
+        http: { host: string; port: number };
+        access_token: string;
+        event_transport: string;
+      })
+    : null;
+
+  const baseUrl = config
+    ? `http://${config.http.host}:${config.http.port}`
+    : "";
+
+  const curlExample = config
+    ? `curl -X POST "${baseUrl}/api/get_login_info?access_token=${config.access_token}" \\\n     -H "Content-Type: application/json" \\\n     -d '{}'`
+    : "";
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button type="button" size="icon-xs" variant="ghost">
+          <Eye className="size-4 text-muted-foreground" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>{displayName} 的配置</SheetTitle>
+        </SheetHeader>
+
+        <div className="mt-4 space-y-4 px-4">
+          {isLoading ? (
+            <p className="text-muted-foreground text-sm">读取中...</p>
+          ) : config ? (
+            <>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">协议</span>
+                  <span className="font-medium">{config.protocol}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">地址</span>
+                  <span className="font-medium">{baseUrl}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">传输</span>
+                  <span className="font-medium">{config.event_transport}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground shrink-0">Token</span>
+                  <code className="truncate rounded bg-muted px-1.5 py-0.5 text-xs">
+                    {config.access_token}
+                  </code>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => handleCopy(curlExample)}
+              >
+                {copied ? (
+                  <Check className="mr-1 size-3" />
+                ) : (
+                  <Copy className="mr-1 size-3" />
+                )}
+                {copied ? "已复制" : "复制 curl 示例"}
+              </Button>
+
+              <div>
+                <p className="mb-1 text-muted-foreground text-xs">
+                  完整配置 JSON
+                </p>
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/30 p-3 text-xs leading-relaxed">
+                  {configJson}
+                </pre>
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">无法读取配置</p>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function BotCard({
   bot,
   onStart,
@@ -266,17 +394,88 @@ function BotCard({
   isDeletePending,
 }: BotCardProps) {
   const statusConfig = botStatusConfig[bot.runtime_status];
+  const renameBot = useRenameBotMutation();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(bot.display_name);
+
+  const handleRename = () => {
+    const name = editName.trim();
+    if (!name || name === bot.display_name) {
+      setIsEditing(false);
+      setEditName(bot.display_name);
+      return;
+    }
+    renameBot.mutate(
+      { botId: bot.bot_id, displayName: name },
+      {
+        onSuccess: () => setIsEditing(false),
+        onError: () => setEditName(bot.display_name),
+      },
+    );
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditName(bot.display_name);
+  };
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-      <div className="min-w-0 space-y-1">
-        <p className="truncate font-medium text-sm">{bot.display_name}</p>
+      <div className="min-w-0 flex-1 space-y-1">
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="h-7 text-sm"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleRename();
+                if (e.key === "Escape") handleCancelEdit();
+              }}
+            />
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              onClick={handleRename}
+              disabled={renameBot.isPending}
+            >
+              <Check className="size-3 text-green-600" />
+            </Button>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              onClick={handleCancelEdit}
+            >
+              <X className="size-3 text-red-500" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <p className="truncate font-medium text-sm">{bot.display_name}</p>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              className="opacity-0 group-hover:opacity-100"
+              onClick={() => {
+                setEditName(bot.display_name);
+                setIsEditing(true);
+              }}
+            >
+              <Pencil className="size-3 text-muted-foreground" />
+            </Button>
+          </div>
+        )}
         <p className="truncate text-muted-foreground text-xs">
           绑定用户: {bot.bound_user_id}
         </p>
         <span className={statusConfig.className}>{statusConfig.label}</span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <BotConfigSheet botId={bot.bot_id} displayName={bot.display_name} />
         {bot.runtime_status === "running" ? (
           <Button
             type="button"

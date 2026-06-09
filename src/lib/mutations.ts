@@ -398,3 +398,22 @@ export function useStopBotMutation() {
     },
   });
 }
+
+export function useRenameBotMutation() {
+  return useMutation({
+    mutationFn: ({
+      botId,
+      displayName,
+    }: {
+      botId: string;
+      displayName: string;
+    }) =>
+      invoke<BotProfile>("rename_bot", {
+        botId,
+        displayName,
+      }),
+    onSuccess: async () => {
+      await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
+    },
+  });
+}

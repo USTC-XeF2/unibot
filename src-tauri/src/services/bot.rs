@@ -171,6 +171,29 @@ impl BotService {
         self.repo.get_online_bot_count().await.map_err(Into::into)
     }
 
+    pub async fn get_bot_config(&self, bot_id: &str) -> AppResult<String> {
+        let bot = self
+            .repo
+            .get_bot_by_id(bot_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
+        tokio::fs::read_to_string(&bot.config_path)
+            .await
+            .map_err(|e| AppError::internal(format!("read bot config: {e}")))
+    }
+
+    pub async fn rename_bot(&self, bot_id: String, display_name: String) -> AppResult<BotProfile> {
+        if display_name.trim().is_empty() {
+            return Err(AppError::validation("display name cannot be empty"));
+        }
+        let bot = self
+            .repo
+            .update_display_name(&bot_id, &display_name)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("bot {bot_id} not found")))?;
+        bot.try_into()
+    }
+
     async fn allocate_port(&self) -> AppResult<u16> {
         let bots = self.repo.list_bots().await?;
         let mut used = Vec::new();

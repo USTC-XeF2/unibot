@@ -231,6 +231,45 @@ impl BotRepo {
         .fetch_one(&self.pool)
         .await
     }
+
+    pub async fn update_display_name(
+        &self,
+        bot_id: &str,
+        display_name: &str,
+    ) -> Result<Option<BotRow>, sqlx::Error> {
+        sqlx::query_as::<_, BotRow>(
+            r#"
+            UPDATE bots
+            SET display_name = ?2, updated_at = unixepoch() * 1000
+            WHERE bot_id = ?1
+            RETURNING bot_id, bound_user_id, display_name, runtime_status, config_path, created_at
+            "#,
+        )
+        .bind(bot_id)
+        .bind(display_name)
+        .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// Reset all bots that are stuck in "running" state back to "stopped",
+    /// and close any debug sessions that were left open (e.g. after a crash).
+    pub async fn reset_all_running_bots(&self) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query(
+            "UPDATE debug_sessions SET ended_at = unixepoch() * 1000 WHERE ended_at IS NULL",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "UPDATE bots SET runtime_status = 'stopped', updated_at = unixepoch() * 1000 WHERE runtime_status = 'running'",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await
+    }
 }
 
 impl TryFrom<BotRow> for crate::models::BotProfile {
