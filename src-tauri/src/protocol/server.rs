@@ -95,18 +95,26 @@ async fn event_handler(
                         let event_data = serde_json::to_value(&protocol_event).ok()?;
                         let json = serde_json::to_string(&protocol_event).ok()?;
 
-                        // Record event via PacketRecorder
-                        let _ = recorder
-                            .record_event(
-                                &bot_id,
-                                Some(&profile_id),
-                                Some(&session_id),
-                                &protocol_event.event_type,
-                                Some("message"),
-                                None,
-                                &event_data,
-                            )
-                            .await;
+                        // Offload recording to a background task so it doesn't block the SSE stream.
+                        let recorder_bg = recorder.clone();
+                        let bot_id_bg = bot_id.clone();
+                        let profile_id_bg = profile_id.clone();
+                        let session_id_bg = session_id.clone();
+                        let event_type_bg = protocol_event.event_type.clone();
+                        let event_data_bg = event_data.clone();
+                        tokio::spawn(async move {
+                            let _ = recorder_bg
+                                .record_event(
+                                    &bot_id_bg,
+                                    Some(&profile_id_bg),
+                                    Some(&session_id_bg),
+                                    &event_type_bg,
+                                    Some("message"),
+                                    None,
+                                    &event_data_bg,
+                                )
+                                .await;
+                        });
 
                         Some(Ok::<_, Infallible>(
                             Event::default().event("milky_event").data(json),
