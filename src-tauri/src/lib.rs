@@ -3,6 +3,7 @@ mod core;
 mod error;
 mod models;
 mod persistence;
+mod protocol;
 mod services;
 mod utils;
 

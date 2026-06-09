@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::internal::MessageSegment;
 
+pub use crate::protocol::types::{BotConfig, HttpConfig};
+
 pub type DbId = String;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

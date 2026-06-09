@@ -1,6 +1,7 @@
 use crate::error::{AppError, AppResult};
 use crate::models::{BotProfile, DebugSession};
 use crate::persistence::BotRepo;
+use crate::protocol::types::{BotConfig, HttpConfig};
 use crate::utils::{new_db_id, now_ts};
 use serde::Serialize;
 use std::io::ErrorKind;
@@ -56,10 +57,25 @@ impl BotService {
             .ok_or_else(|| AppError::internal("bot config path is not valid UTF-8"))?
             .to_string();
 
+        // 分配最小可用端口（从 3001 开始）
+        let port = self.allocate_port().await?;
+        let config = BotConfig {
+            version: 1,
+            protocol: "milky".to_string(),
+            http: HttpConfig {
+                host: "127.0.0.1".to_string(),
+                port,
+            },
+            access_token: uuid::Uuid::new_v4().to_string(),
+            event_transport: "sse".to_string(),
+        };
+        let config_json = serde_json::to_string_pretty(&config)
+            .map_err(|e| AppError::internal(format!("serialize config: {e}")))?;
+
         tokio::fs::create_dir_all(&bots_dir)
             .await
             .map_err(|err| AppError::internal(format!("create bots dir: {err}")))?;
-        tokio::fs::write(&config_path, "{}")
+        tokio::fs::write(&config_path, config_json)
             .await
             .map_err(|err| AppError::internal(format!("write config: {err}")))?;
 
@@ -164,6 +180,26 @@ impl BotService {
 
     pub async fn get_online_bot_count(&self) -> AppResult<i64> {
         self.repo.get_online_bot_count().await.map_err(Into::into)
+    }
+
+    async fn allocate_port(&self) -> AppResult<u16> {
+        let bots = self.repo.list_bots().await?;
+        let mut used = Vec::new();
+        for bot in bots {
+            if let Ok(text) = tokio::fs::read_to_string(&bot.config_path).await {
+                if let Ok(cfg) = serde_json::from_str::<BotConfig>(&text) {
+                    used.push(cfg.http.port);
+                }
+            }
+        }
+        for port in 3001..=65535 {
+            if !used.contains(&port) {
+                return Ok(port);
+            }
+        }
+        Err(AppError::validation(
+            "no available port in range 3001-65535",
+        ))
     }
 }
 
