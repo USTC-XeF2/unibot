@@ -88,16 +88,25 @@ pub fn run() {
                     ) {
                         // Gracefully shut down all protocol servers before exit.
                         // Spawn a dedicated thread and block_on so shutdown actually
-                        // completes before the process exits.
+                        // completes before the process exits. Cap wait at 3s so UI
+                        // doesn't freeze if servers hang.
                         let app_handle_shutdown = app_handle.clone();
-                        std::thread::spawn(move || {
+                        let handle = std::thread::spawn(move || {
                             tauri::async_runtime::block_on(async move {
                                 let runtime = app_handle_shutdown.state::<ProtocolRuntimeManager>();
                                 runtime.shutdown_all().await;
                             });
-                        })
-                        .join()
-                        .ok();
+                        });
+                        let start = std::time::Instant::now();
+                        while start.elapsed() < std::time::Duration::from_secs(3) {
+                            if handle.is_finished() {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                        if !handle.is_finished() {
+                            eprintln!("shutdown thread timed out after 3s, exiting anyway");
+                        }
 
                         let core_state = app_handle.state::<CoreContainer>();
                         for context in core_state.list_user_contexts() {

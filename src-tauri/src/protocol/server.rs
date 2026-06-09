@@ -1,6 +1,8 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use tokio::sync::Semaphore;
+
 use axum::response::sse::Event;
 use axum::{
     Router,
@@ -28,6 +30,9 @@ struct ServerState {
     recorder: Arc<PacketRecorder>,
     session_id: String,
     bot_repo: BotRepo,
+    /// Limits concurrent recorder tasks to prevent resource exhaustion
+    /// under high-frequency event bursts.
+    recorder_sem: Arc<Semaphore>,
 }
 
 /// Query parameters used for auth token extraction.
@@ -85,6 +90,7 @@ async fn event_handler(
     let recorder = state.recorder.clone();
     let session_id = state.session_id.clone();
     let context = state.context.clone();
+    let recorder_sem = state.recorder_sem.clone();
 
     let stream = BroadcastStream::new(rx)
         .then(move |result| {
@@ -94,6 +100,7 @@ async fn event_handler(
             let recorder = recorder.clone();
             let session_id = session_id.clone();
             let context = context.clone();
+            let recorder_sem = recorder_sem.clone();
             async move {
                 match result {
                     Ok(event) => {
@@ -109,13 +116,18 @@ async fn event_handler(
                         let json = serde_json::to_string(&protocol_event).ok()?;
 
                         // Offload recording to a background task so it doesn't block the SSE stream.
+                        // Acquire a permit to cap concurrent recorder tasks.
                         let recorder_bg = recorder.clone();
                         let bot_id_bg = bot_id.clone();
                         let profile_id_bg = profile_id.clone();
                         let session_id_bg = session_id.clone();
                         let event_type_bg = protocol_event.event_type.clone();
                         let event_data_bg = event_data.clone();
+                        let sem = recorder_sem.clone();
                         tokio::spawn(async move {
+                            let Ok(_permit) = sem.acquire().await else {
+                                return;
+                            };
                             let _ = recorder_bg
                                 .record_event(
                                     &bot_id_bg,
@@ -175,17 +187,28 @@ async fn api_handler(
 
     let api_name = api.clone();
 
-    // Record request via PacketRecorder
-    let _ = state
-        .recorder
-        .record_request(
-            &state.context.bot_id,
-            Some(&state.context.bound_user_id),
-            Some(&state.session_id),
-            &api_name,
-            &body,
-        )
-        .await;
+    // Record request via PacketRecorder (offloaded so slow I/O doesn't block API response)
+    let recorder_req = state.recorder.clone();
+    let bot_id_req = state.context.bot_id.clone();
+    let profile_id_req = state.context.bound_user_id.clone();
+    let session_id_req = state.session_id.clone();
+    let api_name_req = api_name.clone();
+    let body_req = body.clone();
+    let sem_req = state.recorder_sem.clone();
+    tokio::spawn(async move {
+        let Ok(_permit) = sem_req.acquire().await else {
+            return;
+        };
+        let _ = recorder_req
+            .record_request(
+                &bot_id_req,
+                Some(&profile_id_req),
+                Some(&session_id_req),
+                &api_name_req,
+                &body_req,
+            )
+            .await;
+    });
 
     let request = ApiRequest {
         api_name: api,
@@ -203,18 +226,28 @@ async fn api_handler(
     let is_error = response.retcode != 0;
     let response_json = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
 
-    // Record response via PacketRecorder
-    let _ = state
-        .recorder
-        .record_response(
-            &state.context.bot_id,
-            Some(&state.context.bound_user_id),
-            Some(&state.session_id),
-            &api_name,
-            is_error,
-            &response_json,
-        )
-        .await;
+    // Record response via PacketRecorder (offloaded so slow I/O doesn't block API response)
+    let recorder_resp = state.recorder.clone();
+    let bot_id_resp = state.context.bot_id.clone();
+    let profile_id_resp = state.context.bound_user_id.clone();
+    let session_id_resp = state.session_id.clone();
+    let api_name_resp = api_name.clone();
+    let sem_resp = state.recorder_sem.clone();
+    tokio::spawn(async move {
+        let Ok(_permit) = sem_resp.acquire().await else {
+            return;
+        };
+        let _ = recorder_resp
+            .record_response(
+                &bot_id_resp,
+                Some(&profile_id_resp),
+                Some(&session_id_resp),
+                &api_name_resp,
+                is_error,
+                &response_json,
+            )
+            .await;
+    });
 
     (StatusCode::OK, axum::Json(response))
 }
@@ -244,6 +277,7 @@ pub async fn spawn_server(
         recorder,
         session_id,
         bot_repo,
+        recorder_sem: Arc::new(Semaphore::new(8)),
     });
 
     let app = Router::new()

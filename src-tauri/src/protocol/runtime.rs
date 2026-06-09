@@ -186,7 +186,19 @@ impl ProtocolRuntimeManager {
             let _ = tx.send(());
         }
 
-        let _ = running.join_handle.await;
+        // Wait up to 5s for graceful shutdown; abort if it hangs.
+        let mut handle = running.join_handle;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                handle.abort();
+            }
+            result = &mut handle => {
+                if let Err(e) = result {
+                    eprintln!("server task for bot {bot_id} panicked: {e}");
+                }
+            }
+        }
+
         self.bot_repo.stop_active_sessions(bot_id).await?;
         Ok(())
     }
@@ -205,9 +217,17 @@ impl ProtocolRuntimeManager {
         }
 
         for (_, running) in entries {
-            // Wait up to 1s per server so shutdown_all doesn't hang on a stuck connection.
-            let _ =
-                tokio::time::timeout(std::time::Duration::from_secs(1), running.join_handle).await;
+            let mut handle = running.join_handle;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                    handle.abort();
+                }
+                result = &mut handle => {
+                    if let Err(e) = result {
+                        eprintln!("server task panicked during shutdown: {e}");
+                    }
+                }
+            }
         }
     }
 
