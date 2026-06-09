@@ -14,10 +14,9 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::error::AppResult;
 use crate::models::InternalEvent;
+use crate::protocol::PacketRecorder;
 use crate::protocol::backend::ProtocolBackend;
-use crate::protocol::types::{
-    ApiRequest, ApiResponse, BotRuntimeContext, PacketRecorder, ProtocolAdapter,
-};
+use crate::protocol::types::{ApiRequest, ApiResponse, BotRuntimeContext, ProtocolAdapter};
 
 /// Server state shared across all request handlers.
 #[derive(Clone)]
