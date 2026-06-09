@@ -261,6 +261,7 @@ mod tests {
                     service_hub,
                     crate::core::CoreContainer::new(),
                     std::env::temp_dir(),
+                    pool.clone(),
                 ),
                 "bot_10001".to_string(),
             )

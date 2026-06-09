@@ -9,6 +9,7 @@ use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::persistence::BotRepo;
 use crate::protocol::backend::VirtualBackend;
+use crate::protocol::recorder::PacketRecorder;
 use crate::protocol::server::spawn_server;
 use crate::protocol::types::MilkyAdapter;
 use crate::protocol::types::{BotConfig, BotRuntimeContext};
@@ -21,7 +22,7 @@ pub struct ProtocolRuntimeManager {
     bot_repo: BotRepo,
     service_hub: ServiceHub,
     core: Arc<CoreContainer>,
-    app_data_dir: PathBuf,
+    recorder: PacketRecorder,
 }
 
 /// A running protocol server entry tracked by the runtime manager.
@@ -39,13 +40,15 @@ impl ProtocolRuntimeManager {
         service_hub: ServiceHub,
         core: CoreContainer,
         app_data_dir: PathBuf,
+        pool: sqlx::SqlitePool,
     ) -> Self {
+        let recorder = PacketRecorder::new(app_data_dir.clone(), pool);
         Self {
             servers: Mutex::new(HashMap::new()),
             bot_repo,
             service_hub,
             core: Arc::new(core),
-            app_data_dir,
+            recorder,
         }
     }
 
@@ -116,14 +119,22 @@ impl ProtocolRuntimeManager {
             listen_addr: bound_addr,
         };
 
-        let (shutdown_tx, join_handle) =
-            match spawn_server(listener, context, backend, adapter, None, session_id).await {
-                Ok((tx, handle)) => (tx, handle),
-                Err(e) => {
-                    let _ = self.bot_repo.stop_active_sessions(bot_id).await;
-                    return Err(e);
-                }
-            };
+        let (shutdown_tx, join_handle) = match spawn_server(
+            listener,
+            context,
+            backend,
+            adapter,
+            Arc::new(self.recorder.clone()),
+            session.session_id.clone(),
+        )
+        .await
+        {
+            Ok((tx, handle)) => (tx, handle),
+            Err(e) => {
+                let _ = self.bot_repo.stop_active_sessions(bot_id).await;
+                return Err(e);
+            }
+        };
 
         servers.insert(
             bot_id.to_string(),

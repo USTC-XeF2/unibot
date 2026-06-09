@@ -24,7 +24,7 @@ struct ServerState {
     context: BotRuntimeContext,
     backend: Arc<dyn ProtocolBackend>,
     adapter: Arc<dyn ProtocolAdapter>,
-    recorder: Option<Arc<PacketRecorder>>,
+    recorder: Arc<PacketRecorder>,
     session_id: String,
 }
 
@@ -68,6 +68,7 @@ async fn event_handler(
 
     let adapter = state.adapter.clone();
     let bot_id = state.context.bot_id.clone();
+    let profile_id = state.context.bound_user_id.clone();
     let recorder = state.recorder.clone();
     let session_id = state.session_id.clone();
     let context = state.context.clone();
@@ -76,6 +77,7 @@ async fn event_handler(
         .then(move |result| {
             let adapter = adapter.clone();
             let bot_id = bot_id.clone();
+            let profile_id = profile_id.clone();
             let recorder = recorder.clone();
             let session_id = session_id.clone();
             let context = context.clone();
@@ -89,14 +91,24 @@ async fn event_handler(
                             }
                         }
 
-                        // Record event via PacketRecorder if present
-                        if let Some(_rec) = recorder.as_ref() {
-                            // Placeholder: recording will be implemented in the features plan
-                            let _ = &session_id;
-                        }
-
                         let protocol_event = adapter.adapt_event(&event, &context)?;
                         let json = serde_json::to_string(&protocol_event).ok()?;
+                        let event_data =
+                            serde_json::from_str(&json).unwrap_or(serde_json::Value::Null);
+
+                        // Record event via PacketRecorder
+                        let _ = recorder
+                            .record_event(
+                                &bot_id,
+                                Some(&profile_id),
+                                Some(&session_id),
+                                &protocol_event.event_type,
+                                Some("message"),
+                                None,
+                                &event_data,
+                            )
+                            .await;
+
                         Some(Ok::<_, Infallible>(
                             Event::default().event("milky_event").data(json),
                         ))
@@ -137,36 +149,50 @@ async fn api_handler(
         );
     }
 
-    // Record request via PacketRecorder if present
-    if let Some(_rec) = state.recorder.as_ref() {
-        let _ = &state.session_id;
-    }
+    let api_name = api.clone();
+
+    // Record request via PacketRecorder
+    let _ = state
+        .recorder
+        .record_request(
+            &state.context.bot_id,
+            Some(&state.context.bound_user_id),
+            Some(&state.session_id),
+            &api_name,
+            &body,
+        )
+        .await;
 
     let request = ApiRequest {
         api_name: api,
         params: body,
     };
 
-    match state.backend.call_api(&state.context, request).await {
-        Ok(data) => {
-            // Record response via PacketRecorder if present
-            if let Some(_rec) = state.recorder.as_ref() {
-                let _ = &state.session_id;
-            }
-            (StatusCode::OK, axum::Json(ApiResponse::ok(data)))
-        }
+    let response = match state.backend.call_api(&state.context, request).await {
+        Ok(data) => ApiResponse::ok(data),
         Err(err) => {
             let (retcode, message) = state.adapter.adapt_error(&err);
-            // Record error response via PacketRecorder if present
-            if let Some(_rec) = state.recorder.as_ref() {
-                let _ = &state.session_id;
-            }
-            (
-                StatusCode::OK,
-                axum::Json(ApiResponse::failed(retcode, message)),
-            )
+            ApiResponse::failed(retcode, message)
         }
-    }
+    };
+
+    let is_error = response.retcode != 0;
+    let response_json = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
+
+    // Record response via PacketRecorder
+    let _ = state
+        .recorder
+        .record_response(
+            &state.context.bot_id,
+            Some(&state.context.bound_user_id),
+            Some(&state.session_id),
+            &api_name,
+            is_error,
+            &response_json,
+        )
+        .await;
+
+    (StatusCode::OK, axum::Json(response))
 }
 
 /// Spawn an axum protocol server on the given TCP listener.
@@ -180,7 +206,7 @@ pub async fn spawn_server(
     context: BotRuntimeContext,
     backend: Arc<dyn ProtocolBackend>,
     adapter: Arc<dyn ProtocolAdapter>,
-    recorder: Option<Arc<PacketRecorder>>,
+    recorder: Arc<PacketRecorder>,
     session_id: String,
 ) -> AppResult<(
     tokio::sync::oneshot::Sender<()>,

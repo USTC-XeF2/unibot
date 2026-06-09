@@ -65,6 +65,7 @@ pub fn run() {
                 service_hub.clone(),
                 core.clone(),
                 app_data_dir,
+                pool.clone(),
             );
 
             app.manage(pool.clone());
