@@ -176,6 +176,13 @@ impl MessageService {
         self.repo.get_message_count().await.map_err(Into::into)
     }
 
+    pub async fn get_seq_by_message_id(&self, message_id: &str) -> AppResult<i64> {
+        self.repo
+            .get_seq_by_message_id(message_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("message {message_id} not found")))
+    }
+
     pub async fn recall_message(
         &self,
         core: &CoreContainer,
