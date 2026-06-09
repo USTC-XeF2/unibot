@@ -115,6 +115,16 @@ pub trait ProtocolAdapter: Send + Sync {
     fn adapt_message_send(&self, message_id: &str, message_seq: i64) -> serde_json::Value;
 }
 
+// ========== Packet Recorder (placeholder) ==========
+
+/// Placeholder for packet recording.
+///
+/// Will be fully implemented in the features plan. The server holds
+/// `Option<Arc<PacketRecorder>>` so recording is a no-op when absent,
+/// avoiding breaking compilation during incremental development.
+#[derive(Debug)]
+pub struct PacketRecorder;
+
 // ========== Milky 1.2 specific types ==========
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

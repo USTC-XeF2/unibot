@@ -107,7 +107,7 @@ impl ProtocolRuntimeManager {
             self.service_hub.clone(),
             self.core.clone(),
         ));
-        let adapter = Arc::new(MilkyAdapter::new());
+        let adapter: Arc<dyn crate::protocol::ProtocolAdapter> = Arc::new(MilkyAdapter::new());
 
         let context = BotRuntimeContext {
             bot_id: bot_id.to_string(),
@@ -117,7 +117,7 @@ impl ProtocolRuntimeManager {
         };
 
         let (shutdown_tx, join_handle) =
-            match spawn_server(listener, context, backend, adapter).await {
+            match spawn_server(listener, context, backend, adapter, None, session_id).await {
                 Ok((tx, handle)) => (tx, handle),
                 Err(e) => {
                     let _ = self.bot_repo.stop_active_sessions(bot_id).await;
