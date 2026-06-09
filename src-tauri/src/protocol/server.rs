@@ -92,9 +92,8 @@ async fn event_handler(
                         }
 
                         let protocol_event = adapter.adapt_event(&event, &context)?;
+                        let event_data = serde_json::to_value(&protocol_event).ok()?;
                         let json = serde_json::to_string(&protocol_event).ok()?;
-                        let event_data =
-                            serde_json::from_str(&json).unwrap_or(serde_json::Value::Null);
 
                         // Record event via PacketRecorder
                         let _ = recorder

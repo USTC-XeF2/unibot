@@ -81,7 +81,7 @@ impl ProtocolBackend for VirtualBackend {
                     .get_user_by_id(&bot.bound_user_id)
                     .await?
                     .ok_or_else(|| AppError::not_found("bound user not found"))?;
-                Ok(self.adapter.adapt_login_info(&user))
+                Ok(self.adapter.adapt_login_info(&user)?)
             }
             "send_private_message" => {
                 let user_id = api

@@ -240,7 +240,7 @@ mod tests {
             account_status: Default::default(),
         };
 
-        let login_info = adapter.adapt_login_info(&user);
+        let login_info = adapter.adapt_login_info(&user).unwrap();
         assert_eq!(login_info["user_id"], 10001);
         assert_eq!(login_info["nickname"], "Alice");
     }

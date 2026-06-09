@@ -149,6 +149,7 @@ impl ProtocolRuntimeManager {
         // Re-check: another task may have inserted while we were preparing.
         if servers.contains_key(bot_id) {
             let _ = shutdown_tx.send(());
+            drop(servers);
             let _ = join_handle.await;
             let _ = self.bot_repo.stop_active_sessions(bot_id).await;
             return Err(AppError::conflict("bot is already running"));

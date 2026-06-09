@@ -110,7 +110,7 @@ pub trait ProtocolAdapter: Send + Sync {
     fn adapt_event(&self, event: &InternalEvent, bot: &BotRuntimeContext) -> Option<ProtocolEvent>;
 
     /// Convert a user profile to a protocol-specific `get_login_info` response.
-    fn adapt_login_info(&self, user: &UserProfile) -> serde_json::Value;
+    fn adapt_login_info(&self, user: &UserProfile) -> crate::error::AppResult<serde_json::Value>;
 
     /// Convert a message-send result to a protocol-specific response.
     fn adapt_message_send(&self, message_id: &str, message_seq: i64) -> serde_json::Value;
@@ -198,10 +198,9 @@ impl ProtocolAdapter for MilkyAdapter {
             InternalEvent::FriendRequestCreated {
                 request_id,
                 initiator_user_id,
-                target_user_id,
                 time,
+                ..
             } => {
-                let _self_id = target_user_id.parse::<i64>().ok()?;
                 let data = serde_json::json!({
                     "request_id": request_id,
                     "user_id": initiator_user_id.parse::<i64>().ok()?,
@@ -217,12 +216,10 @@ impl ProtocolAdapter for MilkyAdapter {
             InternalEvent::GroupRequestCreated {
                 request_id,
                 group_id,
-                request_type: _,
                 initiator_user_id,
-                target_user_id,
                 time,
+                ..
             } => {
-                let _self_id = target_user_id.as_ref()?.parse::<i64>().ok()?;
                 let data = serde_json::json!({
                     "request_id": request_id,
                     "group_id": group_id.parse::<i64>().ok()?,
@@ -242,7 +239,6 @@ impl ProtocolAdapter for MilkyAdapter {
                 target_user_id,
                 time,
             } => {
-                let _self_id = target_user_id.parse::<i64>().ok()?;
                 let data = serde_json::json!({
                     "group_id": group_id.parse::<i64>().ok()?,
                     "user_id": target_user_id.parse::<i64>().ok()?,
@@ -261,7 +257,6 @@ impl ProtocolAdapter for MilkyAdapter {
                 target_user_id,
                 time,
             } => {
-                let _self_id = target_user_id.parse::<i64>().ok()?;
                 let data = serde_json::json!({
                     "group_id": group_id.parse::<i64>().ok()?,
                     "user_id": target_user_id.parse::<i64>().ok()?,
@@ -278,11 +273,14 @@ impl ProtocolAdapter for MilkyAdapter {
         }
     }
 
-    fn adapt_login_info(&self, user: &UserProfile) -> serde_json::Value {
-        serde_json::json!({
-            "user_id": user.user_id.parse::<i64>().unwrap_or(0),
+    fn adapt_login_info(&self, user: &UserProfile) -> crate::error::AppResult<serde_json::Value> {
+        let user_id = user.user_id.parse::<i64>().map_err(|_| {
+            crate::error::AppError::internal(format!("invalid user_id: {}", user.user_id))
+        })?;
+        Ok(serde_json::json!({
+            "user_id": user_id,
             "nickname": user.nickname,
-        })
+        }))
     }
 
     fn adapt_message_send(&self, message_id: &str, message_seq: i64) -> serde_json::Value {
