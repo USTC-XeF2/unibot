@@ -41,11 +41,8 @@ pub struct VirtualBackend {
 }
 
 impl VirtualBackend {
-    pub fn new(service_hub: ServiceHub, core: CoreContainer) -> Self {
-        Self {
-            service_hub,
-            core: Arc::new(core),
-        }
+    pub fn new(service_hub: ServiceHub, core: Arc<CoreContainer>) -> Self {
+        Self { service_hub, core }
     }
 }
 
