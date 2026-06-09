@@ -2,7 +2,7 @@ use crate::error::{AppError, AppResult};
 use crate::models::{BotProfile, DebugSession};
 use crate::persistence::BotRepo;
 use crate::protocol::types::{BotConfig, HttpConfig};
-use crate::utils::{new_db_id, now_ts};
+use crate::utils::new_db_id;
 use serde::Serialize;
 use std::io::ErrorKind;
 use tauri::Manager;

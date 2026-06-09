@@ -26,6 +26,7 @@ pub struct ProtocolRuntimeManager {
 }
 
 /// A running protocol server entry tracked by the runtime manager.
+#[allow(dead_code)]
 pub struct RunningProtocolServer {
     pub bot_id: String,
     pub session_id: String,
@@ -106,11 +107,12 @@ impl ProtocolRuntimeManager {
                 _ => e.into(),
             })?;
 
+        let adapter: Arc<dyn crate::protocol::ProtocolAdapter> = Arc::new(MilkyAdapter::new());
         let backend = Arc::new(VirtualBackend::new(
             self.service_hub.clone(),
             self.core.clone(),
+            adapter.clone(),
         ));
-        let adapter: Arc<dyn crate::protocol::ProtocolAdapter> = Arc::new(MilkyAdapter::new());
 
         let context = BotRuntimeContext {
             bot_id: bot_id.to_string(),
@@ -172,6 +174,7 @@ impl ProtocolRuntimeManager {
     }
 
     /// Gracefully shut down all running protocol servers.
+    #[allow(dead_code)]
     pub async fn shutdown_all(&self) {
         let mut servers = self.servers.lock().await;
         for (_, mut running) in servers.drain() {

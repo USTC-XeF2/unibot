@@ -301,31 +301,6 @@ impl MessageRepo {
             .await
     }
 
-    pub async fn get_message_by_seq(&self, seq: i64) -> Result<Option<MessageRecord>, sqlx::Error> {
-        sqlx::query_as::<_, MessageRecord>(
-            r#"
-            SELECT message_id AS id,
-                   sender_user_id,
-                   message_scene AS source_type,
-                   COALESCE(group_id, peer_id) AS source_id,
-                   receiver_user_id,
-                   group_id,
-                   bot_id,
-                   content_json,
-                   quoted_message_id,
-                   is_recalled,
-                   recalled_by_user_id,
-                   created_at,
-                   message_seq
-            FROM messages
-            WHERE message_seq = ?1
-            "#,
-        )
-        .bind(seq)
-        .fetch_optional(&self.pool)
-        .await
-    }
-
     pub async fn get_seq_by_message_id(
         &self,
         message_id: &str,

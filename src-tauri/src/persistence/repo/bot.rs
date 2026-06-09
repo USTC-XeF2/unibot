@@ -207,16 +207,6 @@ impl BotRepo {
         Ok(())
     }
 
-    pub async fn has_active_session(&self, bot_id: &str) -> Result<bool, sqlx::Error> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM debug_sessions WHERE bot_id = ?1 AND ended_at IS NULL",
-        )
-        .bind(bot_id)
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(count > 0)
-    }
-
     pub async fn list_sessions_by_bot(
         &self,
         bot_id: &str,

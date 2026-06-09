@@ -55,6 +55,7 @@ pub struct BotRuntimeContext {
     pub bot_id: String,
     pub bound_user_id: String,
     pub access_token: String,
+    #[allow(dead_code)]
     pub listen_addr: std::net::SocketAddr,
 }
 

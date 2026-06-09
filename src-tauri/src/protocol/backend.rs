@@ -7,7 +7,7 @@ use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{InternalEvent, MessageSource};
 use crate::protocol::adapter::milky_to_internal_segments;
-use crate::protocol::types::{ApiRequest, BotRuntimeContext};
+use crate::protocol::types::{ApiRequest, BotRuntimeContext, ProtocolAdapter};
 use crate::services::ServiceHub;
 
 /// Protocol-agnostic backend abstraction.
@@ -38,11 +38,20 @@ pub trait ProtocolBackend: Send + Sync {
 pub struct VirtualBackend {
     service_hub: ServiceHub,
     core: Arc<CoreContainer>,
+    adapter: Arc<dyn ProtocolAdapter>,
 }
 
 impl VirtualBackend {
-    pub fn new(service_hub: ServiceHub, core: Arc<CoreContainer>) -> Self {
-        Self { service_hub, core }
+    pub fn new(
+        service_hub: ServiceHub,
+        core: Arc<CoreContainer>,
+        adapter: Arc<dyn ProtocolAdapter>,
+    ) -> Self {
+        Self {
+            service_hub,
+            core,
+            adapter,
+        }
     }
 }
 
@@ -72,10 +81,7 @@ impl ProtocolBackend for VirtualBackend {
                     .get_user_by_id(&bot.bound_user_id)
                     .await?
                     .ok_or_else(|| AppError::not_found("bound user not found"))?;
-                Ok(serde_json::json!({
-                    "user_id": user.user_id.parse::<i64>().unwrap_or(0),
-                    "nickname": user.nickname,
-                }))
+                Ok(self.adapter.adapt_login_info(&user))
             }
             "send_private_message" => {
                 let user_id = api
@@ -114,10 +120,7 @@ impl ProtocolBackend for VirtualBackend {
                     .get_seq_by_message_id(&result.id)
                     .await
                     .unwrap_or(0);
-                Ok(serde_json::json!({
-                    "message_id": result.id,
-                    "message_seq": message_seq,
-                }))
+                Ok(self.adapter.adapt_message_send(&result.id, message_seq))
             }
             "send_group_message" => {
                 let group_id = api
@@ -154,10 +157,7 @@ impl ProtocolBackend for VirtualBackend {
                     .get_seq_by_message_id(&result.id)
                     .await
                     .unwrap_or(0);
-                Ok(serde_json::json!({
-                    "message_id": result.id,
-                    "message_seq": message_seq,
-                }))
+                Ok(self.adapter.adapt_message_send(&result.id, message_seq))
             }
             "get_friend_list" => {
                 let friend_ids = self

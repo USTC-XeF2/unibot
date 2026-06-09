@@ -7,7 +7,6 @@ pub mod server;
 pub mod tests;
 pub mod types;
 
-pub use backend::{ProtocolBackend, VirtualBackend};
 pub use recorder::PacketRecorder;
 pub use runtime::ProtocolRuntimeManager;
 pub use types::*;
