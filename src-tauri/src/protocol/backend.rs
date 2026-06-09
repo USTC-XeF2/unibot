@@ -159,6 +159,82 @@ impl ProtocolBackend for VirtualBackend {
                     "message_seq": message_seq,
                 }))
             }
+            "get_friend_list" => {
+                let friend_ids = self
+                    .service_hub
+                    .user
+                    .list_friends(bot.bound_user_id.clone())
+                    .await?;
+                let mut data = Vec::new();
+                for friend_id in friend_ids {
+                    if let Some(profile) = self.service_hub.user.get_user_by_id(&friend_id).await? {
+                        data.push(serde_json::json!({
+                            "user_id": profile.user_id.parse::<i64>().unwrap_or(0),
+                            "nickname": profile.nickname,
+                            "remark": "",
+                        }));
+                    }
+                }
+                Ok(serde_json::json!({ "data": data }))
+            }
+            "get_group_list" => {
+                let groups = self
+                    .service_hub
+                    .group
+                    .list_user_groups(&self.core, bot.bound_user_id.clone())
+                    .await?;
+                let data: Vec<serde_json::Value> = groups
+                    .into_iter()
+                    .map(|g| {
+                        serde_json::json!({
+                            "group_id": g.group_id.parse::<i64>().unwrap_or(0),
+                            "group_name": g.group_name,
+                            "member_count": g.member_count,
+                            "max_member_count": g.max_member_count,
+                        })
+                    })
+                    .collect();
+                Ok(serde_json::json!({ "data": data }))
+            }
+            "get_group_info" => {
+                let _group_id = api
+                    .params
+                    .get("group_id")
+                    .and_then(|v| v.as_i64())
+                    .ok_or_else(|| AppError::validation("missing group_id"))?
+                    .to_string();
+                // GroupService does not expose get_group_by_id yet
+                Err(AppError::not_found("get_group_info not yet implemented"))
+            }
+            "get_group_member_list" => {
+                let group_id = api
+                    .params
+                    .get("group_id")
+                    .and_then(|v| v.as_i64())
+                    .ok_or_else(|| AppError::validation("missing group_id"))?
+                    .to_string();
+                let members = self
+                    .service_hub
+                    .group
+                    .list_group_members(bot.bound_user_id.clone(), group_id)
+                    .await?;
+                let data: Vec<serde_json::Value> = members
+                    .into_iter()
+                    .map(|m| {
+                        serde_json::json!({
+                            "user_id": m.user_id.parse::<i64>().unwrap_or(0),
+                            "nickname": m.card,
+                            "card": m.card,
+                            "role": match m.role {
+                                crate::models::GroupRole::Owner => "owner",
+                                crate::models::GroupRole::Admin => "admin",
+                                crate::models::GroupRole::Member => "member",
+                            },
+                        })
+                    })
+                    .collect();
+                Ok(serde_json::json!({ "data": data }))
+            }
             _ => Err(AppError::not_found(format!(
                 "unknown api: {}",
                 api.api_name
