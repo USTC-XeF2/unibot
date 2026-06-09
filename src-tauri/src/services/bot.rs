@@ -110,7 +110,9 @@ impl BotService {
     ) -> AppResult<()> {
         // If bot is running, stop it first via runtime
         if runtime.is_running(&bot_id).await {
-            let _ = runtime.stop_bot(&bot_id).await;
+            runtime.stop_bot(&bot_id).await.map_err(|e| {
+                AppError::internal(format!("failed to stop bot before deletion: {e}"))
+            })?;
         }
 
         let bot = self

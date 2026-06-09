@@ -65,9 +65,12 @@ impl ProtocolRuntimeManager {
     ///
     /// On any failure after session creation, the session is stopped.
     pub async fn start_bot(&self, bot_id: &str) -> AppResult<SocketAddr> {
-        let mut servers = self.servers.lock().await;
-        if servers.contains_key(bot_id) {
-            return Err(AppError::conflict("bot is already running"));
+        // Quick check with minimal lock scope.
+        {
+            let servers = self.servers.lock().await;
+            if servers.contains_key(bot_id) {
+                return Err(AppError::conflict("bot is already running"));
+            }
         }
 
         let bot = self
@@ -133,10 +136,23 @@ impl ProtocolRuntimeManager {
         {
             Ok((tx, handle)) => (tx, handle),
             Err(e) => {
-                let _ = self.bot_repo.stop_active_sessions(bot_id).await;
+                if let Err(cleanup_err) = self.bot_repo.stop_active_sessions(bot_id).await {
+                    eprintln!(
+                        "failed to cleanup session after spawn_server failure for bot {bot_id}: {cleanup_err}"
+                    );
+                }
                 return Err(e);
             }
         };
+
+        let mut servers = self.servers.lock().await;
+        // Re-check: another task may have inserted while we were preparing.
+        if servers.contains_key(bot_id) {
+            let _ = shutdown_tx.send(());
+            let _ = join_handle.await;
+            let _ = self.bot_repo.stop_active_sessions(bot_id).await;
+            return Err(AppError::conflict("bot is already running"));
+        }
 
         servers.insert(
             bot_id.to_string(),

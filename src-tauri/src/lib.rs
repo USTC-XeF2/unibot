@@ -87,8 +87,12 @@ pub fn run() {
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
                     ) {
                         // Gracefully shut down all protocol servers before exit.
-                        let runtime = app_handle.state::<ProtocolRuntimeManager>();
-                        tauri::async_runtime::block_on(runtime.shutdown_all());
+                        // Use spawn instead of block_on to avoid blocking the main thread.
+                        let app_handle_shutdown = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let runtime = app_handle_shutdown.state::<ProtocolRuntimeManager>();
+                            runtime.shutdown_all().await;
+                        });
 
                         let core_state = app_handle.state::<CoreContainer>();
                         for context in core_state.list_user_contexts() {
