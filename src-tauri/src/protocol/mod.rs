@@ -3,6 +3,8 @@ pub mod backend;
 pub mod recorder;
 pub mod runtime;
 pub mod server;
+#[cfg(test)]
+pub mod tests;
 pub mod types;
 
 pub use backend::{ProtocolBackend, VirtualBackend};
