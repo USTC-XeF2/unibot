@@ -1,5 +1,6 @@
 import { ArrowDownToLine, ArrowUpFromLine, Network } from "lucide-react";
 import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useProtocolPacketDetail,
   useProtocolPackets,
@@ -37,99 +38,180 @@ function formatTime(ts: number): string {
   });
 }
 
+function PacketCard({
+  packet,
+  isSelected,
+  onClick,
+}: {
+  packet: ProtocolPacket;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-lg border p-3 text-left transition-colors hover:bg-muted/40 ${
+        isSelected ? "bg-muted" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <PacketDirectionBadge direction={packet.direction} />
+            <span className="truncate font-medium text-sm">
+              {packet.action_name}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+            <span>{formatTime(packet.created_at)}</span>
+            <span>·</span>
+            <span className="truncate">{packet.bot_id}</span>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function PacketsView() {
   const [selectedPacketId, setSelectedPacketId] = useState<string | null>(null);
   const { data: packets, isLoading } = useProtocolPackets({ limit: 100 });
   const { data: packetJson, isLoading: detailLoading } =
     useProtocolPacketDetail(selectedPacketId ?? "");
 
+  const selectedPacket = packets?.find((p) => p.packet_id === selectedPacketId);
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-      <div className="space-y-3 rounded-xl border bg-card/60 p-3">
-        <div className="flex items-center gap-2 text-sm">
-          <Network className="size-4" />
-          <span className="font-medium">接口调试</span>
-          <span className="text-muted-foreground text-xs">
-            {packets?.length ?? 0} 条记录
-          </span>
-        </div>
+    <div className="space-y-4">
+      <h1 className="font-semibold text-xl">接口调试</h1>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Network className="size-4" /> 报文总数
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <span className="text-lg text-muted-foreground">读取中...</span>
+            ) : (
+              <span className="font-semibold text-2xl">
+                {packets?.length ?? 0}
+              </span>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <ArrowDownToLine className="size-4" /> 接收
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <span className="text-lg text-muted-foreground">读取中...</span>
+            ) : (
+              <span className="font-semibold text-2xl">
+                {packets?.filter((p) => p.direction === "receive").length ?? 0}
+              </span>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <ArrowUpFromLine className="size-4" /> 发送
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <span className="text-lg text-muted-foreground">读取中...</span>
+            ) : (
+              <span className="font-semibold text-2xl">
+                {packets?.filter((p) => p.direction === "send").length ?? 0}
+              </span>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card/60">
-        {isLoading ? (
-          <div className="flex flex-1 items-center justify-center text-muted-foreground text-sm">
-            加载中...
-          </div>
-        ) : (
-          <div className="flex h-full min-h-0">
-            {/* 左侧列表 */}
-            <div className="flex min-h-0 w-2/3 flex-col border-r">
-              <div className="grid grid-cols-[140px_80px_1fr_120px] gap-2 border-b px-3 py-2 text-muted-foreground text-xs">
-                <span>时间</span>
-                <span>方向</span>
-                <span>动作</span>
-                <span>Bot</span>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Network className="size-4" /> 报文列表
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <p className="text-muted-foreground text-sm">加载中...</p>
+            ) : packets && packets.length > 0 ? (
+              <div className="space-y-2">
+                {packets.map((packet: ProtocolPacket) => (
+                  <PacketCard
+                    key={packet.packet_id}
+                    packet={packet}
+                    isSelected={selectedPacketId === packet.packet_id}
+                    onClick={() => setSelectedPacketId(packet.packet_id)}
+                  />
+                ))}
               </div>
-              <div className="min-h-0 flex-1 overflow-auto">
-                {packets && packets.length > 0 ? (
-                  packets.map((packet: ProtocolPacket) => (
-                    <button
-                      key={packet.packet_id}
-                      type="button"
-                      onClick={() => setSelectedPacketId(packet.packet_id)}
-                      className={`grid w-full grid-cols-[140px_80px_1fr_120px] gap-2 border-b px-3 py-2 text-left text-xs transition-colors hover:bg-muted/40 ${
-                        selectedPacketId === packet.packet_id ? "bg-muted" : ""
-                      }`}
-                    >
-                      <span className="text-muted-foreground">
-                        {formatTime(packet.created_at)}
-                      </span>
-                      <span>
-                        <PacketDirectionBadge direction={packet.direction} />
-                      </span>
-                      <span className="truncate">{packet.action_name}</span>
-                      <span className="truncate text-muted-foreground">
-                        {packet.bot_id.slice(0, 8)}...
-                      </span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="flex flex-1 items-center justify-center py-12 text-muted-foreground text-sm">
-                    暂无报文记录
-                  </div>
-                )}
-              </div>
-            </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">暂无报文记录</p>
+            )}
+          </CardContent>
+        </Card>
 
-            {/* 右侧详情 */}
-            <div className="flex min-h-0 w-1/3 flex-col">
-              <div className="border-b px-3 py-2 text-muted-foreground text-xs">
-                报文详情
-              </div>
-              <div className="min-h-0 flex-1 overflow-auto p-3">
-                {selectedPacketId ? (
-                  detailLoading ? (
-                    <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-                      读取中...
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Network className="size-4" /> 报文详情
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedPacketId ? (
+              detailLoading ? (
+                <p className="text-muted-foreground text-sm">读取中...</p>
+              ) : packetJson ? (
+                <div className="space-y-3">
+                  {selectedPacket && (
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p>
+                        <span className="font-medium">动作:</span>{" "}
+                        {selectedPacket.action_name}
+                      </p>
+                      <p>
+                        <span className="font-medium">方向:</span>{" "}
+                        {selectedPacket.direction === "receive"
+                          ? "接收"
+                          : "发送"}
+                      </p>
+                      <p>
+                        <span className="font-medium">时间:</span>{" "}
+                        {formatTime(selectedPacket.created_at)}
+                      </p>
                     </div>
-                  ) : packetJson ? (
-                    <pre className="whitespace-pre-wrap break-all rounded border bg-muted/30 p-3 text-xs leading-relaxed">
-                      {packetJson}
-                    </pre>
-                  ) : (
-                    <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-                      无法读取报文内容
-                    </div>
-                  )
-                ) : (
-                  <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-                    选择一条报文查看详情
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+                  )}
+                  <pre className="whitespace-pre-wrap break-all rounded border bg-muted/30 p-3 text-xs leading-relaxed">
+                    {packetJson}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  无法读取报文内容
+                </p>
+              )
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                选择一条报文查看详情
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
