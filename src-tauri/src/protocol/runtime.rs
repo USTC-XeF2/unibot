@@ -174,22 +174,20 @@ impl ProtocolRuntimeManager {
     }
 
     /// Gracefully shut down all running protocol servers.
-    #[allow(dead_code)]
     pub async fn shutdown_all(&self) {
         let mut servers = self.servers.lock().await;
-        for (_, mut running) in servers.drain() {
+        // Drain once and keep ownership of entries so we can await handles later.
+        let mut entries: Vec<_> = servers.drain().collect();
+        drop(servers);
+
+        for (_, running) in &mut entries {
             if let Some(tx) = running.shutdown_tx.take() {
                 let _ = tx.send(());
             }
         }
-        // Drop lock before awaiting handles
-        let handles: Vec<_> = servers
-            .drain()
-            .map(|(_, running)| running.join_handle)
-            .collect();
-        drop(servers);
-        for handle in handles {
-            let _ = handle.await;
+
+        for (_, running) in entries {
+            let _ = running.join_handle.await;
         }
     }
 

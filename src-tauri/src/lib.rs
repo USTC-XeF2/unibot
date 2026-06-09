@@ -1,11 +1,11 @@
 mod commands;
-mod core;
-mod error;
-mod models;
-mod persistence;
-mod protocol;
-mod services;
-mod utils;
+pub mod core;
+pub mod error;
+pub mod models;
+pub mod persistence;
+pub mod protocol;
+pub mod services;
+pub mod utils;
 
 use tauri::Manager;
 
@@ -16,6 +16,7 @@ use commands::{
 };
 use core::CoreContainer;
 use persistence::{BotRepo, GroupRepo, InteractionRepo, MessageRepo, UserRepo, init_sqlite_pool};
+use protocol::ProtocolRuntimeManager;
 use services::{
     BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
     UserService,
@@ -56,6 +57,11 @@ pub fn run() {
                 }
             }
 
+            // Reset any bots that were left in "running" state from a previous
+            // unclean shutdown (e.g. app crashed or was force-killed).
+            tauri::async_runtime::block_on(bot_repo.reset_all_running_bots())
+                .map_err(|err| format!("failed to reset running bots: {err}"))?;
+
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -80,6 +86,10 @@ pub fn run() {
                         event,
                         tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
                     ) {
+                        // Gracefully shut down all protocol servers before exit.
+                        let runtime = app_handle.state::<ProtocolRuntimeManager>();
+                        tauri::async_runtime::block_on(runtime.shutdown_all());
+
                         let core_state = app_handle.state::<CoreContainer>();
                         for context in core_state.list_user_contexts() {
                             if let Some(label) = context.chat_window_label() {
@@ -107,7 +117,9 @@ pub fn run() {
             main::get_db_status,
             main::get_stats,
             bot::create_bot,
+            bot::get_bot_config,
             bot::list_bots,
+            bot::rename_bot,
             bot::delete_bot,
             bot::start_bot,
             bot::stop_bot,
