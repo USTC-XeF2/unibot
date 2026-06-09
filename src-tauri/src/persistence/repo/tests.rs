@@ -480,11 +480,13 @@ async fn smoke_crud_bots_and_debug_sessions(pool: sqlx::SqlitePool) -> Result<()
     assert_eq!(session.bot_id, "bot_10001");
     assert!(session.ended_at.is_none());
 
-    assert!(repo.has_active_session("bot_10001").await?);
+    let running = repo.get_bot_by_id("bot_10001").await?.unwrap();
+    assert_eq!(running.runtime_status, "running");
     assert_eq!(repo.get_online_bot_count().await?, 1);
 
     repo.stop_active_sessions("bot_10001").await?;
-    assert!(!repo.has_active_session("bot_10001").await?);
+    let stopped = repo.get_bot_by_id("bot_10001").await?.unwrap();
+    assert_eq!(stopped.runtime_status, "stopped");
     assert_eq!(repo.get_online_bot_count().await?, 0);
 
     let sessions = repo.list_sessions_by_bot("bot_10001").await?;
@@ -550,7 +552,6 @@ async fn bot_session_lifecycle_updates_status_atomically(
 
     let running = repo.get_bot_by_id("bot_10001").await?.unwrap();
     assert_eq!(running.runtime_status, "running");
-    assert!(repo.has_active_session("bot_10001").await?);
 
     let duplicate = repo
         .start_session("session_2", "bot_10001", "Duplicate Session")
@@ -560,7 +561,6 @@ async fn bot_session_lifecycle_updates_status_atomically(
     repo.stop_active_sessions("bot_10001").await?;
     let stopped = repo.get_bot_by_id("bot_10001").await?.unwrap();
     assert_eq!(stopped.runtime_status, "stopped");
-    assert!(!repo.has_active_session("bot_10001").await?);
 
     Ok(())
 }

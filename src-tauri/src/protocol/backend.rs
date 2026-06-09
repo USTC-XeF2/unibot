@@ -197,14 +197,26 @@ impl ProtocolBackend for VirtualBackend {
                 Ok(serde_json::json!({ "data": data }))
             }
             "get_group_info" => {
-                let _group_id = api
+                let group_id = api
                     .params
                     .get("group_id")
                     .and_then(|v| v.as_i64())
                     .ok_or_else(|| AppError::validation("missing group_id"))?
                     .to_string();
-                // GroupService does not expose get_group_by_id yet
-                Err(AppError::not_found("get_group_info not yet implemented"))
+                let group = self
+                    .service_hub
+                    .group
+                    .get_group(&group_id)
+                    .await?
+                    .ok_or_else(|| AppError::not_found("group not found"))?;
+                Ok(serde_json::json!({
+                    "data": {
+                        "group_id": group.group_id.parse::<i64>().unwrap_or(0),
+                        "group_name": group.group_name,
+                        "member_count": group.member_count,
+                        "max_member_count": group.max_member_count,
+                    }
+                }))
             }
             "get_group_member_list" => {
                 let group_id = api
