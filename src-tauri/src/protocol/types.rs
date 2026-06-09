@@ -139,24 +139,8 @@ impl MilkyAdapter {
         Self
     }
 
-    fn internal_to_milky_segment(seg: &MessageSegment) -> MilkySegment {
-        match seg {
-            MessageSegment::Text { text } => MilkySegment::Text { text: text.clone() },
-            MessageSegment::Image { file, url } => MilkySegment::Image {
-                file: file.clone(),
-                url: url.clone(),
-            },
-            MessageSegment::At { target } => MilkySegment::At { qq: target.clone() },
-            MessageSegment::AtAll => MilkySegment::AtAll {},
-            MessageSegment::Face { id } => MilkySegment::Face { id: id.clone() },
-        }
-    }
-
     fn internal_to_milky_segments(segments: &[MessageSegment]) -> Vec<MilkySegment> {
-        segments
-            .iter()
-            .map(Self::internal_to_milky_segment)
-            .collect()
+        crate::protocol::adapter::internal_to_milky_segments(segments)
     }
 }
 
