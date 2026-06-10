@@ -161,9 +161,17 @@ pub async fn read_system_logs(
                 }
             }
 
+            let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
+
+            // Filter by since cursor
+            if let Some(since_ts) = since {
+                if entry_ts < since_ts as i64 {
+                    continue;
+                }
+            }
+
             // Filter by before cursor
             if let Some(before_ts) = before {
-                let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
                 if entry_ts >= before_ts as i64 {
                     continue;
                 }
