@@ -115,7 +115,7 @@ export interface LogPage<T> {
 - `src/lib/query/index.ts` (修改)
 - `src/types/settings.ts` (新建)
 
-- [ ] **Step 1.1: 创建 `SettingsRepo`**
+- [x] **Step 1.1: 创建 `SettingsRepo`**
 
   在 `src-tauri/src/persistence/repo/settings.rs` 实现：
 
@@ -165,13 +165,13 @@ export interface LogPage<T> {
   }
   ```
 
-- [ ] **Step 1.2: 注册 `SettingsRepo`**
+- [x] **Step 1.2: 注册 `SettingsRepo`**
 
   修改 `src-tauri/src/persistence/repo/mod.rs`：
   - 加 `pub mod settings;`
   - 加 `pub use settings::SettingsRepo;`
 
-- [ ] **Step 1.3: 前端 settings 类型与 query**
+- [x] **Step 1.3: 前端 settings 类型与 query**
 
   新建 `src/types/settings.ts`：
 
@@ -212,7 +212,7 @@ export interface LogPage<T> {
 - `src-tauri/src/lib.rs` (修改)
 - `src-tauri/src/utils.rs` (修改)
 
-- [ ] **Step 2.1: 添加依赖**
+- [x] **Step 2.1: 添加依赖**
 
   修改 `src-tauri/Cargo.toml`：
 
@@ -222,7 +222,7 @@ export interface LogPage<T> {
   tracing-appender = "0.2"
   ```
 
-- [ ] **Step 2.2: 实现自定义 JSON Layer**
+- [x] **Step 2.2: 实现自定义 JSON Layer**
 
   新建 `src-tauri/src/logging.rs`。核心内容：
 
@@ -240,7 +240,7 @@ export interface LogPage<T> {
   - 文件命名：`Builder::filename_prefix("unibot").filename_suffix("log")` → `unibot.YYYY-MM-DD.log`
   - `WorkerGuard` 必须被 `app.manage(LogGuard(guard))` 持有整个进程生命周期
 
-- [ ] **Step 2.3: 在 `lib.rs` setup 中初始化 tracing**
+- [x] **Step 2.3: 在 `lib.rs` setup 中初始化 tracing**
 
   在 `app.manage(pool.clone());` 之前：
 
@@ -255,7 +255,7 @@ export interface LogPage<T> {
 
   **注意：** `tracing_subscriber::registry()...init()` 只能调用一次。Tauri 主进程只跑一次 setup，安全。测试环境用 `#[sqlx::test]` 不走 setup，不冲突。
 
-- [ ] **Step 2.4: 日志清理函数**
+- [x] **Step 2.4: 日志清理函数**
 
   在 `src-tauri/src/utils.rs` 增加：
 
@@ -288,7 +288,7 @@ export interface LogPage<T> {
 - `src-tauri/src/utils.rs`
 - `src-tauri/src/lib.rs`
 
-- [ ] **Step 3.1: Service 层埋点**
+- [x] **Step 3.1: Service 层埋点**
 
   按 spec 1.5 的表格插入 `tracing` 调用：
 
@@ -305,7 +305,7 @@ export interface LogPage<T> {
   | `services/message.rs` send 错误分支 | `tracing::error!(target: "unibot::message", user_id = %user_id, error = %err, "message send failed");` |
   | `protocol/server.rs` `is_error` 判定处 | `tracing::error!(target: "unibot::protocol", bot_id = %bot_id, error = %action_name, "protocol adapter error");`（或按实际错误内容） |
 
-- [ ] **Step 3.2: `eprintln!` 迁移**
+- [x] **Step 3.2: `eprintln!` 迁移**
 
   全部 10 处改为对应 `tracing::warn!` / `error!`：
   - `utils.rs` 2 处 group member 查询失败 → `tracing::warn!`
@@ -346,7 +346,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 ];
 ```
 
-- [ ] **Step 3.5.1: 重写 `PacketRecorder` 内部结构**
+- [x] **Step 3.5.1: 重写 `PacketRecorder` 内部结构**
 
   ```rust
   struct PacketRecorder {
@@ -387,13 +387,13 @@ const NORMAL_ACTIONS: &[&str] = &[
      使用 `QueryBuilder` 构造多行 VALUES。
   4. `flush()` 方法（供 shutdown 调用）：drain channel 剩余条目，立即执行一次批量 INSERT
 
-- [ ] **Step 3.5.2: `shutdown_all` 时 flush buffer**
+- [x] **Step 3.5.2: `shutdown_all` 时 flush buffer**
 
   修改 `runtime.rs` `shutdown_all`：在关闭所有 server 后，调用 `recorder.flush().await`。
 
   注意：`ProtocolRuntimeManager::stop_bot` 也应在 stop 后 flush（如果 channel 中有该 bot 的 pending 记录）。
 
-- [ ] **Step 3.5.3: 前端默认过滤**
+- [x] **Step 3.5.3: 前端默认过滤**
 
   `list_protocol_packets` 默认行为不变——返回 `protocol_packets` 表中的数据。由于 Normal 记录通过缓冲批量入表，查询结果会延迟最多 100ms，对用户体验无影响。
 
@@ -453,7 +453,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 
   透传 `is_error`、`until`、`before`，返回 `LogPage<ProtocolPacketRecord>`。
 
-- [ ] **Step 4.3: 新建 `SystemLogReader`**
+- [x] **Step 4.3: 新建 `SystemLogReader`**
 
   新建 `src-tauri/src/persistence/repo/system_log.rs`：
 
@@ -481,7 +481,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 
   日期推算用 `chrono::NaiveDate` 从 `since/until` 提取，迭代 `succ_opt()`。
 
-- [ ] **Step 4.4: 新增系统日志与设置 command**
+- [x] **Step 4.4: 新增系统日志与设置 command**
 
   在 `src-tauri/src/commands/main.rs` 增加：
 
@@ -497,7 +497,7 @@ const NORMAL_ACTIONS: &[&str] = &[
   - `set_log_retention` 只持久化，不立即执行清理
   - `trigger_log_cleanup` 立即按当前 retention_days 执行一次清理
 
-- [ ] **Step 4.5: 注册 command**
+- [x] **Step 4.5: 注册 command**
 
   修改 `src-tauri/src/lib.rs:129` 的 `generate_handler!`，追加 5 个新 command。
 
@@ -519,7 +519,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 - `src/lib/query/index.ts` (修改)
 - `src/views/main/logs.tsx` (重写)
 
-- [ ] **Step 5.1: 类型定义**
+- [x] **Step 5.1: 类型定义**
 
   新建 `src/types/log.ts`：
 
@@ -561,7 +561,7 @@ const NORMAL_ACTIONS: &[&str] = &[
   }
   ```
 
-- [ ] **Step 5.2: 前端 query hooks**
+- [x] **Step 5.2: 前端 query hooks**
 
   新建 `src/lib/query/logs.ts`：
 
@@ -577,7 +577,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 
   修改 `keys.ts` 增加 `logs` 相关 key。
 
-- [ ] **Step 5.3: 重写 Logs 页面**
+- [x] **Step 5.3: 重写 Logs 页面**
 
   修改 `src/views/main/logs.tsx`：
 
@@ -606,7 +606,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 - `src/views/main/settings.tsx`
 - `src/lib/query/settings.ts`
 
-- [ ] **Step 6.1: 新增"日志设置"卡片**
+- [x] **Step 6.1: 新增"日志设置"卡片**
 
   在 `src/views/main/settings.tsx` 增加第二个 `Card`：
 
@@ -618,7 +618,7 @@ const NORMAL_ACTIONS: &[&str] = &[
     - onClick → `invoke("trigger_log_cleanup")`
     - 成功后 toast 或简单 alert
 
-- [ ] **Step 6.2: 接入 query**
+- [x] **Step 6.2: 接入 query**
 
   使用 `useLogSettingsQuery` 读取当前设置；mutation 成功后 `invalidateLogSettingsQuery()`。
 
@@ -631,9 +631,9 @@ const NORMAL_ACTIONS: &[&str] = &[
 
 ## 4. 验收标准（Definition of Done）
 
-- [ ] `cargo test --manifest-path src-tauri/Cargo.toml` 全部通过
-- [ ] `bunx --bun @biomejs/biome check --write` 无错误
-- [ ] `cargo fmt --manifest-path src-tauri/Cargo.toml` 已执行
+- [x] `cargo test --manifest-path src-tauri/Cargo.toml` 全部通过
+- [x] `bunx --bun @biomejs/biome check --write` 无错误
+- [x] `cargo fmt --manifest-path src-tauri/Cargo.toml` 已执行
 - [ ] 应用启动后 `{app_data_dir}/logs/unibot.YYYY-MM-DD.log` 正确生成
 - [ ] Bot 启停、用户注册、群创建能在日志文件中看到对应 JSON 行
 - [ ] Logs 页面"全部"模式下能同时看到协议日志和系统日志，按时间倒序排列
@@ -641,7 +641,7 @@ const NORMAL_ACTIONS: &[&str] = &[
 - [ ] 切换"日志来源"、"时间范围"、"等级"筛选均正常工作
 - [ ] Settings 页面 DEBUG 开关实时生效（无需重启应用）
 - [ ] 保留期改变后，下次清理任务按新配置执行
-- [ ] 代码库中无残留 `eprintln!`
+- [x] 代码库中无残留 `eprintln!`
 
 ---
 

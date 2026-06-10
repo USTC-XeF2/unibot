@@ -86,6 +86,7 @@ pub fn set_log_level(level: &str) -> anyhow::Result<bool> {
 /// Returns entries sorted by timestamp descending (newest first).
 pub async fn read_system_logs(
     log_dir: impl AsRef<Path>,
+    since: Option<u64>,
     before: Option<u64>,
     limit: usize,
 ) -> anyhow::Result<Vec<serde_json::Value>> {
@@ -94,9 +95,12 @@ pub async fn read_system_logs(
         return Ok(vec![]);
     }
 
-    // Compute date range from `before` to filter files at the directory level.
-    // We only read files whose date <= the day of `before` (or today if no before).
-    // This avoids opening every log file when the user only wants recent entries.
+    // Compute date range from `since` / `before` to filter files at the directory level.
+    // We only read files whose date falls within [since_day, before_day].
+    // This avoids opening every log file when the user only wants a specific window.
+    let min_file_date = since.and_then(|ts| {
+        chrono::DateTime::from_timestamp_millis(ts as i64).map(|dt| dt.date_naive())
+    });
     let max_file_date = before.and_then(|ts| {
         chrono::DateTime::from_timestamp_millis(ts as i64).map(|dt| dt.date_naive())
     });
@@ -117,8 +121,14 @@ pub async fn read_system_logs(
             .and_then(|s| s.strip_suffix(".log"))
             .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
-        // File-level filtering: skip files newer than the query window.
-        // If no `before` is given, we read all files.
+        // File-level filtering: skip files outside the [since, before] date window.
+        if let Some(min_date) = min_file_date {
+            if let Some(date) = file_date {
+                if date < min_date {
+                    continue;
+                }
+            }
+        }
         if let Some(max_date) = max_file_date {
             if let Some(date) = file_date {
                 if date > max_date {

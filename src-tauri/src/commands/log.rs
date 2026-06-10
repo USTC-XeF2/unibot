@@ -25,6 +25,7 @@ pub struct LogCleanupResult {
 #[tauri::command]
 pub async fn list_system_logs(
     app: tauri::AppHandle,
+    since: Option<u64>,
     before: Option<u64>,
     limit: Option<usize>,
 ) -> Result<Vec<SystemLogEntry>, String> {
@@ -36,7 +37,7 @@ pub async fn list_system_logs(
 
     let limit = limit.unwrap_or(100).min(1000);
 
-    let values = logging::read_system_logs(&log_dir, before, limit)
+    let values = logging::read_system_logs(&log_dir, since, before, limit)
         .await
         .map_err(|e| e.to_string())?;
 

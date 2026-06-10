@@ -5,12 +5,13 @@ import type { LogSettings, SystemLogEntry } from "@/types/log";
 import { queryKeys } from "./keys";
 
 export function useSystemLogsQuery(
-  params: { before?: number; limit?: number } = {},
+  params: { since?: number; before?: number; limit?: number } = {},
 ) {
   return useQuery({
     queryKey: queryKeys.logs.system(params),
     queryFn: () =>
       invoke<SystemLogEntry[]>("list_system_logs", {
+        since: params.since ?? null,
         before: params.before ?? null,
         limit: params.limit ?? 100,
       }),
