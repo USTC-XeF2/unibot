@@ -78,8 +78,8 @@ function CreateGroupDialog({
     }
 
     try {
-      const initialMemberUserIds = [...selectedGroupMemberIds].sort(
-        (a, b) => a.localeCompare(b),
+      const initialMemberUserIds = [...selectedGroupMemberIds].sort((a, b) =>
+        a.localeCompare(b),
       );
 
       await createGroupMutation.mutateAsync({

@@ -8,10 +8,7 @@ function isSameDay(date: Date, now = new Date()): boolean {
   );
 }
 
-function withTimestamp(
-  ts: number,
-  formatter: (date: Date) => string,
-): string {
+function withTimestamp(ts: number, formatter: (date: Date) => string): string {
   if (!ts) {
     return "";
   }

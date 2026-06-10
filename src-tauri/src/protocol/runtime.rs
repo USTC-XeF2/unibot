@@ -138,7 +138,8 @@ impl ProtocolRuntimeManager {
             Ok((tx, handle)) => (tx, handle),
             Err(e) => {
                 if let Err(cleanup_err) = self.bot_repo.stop_active_sessions(bot_id).await {
-                    eprintln!(
+                    tracing::warn!(
+                        target: "protocol_runtime",
                         "failed to cleanup session after spawn_server failure for bot {bot_id}: {cleanup_err}"
                     );
                 }
@@ -194,12 +195,13 @@ impl ProtocolRuntimeManager {
             }
             result = &mut handle => {
                 if let Err(e) = result {
-                    eprintln!("server task for bot {bot_id} panicked: {e}");
+                    tracing::warn!(target: "protocol_runtime", "server task for bot {bot_id} panicked: {e}");
                 }
             }
         }
 
         self.bot_repo.stop_active_sessions(bot_id).await?;
+        self.recorder.flush().await;
         Ok(())
     }
 
@@ -224,7 +226,7 @@ impl ProtocolRuntimeManager {
                 }
                 result = &mut handle => {
                     if let Err(e) = result {
-                        eprintln!("server task panicked during shutdown: {e}");
+                        tracing::warn!(target: "protocol_runtime", "server task panicked during shutdown: {e}");
                     }
                 }
             }

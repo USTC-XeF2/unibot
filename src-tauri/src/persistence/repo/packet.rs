@@ -26,12 +26,16 @@ impl PacketRepo {
         Self { pool }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_packets(
         &self,
         bot_id: Option<&str>,
         direction: Option<&str>,
         action_name: Option<&str>,
         since: Option<u64>,
+        until: Option<u64>,
+        is_error: Option<bool>,
+        before: Option<u64>,
         limit: i64,
     ) -> Result<Vec<ProtocolPacketRecord>, sqlx::Error> {
         let limit = limit.min(1000);
@@ -72,8 +76,38 @@ impl PacketRepo {
                 builder.push(" AND created_at >= ");
             } else {
                 builder.push(" WHERE created_at >= ");
+                has_where = true;
             }
             builder.push_bind(since as i64);
+        }
+
+        if let Some(until) = until {
+            if has_where {
+                builder.push(" AND created_at <= ");
+            } else {
+                builder.push(" WHERE created_at <= ");
+                has_where = true;
+            }
+            builder.push_bind(until as i64);
+        }
+
+        if let Some(is_error) = is_error {
+            if has_where {
+                builder.push(" AND is_error = ");
+            } else {
+                builder.push(" WHERE is_error = ");
+                has_where = true;
+            }
+            builder.push_bind(if is_error { 1 } else { 0 });
+        }
+
+        if let Some(before) = before {
+            if has_where {
+                builder.push(" AND created_at < ");
+            } else {
+                builder.push(" WHERE created_at < ");
+            }
+            builder.push_bind(before as i64);
         }
 
         builder.push(" ORDER BY created_at DESC LIMIT ");

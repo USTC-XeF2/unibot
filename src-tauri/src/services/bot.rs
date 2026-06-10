@@ -7,6 +7,11 @@ use serde::Serialize;
 use std::io::ErrorKind;
 use tauri::Manager;
 
+#[cfg(test)]
+use crate::persistence::SettingsRepo;
+#[cfg(test)]
+use crate::services::SettingsService;
+
 #[derive(Clone)]
 pub struct BotService {
     repo: BotRepo,
@@ -125,7 +130,8 @@ impl BotService {
             Ok(()) => {}
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => {
-                eprintln!(
+                tracing::warn!(
+                    target: "bot_service",
                     "failed to delete bot config file at {} after deleting bot {bot_id}: {err}",
                     bot.config_path
                 );
@@ -277,6 +283,7 @@ mod tests {
             RequestService::new(user_repo.clone()),
             UserService::new(user_repo),
             BotService::new(repo.clone()),
+            SettingsService::new(SettingsRepo::new(pool.clone())),
         );
 
         let result = BotService::new(repo.clone())

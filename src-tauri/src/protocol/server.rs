@@ -146,7 +146,7 @@ async fn event_handler(
                         ))
                     }
                     Err(e) => {
-                        eprintln!("SSE event stream dropped messages for bot {bot_id}: {e}");
+                        tracing::warn!(target: "protocol_server", "SSE event stream dropped messages for bot {bot_id}: {e}");
                         // Skip and continue receiving new events.
                         None
                     }
@@ -293,7 +293,7 @@ pub async fn spawn_server(
             let _ = shutdown_rx.await;
         });
         if let Err(e) = graceful.await {
-            eprintln!("protocol server error: {e}");
+            tracing::warn!(target: "protocol_server", "protocol server error: {e}");
         }
     });
 

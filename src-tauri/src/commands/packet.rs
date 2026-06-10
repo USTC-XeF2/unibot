@@ -2,12 +2,16 @@ use crate::persistence::{PacketRepo, ProtocolPacketRecord};
 use tauri::Manager;
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn list_protocol_packets(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     bot_id: Option<String>,
     direction: Option<String>,
     action_name: Option<String>,
     since: Option<u64>,
+    until: Option<u64>,
+    is_error: Option<bool>,
+    before: Option<u64>,
     limit: Option<i64>,
 ) -> Result<Vec<ProtocolPacketRecord>, String> {
     let repo = PacketRepo::new(pool.inner().clone());
@@ -17,6 +21,9 @@ pub async fn list_protocol_packets(
         direction.as_deref(),
         action_name.as_deref(),
         since,
+        until,
+        is_error,
+        before,
         limit,
     )
     .await

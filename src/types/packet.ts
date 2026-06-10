@@ -18,5 +18,8 @@ export interface PacketFilters {
   direction?: "receive" | "send";
   action_name?: string;
   since?: number;
+  until?: number;
+  is_error?: boolean;
+  before?: number;
   limit?: number;
 }

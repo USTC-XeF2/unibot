@@ -1,5 +1,6 @@
 pub mod bot;
 pub mod chat;
+pub mod log;
 pub mod main;
 pub mod packet;
 

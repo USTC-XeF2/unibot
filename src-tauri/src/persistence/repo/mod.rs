@@ -4,6 +4,7 @@ pub mod group;
 pub mod interaction;
 pub mod message;
 pub mod packet;
+pub mod settings;
 pub mod user;
 
 #[cfg(test)]
@@ -14,4 +15,5 @@ pub use group::{GroupEventRecord, GroupRepo, NewGroupEventRecord, NewGroupReques
 pub use interaction::{InteractionRepo, NewMessageReactionRecord, NewPokeRecord};
 pub use message::{MessageRecord, MessageRepo, NewMessageRecord};
 pub use packet::{PacketRepo, ProtocolPacketRecord};
+pub use settings::{SettingRecord, SettingsRepo};
 pub use user::{NewFriendRequestRecord, UserRepo};

@@ -3,6 +3,7 @@ pub mod group;
 pub mod interaction;
 pub mod message;
 pub mod request;
+pub mod settings;
 pub mod user;
 
 pub use bot::{BotService, StatsResult};
@@ -10,6 +11,7 @@ pub use group::{GroupService, MuteGroupMemberResult};
 pub use interaction::InteractionService;
 pub use message::{MessageService, SendMessageResult};
 pub use request::RequestService;
+pub use settings::SettingsService;
 pub use user::UserService;
 
 #[derive(Clone)]
@@ -20,6 +22,7 @@ pub struct ServiceHub {
     pub request: RequestService,
     pub user: UserService,
     pub bot: BotService,
+    pub settings: SettingsService,
 }
 
 impl ServiceHub {
@@ -30,6 +33,7 @@ impl ServiceHub {
         request: RequestService,
         user: UserService,
         bot: BotService,
+        settings: SettingsService,
     ) -> Self {
         Self {
             message,
@@ -38,6 +42,7 @@ impl ServiceHub {
             request,
             user,
             bot,
+            settings,
         }
     }
 }
