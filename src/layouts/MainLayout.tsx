@@ -30,6 +30,7 @@ import {
   SidebarProvider,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import { useUsersQuery } from "@/lib/query";
 
 const footerNavItems = [
@@ -242,6 +243,7 @@ function MainLayout() {
         <main className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
           <Outlet />
         </main>
+        <Toaster position="top-center" />
       </div>
     </SidebarProvider>
   );

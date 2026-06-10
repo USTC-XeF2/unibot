@@ -7,5 +7,6 @@ pub use db_pool::init_sqlite_pool;
 pub use repo::{
     BotRepo, GroupEventRecord, GroupRepo, InteractionRepo, MessageRecord, MessageRepo,
     NewFriendRequestRecord, NewGroupEventRecord, NewGroupRequestRecord, NewMessageReactionRecord,
-    NewMessageRecord, NewPokeRecord, PacketRepo, ProtocolPacketRecord, UserRepo,
+    NewMessageRecord, NewPokeRecord, PacketRepo, ProtocolPacketRecord, SettingRecord, SettingsRepo,
+    UserRepo,
 };

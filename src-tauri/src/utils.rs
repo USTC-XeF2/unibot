@@ -39,7 +39,10 @@ pub async fn emit_to_group_members(
             emit_to_users(core, members.iter().map(|member| &member.user_id), event);
         }
         Err(err) => {
-            eprintln!("failed to list group members for group {group_id}: {err}");
+            tracing::warn!(
+                target: "utils",
+                "failed to list group members for group {group_id}: {err}"
+            );
         }
     }
 }
@@ -68,7 +71,8 @@ pub async fn recipients_for_source(
                 }
             }
             Err(err) => {
-                eprintln!(
+                tracing::warn!(
+                    target: "utils",
                     "failed to list group members for recipient calc group {group_id}: {err}"
                 );
             }

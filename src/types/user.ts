@@ -1,8 +1,4 @@
-export type AccountStatus =
-  | "active"
-  | "disabled"
-  | "unavailable"
-  | "deleted";
+export type AccountStatus = "active" | "disabled" | "unavailable" | "deleted";
 
 export type UserProfile = {
   user_id: string;

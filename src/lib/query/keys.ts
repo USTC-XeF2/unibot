@@ -38,6 +38,11 @@ export const queryKeys = {
   db: {
     status: () => ["db", "status"] as const,
   },
+  logs: {
+    system: (params: { before?: number; limit?: number }) =>
+      ["logs", "system", params] as const,
+    settings: () => ["logs", "settings"] as const,
+  },
   bots: {
     all: () => ["bots"] as const,
     stats: () => ["stats"] as const,

@@ -1,6 +1,7 @@
 mod commands;
 pub mod core;
 pub mod error;
+pub mod logging;
 pub mod models;
 pub mod persistence;
 pub mod protocol;
@@ -12,14 +13,16 @@ use tauri::Manager;
 use commands::{
     bot,
     chat::{group, message, request, user},
-    main, packet,
+    log, main, packet,
 };
 use core::CoreContainer;
-use persistence::{BotRepo, GroupRepo, InteractionRepo, MessageRepo, UserRepo, init_sqlite_pool};
+use persistence::{
+    BotRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo, init_sqlite_pool,
+};
 use protocol::ProtocolRuntimeManager;
 use services::{
     BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
-    UserService,
+    SettingsService, UserService,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,6 +48,7 @@ pub fn run() {
                 RequestService::new(request_user_repo),
                 UserService::new(user_repo.clone()),
                 BotService::new(bot_repo.clone()),
+                SettingsService::new(SettingsRepo::new(pool.clone())),
             );
 
             let core = CoreContainer::new();
@@ -66,6 +70,110 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .map_err(|err| format!("failed to get app data dir: {err}"))?;
+
+            // Initialize tracing/logging
+            let log_level = tauri::async_runtime::block_on(service_hub.settings.get_log_level());
+            let logs_dir = app_data_dir.join("logs");
+            std::fs::create_dir_all(&logs_dir)
+                .map_err(|err| format!("failed to create logs dir: {err}"))?;
+            let log_guard = logging::init_logging(&logs_dir, &log_level)
+                .map_err(|err| format!("failed to init logging: {err}"))?;
+            tracing::info!(target: "app", "UniBot started, log_level={}", log_level);
+
+            // Schedule periodic log cleanup.
+            //
+            // Strategy: read `log.last_cleanup_at` on startup.
+            // If the last cleanup happened before today's 4:00 AM,
+            // run one immediately (covers missed cleanups).
+            // Then wait until next 4:00 AM and repeat.
+            {
+                let cleanup_app = app.handle().clone();
+                let cleanup_hub = service_hub.clone();
+                tauri::async_runtime::spawn(async move {
+                    async fn run_cleanup(
+                        app: &tauri::AppHandle,
+                        hub: &crate::services::ServiceHub,
+                    ) -> bool {
+                        let log_dir = match app.path().app_data_dir() {
+                            Ok(dir) => dir.join("logs"),
+                            Err(e) => {
+                                tracing::warn!(target: "log_cleanup", "failed to get app data dir: {e}");
+                                return false;
+                            }
+                        };
+                        let retention_days = hub.settings.get_log_retention_days().await;
+                        if retention_days <= 0 {
+                            return false;
+                        }
+                        match crate::logging::cleanup_old_logs(&log_dir, retention_days).await {
+                            Ok(deleted) => {
+                                if deleted > 0 {
+                                    tracing::info!(
+                                        target: "log_cleanup",
+                                        "auto-cleaned {deleted} old log files (retention={retention_days}d)"
+                                    );
+                                }
+                                true
+                            }
+                            Err(e) => {
+                                tracing::warn!(target: "log_cleanup", "auto-cleanup failed: {e}");
+                                false
+                            }
+                        }
+                    }
+
+                    // --- Startup check ---
+                    let last_cleanup = cleanup_hub.settings.get_log_last_cleanup_at().await;
+                    let today_4am = chrono::Local::now()
+                        .date_naive()
+                        .and_hms_opt(4, 0, 0)
+                        .expect("4:00 is a valid time")
+                        .and_utc()
+                        .timestamp_millis();
+
+                    // If never cleaned, or last cleanup was before today's 4:00 AM
+                    if last_cleanup == 0 || last_cleanup < today_4am {
+                        if run_cleanup(&cleanup_app, &cleanup_hub).await {
+                            let _ = cleanup_hub
+                                .settings
+                                .set_log_last_cleanup_at(crate::utils::now_ts() as i64)
+                                .await;
+                        }
+                    }
+
+                    let mut next_run = tokio::time::Instant::now();
+                    loop {
+                        // Wait until next 4:00 AM
+                        let now = chrono::Local::now();
+                        let tomorrow = now.date_naive().succ_opt().unwrap_or(now.date_naive());
+                        let tomorrow_4am = match tomorrow
+                            .and_hms_opt(4, 0, 0)
+                            .expect("4:00 is a valid time")
+                            .and_local_timezone(chrono::Local)
+                        {
+                            chrono::LocalResult::Single(dt) => dt,
+                            chrono::LocalResult::Ambiguous(dt, _) => dt,
+                            chrono::LocalResult::None => now + chrono::TimeDelta::hours(24),
+                        };
+                        let delay_ms =
+                            (tomorrow_4am - now).num_milliseconds().max(0) as u64;
+
+                        tokio::time::sleep_until(
+                            next_run + std::time::Duration::from_millis(delay_ms),
+                        )
+                        .await;
+                        next_run = tokio::time::Instant::now();
+
+                        if run_cleanup(&cleanup_app, &cleanup_hub).await {
+                            let _ = cleanup_hub
+                                .settings
+                                .set_log_last_cleanup_at(crate::utils::now_ts() as i64)
+                                .await;
+                        }
+                    }
+                });
+            }
+
             let protocol_runtime = protocol::ProtocolRuntimeManager::new(
                 bot_repo.clone(),
                 service_hub.clone(),
@@ -78,6 +186,7 @@ pub fn run() {
             app.manage(core);
             app.manage(service_hub);
             app.manage(protocol_runtime);
+            app.manage(log_guard);
 
             if let Some(main_window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
@@ -105,7 +214,7 @@ pub fn run() {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                         }
                         if !handle.is_finished() {
-                            eprintln!("shutdown thread timed out after 3s, exiting anyway");
+                            tracing::warn!(target: "app", "shutdown thread timed out after 3s, exiting anyway");
                         }
 
                         let core_state = app_handle.state::<CoreContainer>();
@@ -134,6 +243,11 @@ pub fn run() {
             main::open_user_chat_window,
             main::get_db_status,
             main::get_stats,
+            log::list_system_logs,
+            log::get_log_settings,
+            log::set_log_level,
+            log::set_log_retention_days,
+            log::trigger_log_cleanup,
             bot::create_bot,
             bot::get_bot_config,
             bot::list_bots,

@@ -399,6 +399,26 @@ export function useStopBotMutation() {
   });
 }
 
+export function useSetLogLevelMutation() {
+  return useMutation({
+    mutationFn: ({ level }: { level: string }) =>
+      invoke("set_log_level", { level }),
+  });
+}
+
+export function useSetLogRetentionMutation() {
+  return useMutation({
+    mutationFn: ({ days }: { days: number }) =>
+      invoke("set_log_retention_days", { days }),
+  });
+}
+
+export function useTriggerLogCleanupMutation() {
+  return useMutation({
+    mutationFn: () => invoke<{ deleted_files: number }>("trigger_log_cleanup"),
+  });
+}
+
 export function useRenameBotMutation() {
   return useMutation({
     mutationFn: ({

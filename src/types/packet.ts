@@ -1,7 +1,7 @@
 export interface ProtocolPacket {
   packet_id: string;
-  bot_id: string;
-  profile_id: string;
+  bot_id: string | null;
+  profile_id: string | null;
   protocol_type: string;
   direction: "receive" | "send";
   action_name: string;
@@ -9,7 +9,7 @@ export interface ProtocolPacket {
   related_object_type: string | null;
   related_object_id: string | null;
   is_error: boolean;
-  session_id: string;
+  session_id: string | null;
   created_at: number;
 }
 
@@ -18,5 +18,8 @@ export interface PacketFilters {
   direction?: "receive" | "send";
   action_name?: string;
   since?: number;
+  until?: number;
+  is_error?: boolean;
+  before?: number;
   limit?: number;
 }
