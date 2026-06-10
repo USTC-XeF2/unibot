@@ -3,6 +3,15 @@
 > 本 spec 覆盖群文件实际上传下载（A）、群相册（B）、群管理 UI（C）、会话置顶/免打扰 + 群分类（D）四个方向。
 >
 > 基于代码现状核对（2026-06-10）：`group_albums`/`group_photos`/`group_categories`/`conversations` 四张表已在 0001 schema 中，但缺少对应 command/前端 UI。`group_files` 有表但无 `file_path` 列，现有 `upsert_group_file` 是纯 DB 记录，不落盘文件。
+>
+> **审查修正记录（v2，核对实现细节后）**：
+> 1. `ServiceHub` 不持有 `app_data_dir`，落盘需在 command 层用 `app: tauri::AppHandle` + `app.path().app_data_dir()`（参照 `read_protocol_packet`）。文件 IO 与 DB 写入职责分离，不污染 GroupService。详见 2.0。
+> 2. 项目当前**无任何 hash crate**，需新增 `sha2`。
+> 3. `set_conversation_pinned` 的 UPSERT **不能用单条双 `ON CONFLICT`**（SQLite 不支持），必须按 scene 分两条 SQL，参照 `message.rs::insert_message`。详见 4.2。
+> 4. `default.json` capabilities 必须加 `dialog:default`，否则 dialog 插件调用被拒。详见 1.3。
+> 5. 原子写参照 `recorder.rs`：`.{id}.tmp` 临时文件 → `tokio::fs::rename`。
+> 6. 根目录文件的 `parent_folder_id` 在 DB 是 NULL、entity 是空串，过滤查询需做映射。详见 2.6。
+> 7. 所有新增 command 必须在 `lib.rs` 的 `tauri::generate_handler!` 宏里注册（约第 238 行起），否则前端 invoke 报 "command not found"。
 
 ---
 
@@ -56,6 +65,7 @@
 **Cargo.toml** 添加：
 ```toml
 tauri-plugin-dialog = "2"
+sha2 = "0.10"          # SHA-256 计算（项目当前无任何 hash crate）
 ```
 
 **package.json** 添加：
@@ -64,6 +74,14 @@ tauri-plugin-dialog = "2"
 ```
 
 > `plugin-fs` 不需要——文件读写全在 Rust command 内用 `std::fs`/`tokio::fs` 完成。
+
+**`src-tauri/src/lib.rs`** 注册插件（现有 plugin 注册在 `.invoke_handler` 之前，约第 235-237 行）：
+```rust
+.plugin(tauri_plugin_opener::init())
+.plugin(tauri_plugin_os::init())
+.plugin(tauri_plugin_prevent_default::debug())
+.plugin(tauri_plugin_dialog::init())     // ← 新增
+```
 
 ### 1.2 Tauri 配置
 
@@ -79,6 +97,21 @@ tauri-plugin-dialog = "2"
   }
 }
 ```
+
+### 1.3 Capabilities（易漏）
+
+`src-tauri/capabilities/default.json` 的 `permissions` 数组必须加 dialog 权限，否则前端 `open()`/`save()` 调用会被权限系统拒绝：
+```json
+"permissions": [
+  "core:default",
+  "os:default",
+  "dialog:default",        // ← 新增
+  "core:window:allow-minimize",
+  ...
+]
+```
+
+> 群文件/相册 UI 只在 `main` 窗口的群详情里，`default.json`（`"windows": ["main"]`）即可，无需改 `chat.json`。`assetProtocol` 启用后 `convertFileSrc` 不需要额外 capability 权限。
 
 ### 1.3 Migration 0003
 
@@ -182,6 +215,20 @@ pub struct GroupCategoryEntity {
 
 ## Phase 2：群文件（A）
 
+### 2.0 app_data_dir 获取方式（关键约束）
+
+**`ServiceHub` 不持有 `app_data_dir`**——它只 bundle 7 个 service（message/interaction/group/request/user/bot/settings），没有路径字段。落盘逻辑不能假设 service 能拿到 app_data_dir。
+
+项目已有惯例（见 `commands/packet.rs::read_protocol_packet`）：**command 层接 `app: tauri::AppHandle`，用 `app.path().app_data_dir()` 取目录**（需 `use tauri::Manager;`）。`PacketRecorder` 则是在 `lib.rs` 构造时注入 `PathBuf`（见 `recorder.rs::new`）。
+
+本期采用 **command 层取 app_data_dir + 调用一个独立的文件落盘 helper** 的方案，不污染 GroupService：
+
+- command 接 `app: tauri::AppHandle` → 拿到 `app_data_dir: PathBuf`
+- command 调用 `crate::services::group::storage`（新建 mod）里的落盘函数完成 sanitize/hash/原子写/路径校验，返回相对路径
+- command 再调 `services.group.upsert_group_file(...)` 写 DB 记录（DB 失败时 command 负责删已落盘文件）
+
+> 落盘与 DB 写入分离：文件 IO 不进 GroupService，GroupService 只管 DB 记录和事件 emit，与现有 `upsert_group_file` 签名兼容（仅给 entity 加 `file_path` 字段）。
+
 ### 2.1 文件存储规划
 
 目录结构（`app_data_dir` 下，与 `packets/` 平级）：
@@ -219,9 +266,11 @@ pub struct GroupCategoryEntity {
 
 ### 2.4 写入策略
 
-1. 先写同目录临时文件（`.tmp` 后缀）
-2. `std::fs::rename` 原子移动到目标路径
-3. 数据库写入失败则删除已落盘文件（rollback）
+参照 `recorder.rs::record` 的既有惯例：
+1. `tokio::fs::create_dir_all(groups/{group_id}/files/)`
+2. 先写同目录临时文件（`.{file_id}.tmp` 前缀，与 recorder 一致）
+3. `tokio::fs::rename` 原子移动到目标路径；rename 失败时 `std::fs::remove_file` 清理临时文件
+4. 数据库写入失败则删除已落盘文件（rollback）
 
 ### 2.5 后端 Command
 
@@ -229,26 +278,27 @@ pub struct GroupCategoryEntity {
 ```rust
 #[tauri::command]
 pub async fn upload_group_file(
-    app: tauri::AppHandle,
+    app: tauri::AppHandle,              // ← 取 app_data_dir，参照 read_protocol_packet
     services: tauri::State<'_, crate::services::ServiceHub>,
     core: tauri::State<'_, crate::core::CoreContainer>,
     user_id: String,
     group_id: String,
     parent_folder_id: Option<String>,
-    src_path: String,              // ← 前端 dialog open() 返回的绝对路径
+    src_path: String,                   // ← 前端 dialog open() 返回的绝对路径
 ) -> Result<GroupFileEntity, String>
 ```
 
 流程：
-1. 校验用户是群成员
-2. `parent_folder_id` 非空时校验文件夹存在且属于该群
-3. `tokio::fs::metadata(&src_path).await` 取文件大小，超限（50MB）返回 Err
-4. 提取原文件名并 sanitize → `{file_id}_{sanitized_name}`
-5. 流式读取计算 SHA-256 hex（64 字符完整 hash）
-6. 拷贝到 `groups/{group_id}/files/` 临时文件 → rename
-7. `group_files` INSERT（含相对 `file_path`、`file_size`、`file_hash`、`uploader_user_id`）
-8. DB 失败 → 删除已落盘文件
-9. emit `GroupFileUpserted` 事件
+1. `app.path().app_data_dir()` 取目录（`use tauri::Manager;`）
+2. 校验用户是群成员（`services.group.ensure_group_member`，已有）
+3. `parent_folder_id` 非空时校验文件夹存在且属于该群
+4. `tokio::fs::metadata(&src_path).await` 取文件大小，超限（50MB）返回 Err
+5. 提取原文件名并 sanitize → `{file_id}_{sanitized_name}`（`file_id = new_db_id()`）
+6. 流式读取计算 SHA-256 hex（64 字符完整 hash，用 `sha2` crate）
+7. 落盘 helper：拷贝到 `groups/{group_id}/files/` 临时文件 → rename，返回相对 `file_path`
+8. `services.group.upsert_group_file(core, file)` 写 DB（entity 含 `file_path`）
+9. DB 失败 → command 删除已落盘文件
+10. service 内部 emit `GroupFileUpserted` 事件（已有逻辑）
 
 #### `download_group_file`
 ```rust
@@ -256,22 +306,25 @@ pub async fn upload_group_file(
 pub async fn download_group_file(
     app: tauri::AppHandle,
     services: tauri::State<'_, crate::services::ServiceHub>,
+    user_id: String,                // ← 校验该用户是群成员
     file_id: String,
     dest_path: String,             // ← 前端 dialog save() 返回的绝对路径
 ) -> Result<(), String>
 ```
 
 流程：
-1. 查记录 → 取 `file_path`
-2. 路径安全校验（canonicalize + 前缀检查）
-3. `std::fs::copy(src, dest_path)`
-4. `download_count + 1`
-5. 源文件缺失返回 Err
+1. 查记录 → 取 `group_id` + `file_path`
+2. 校验 `user_id` 是该群成员（`ensure_group_member`）
+3. 路径安全校验（`app_data_dir.join(file_path).canonicalize()` + 前缀检查）
+4. `std::fs::copy(src, dest_path)`
+5. `download_count + 1`
+6. 源文件缺失返回 Err
 
 #### `delete_group_file`
 ```rust
 #[tauri::command]
 pub async fn delete_group_file(
+    app: tauri::AppHandle,           // ← 取 app_data_dir 删磁盘文件
     services: tauri::State<'_, crate::services::ServiceHub>,
     user_id: String,
     file_id: String,
@@ -279,9 +332,10 @@ pub async fn delete_group_file(
 ```
 
 流程：
-1. 查记录 → 校验操作者是上传者本人或群管理员/群主
-2. DELETE `group_files` 行
-3. 尝试删除磁盘文件，失败仅 `eprintln!` 不阻断
+1. 查记录 → 取 `group_id` + `uploader_user_id` + `file_path`
+2. 校验操作者是上传者本人或群管理员/群主
+3. DELETE `group_files` 行
+4. `app.path().app_data_dir()` → join `file_path` → 路径安全校验 → 删磁盘文件，失败仅 `eprintln!` 不阻断
 
 ### 2.6 Repo 变更
 
@@ -292,6 +346,8 @@ pub async fn delete_group_file(
 - 新增 `get_group_file_by_id(file_id) -> Option<GroupFileEntity>`
 - 新增 `delete_group_file(file_id) -> Result<(), sqlx::Error>`
 - `list_group_files` 增加 `parent_folder_id` 过滤参数（当前查询返回整个群的全部文件，不分文件夹）
+
+> **根目录 parent_folder_id 约定**：schema 里 `group_files.parent_folder_id` 可空（根目录文件存 NULL），但 entity 用空串 `""` 表示根目录（见 `upsert_group_folder` 里 `parent_folder_id.is_empty() || == "/"` → `None` 的既有惯例）。`list_group_files(group_id, parent_folder_id)` 过滤时需把空串映射为 `parent_folder_id IS NULL` 查询，非空串映射为 `parent_folder_id = ?`。
 
 **Row type 更新**：`GroupFileRow` 加 `file_path: Option<String>`。
 
@@ -373,6 +429,7 @@ pub async fn create_group_album(
 
 #[tauri::command]
 pub async fn list_group_albums(
+    app: tauri::AppHandle,          // ← 取 app_data_dir 拼接 cover_abs_path
     services: tauri::State<'_, crate::services::ServiceHub>,
     user_id: String,
     group_id: String,
@@ -380,6 +437,7 @@ pub async fn list_group_albums(
 
 #[tauri::command]
 pub async fn delete_group_album(
+    app: tauri::AppHandle,          // ← 取 app_data_dir 删磁盘目录
     services: tauri::State<'_, crate::services::ServiceHub>,
     user_id: String,
     album_id: String,
@@ -424,7 +482,7 @@ pub async fn upload_group_photo(
 ```rust
 #[tauri::command]
 pub async fn list_group_photos(
-    app: tauri::AppHandle,
+    app: tauri::AppHandle,          // ← 取 app_data_dir 拼接 abs_path
     services: tauri::State<'_, crate::services::ServiceHub>,
     user_id: String,
     album_id: String,
@@ -432,6 +490,7 @@ pub async fn list_group_photos(
 
 #[tauri::command]
 pub async fn delete_group_photo(
+    app: tauri::AppHandle,          // ← 取 app_data_dir 删磁盘文件
     services: tauri::State<'_, crate::services::ServiceHub>,
     user_id: String,
     photo_id: String,
@@ -565,20 +624,40 @@ pub struct ConversationState {
 }
 ```
 
-UPSERT 使用 `conversation_id` 生成规则：`{owner}:{scene}:{peer_or_group}`（与 `repo/message.rs` 中的规则一致）。
+UPSERT 使用 `conversation_id` 生成规则：`{owner}:{scene}:{peer_or_group}`（与 `repo/message.rs::insert_message` 中 `conversation_id` 的生成规则完全一致）。
 
-```sql
-INSERT INTO conversations (conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id, is_pinned, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
-    WHERE conversation_scene IN ('private', 'temp')
-DO UPDATE SET is_pinned = excluded.is_pinned, updated_at = excluded.updated_at
-ON CONFLICT(owner_user_id, conversation_scene, group_id)
-    WHERE conversation_scene = 'group'
-DO UPDATE SET is_pinned = excluded.is_pinned, updated_at = excluded.updated_at
+**注意：单条 SQL 不能带两个 `ON CONFLICT`**——SQLite 不支持。必须像 `message.rs` 那样按 scene 走两条不同的 SQL，每条单 conflict target。private/temp 走 `uq_conversation_private`，group 走 `uq_conversation_group`：
+
+```rust
+// scene == "private" | "temp"
+// conversation_id = format!("{owner}:{scene}:{peer}")
+sqlx::query(
+    r#"
+    INSERT INTO conversations (
+        conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id, is_pinned, updated_at
+    ) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6)
+    ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
+        WHERE conversation_scene IN ('private', 'temp')
+    DO UPDATE SET is_pinned = excluded.is_pinned, updated_at = excluded.updated_at
+    "#,
+)
+// scene == "group"
+// conversation_id = format!("{owner}:group:{group_id}")
+sqlx::query(
+    r#"
+    INSERT INTO conversations (
+        conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id, is_pinned, updated_at
+    ) VALUES (?1, ?2, 'group', NULL, ?3, ?4, ?5)
+    ON CONFLICT(owner_user_id, conversation_scene, group_id)
+        WHERE conversation_scene = 'group'
+    DO UPDATE SET is_pinned = excluded.is_pinned, updated_at = excluded.updated_at
+    "#,
+)
 ```
 
-> 注意：SQLite 3.35.0+ 才支持 `UPSERT` 多 conflict target；Tauri 自带的 SQLite 版本需确认。若不支持多 conflict，fallback 为 `INSERT OR REPLACE` 整行替换（会丢 `last_message_id`/`unread_count`，需先 SELECT 再 REPLACE）。
+> 这两条带 `WHERE` 的 partial-index conflict target 已在 `message.rs` 跑通（见 0001 schema 的 `uq_conversation_private` / `uq_conversation_group`），无 SQLite 版本兼容风险。`set_conversation_muted` 同理，把 `is_pinned` 换成 `is_muted`。
+>
+> **新插入时另一字段取默认值**：插 private 行只 set `is_pinned`，`is_muted` 走列默认 `0`；后续 set muted 再 UPDATE。两个 command 各自独立 UPSERT 互不覆盖（DO UPDATE 只动自己那一列）。
 
 #### 群分类
 ```rust
