@@ -96,7 +96,14 @@ impl BotService {
             }
         };
 
-        bot.try_into()
+        let profile: BotProfile = bot.try_into()?;
+        tracing::info!(
+            target: "bot_service",
+            bot_id = %profile.bot_id,
+            display_name = %profile.display_name,
+            "bot created"
+        );
+        Ok(profile)
     }
 
     pub async fn list_bots(&self) -> AppResult<Vec<BotProfile>> {
@@ -138,6 +145,7 @@ impl BotService {
             }
         }
 
+        tracing::info!(target: "bot_service", bot_id = %bot_id, "bot deleted");
         Ok(())
     }
 
@@ -147,7 +155,8 @@ impl BotService {
         bot_id: String,
     ) -> AppResult<DebugSession> {
         // Start runtime (it creates the session)
-        let _addr = runtime.start_bot(&bot_id).await?;
+        let addr = runtime.start_bot(&bot_id).await?;
+        tracing::info!(target: "bot_service", bot_id = %bot_id, addr = %addr, "bot started");
 
         // Return the latest active session
         let sessions = self.repo.list_sessions_by_bot(&bot_id).await?;
@@ -163,7 +172,9 @@ impl BotService {
         runtime: &crate::protocol::ProtocolRuntimeManager,
         bot_id: String,
     ) -> AppResult<()> {
-        runtime.stop_bot(&bot_id).await
+        runtime.stop_bot(&bot_id).await?;
+        tracing::info!(target: "bot_service", bot_id = %bot_id, "bot stopped");
+        Ok(())
     }
 
     pub async fn list_sessions(&self, bot_id: String) -> AppResult<Vec<DebugSession>> {

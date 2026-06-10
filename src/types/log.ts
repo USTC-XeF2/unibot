@@ -3,7 +3,7 @@ export interface SystemLogEntry {
   level: "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR";
   target: string;
   msg: string;
-  fields?: Record<string, unknown>;
+  fields?: Record<string, unknown> | null;
 }
 
 export interface LogSettings {
@@ -11,6 +11,7 @@ export interface LogSettings {
   retention_days: number;
 }
 
+// TODO: Phase 1 does not enable cursor pagination; keep the type for Phase 2.
 export interface LogPage<T> {
   items: T[];
   next_cursor: number | null;

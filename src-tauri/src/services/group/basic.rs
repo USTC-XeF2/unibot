@@ -49,6 +49,13 @@ impl GroupService {
         };
 
         self.repo.upsert_group(&group).await?;
+        tracing::info!(
+            target: "group_service",
+            group_id = %group_id,
+            group_name = %group.group_name,
+            owner = %user_id,
+            "group created"
+        );
 
         let owner_member = GroupMemberProfile {
             group_id: group_id.clone(),

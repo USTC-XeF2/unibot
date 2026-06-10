@@ -201,6 +201,12 @@ impl GroupService {
             return Err(AppError::not_found(format!("group {} not found", group_id)));
         }
 
+        tracing::info!(
+            target: "group_service",
+            group_id = %group_id,
+            user_id = %user_id,
+            "group dissolved"
+        );
         Ok(())
     }
 }

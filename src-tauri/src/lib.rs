@@ -127,7 +127,7 @@ pub fn run() {
                     let today_4am = chrono::Local::now()
                         .date_naive()
                         .and_hms_opt(4, 0, 0)
-                        .unwrap_or_default()
+                        .expect("4:00 is a valid time")
                         .and_utc()
                         .timestamp_millis();
 
@@ -148,7 +148,7 @@ pub fn run() {
                         let tomorrow = now.date_naive().succ_opt().unwrap_or(now.date_naive());
                         let tomorrow_4am = match tomorrow
                             .and_hms_opt(4, 0, 0)
-                            .unwrap_or_default()
+                            .expect("4:00 is a valid time")
                             .and_local_timezone(chrono::Local)
                         {
                             chrono::LocalResult::Single(dt) => dt,

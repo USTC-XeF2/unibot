@@ -140,6 +140,14 @@ impl MessageService {
             recipients_for_source(core, &self.group_repo, &source, &user_id, Some(&user_id)).await;
         emit_to_users(core, recipients, event);
 
+        tracing::info!(
+            target: "message_service",
+            message_id = %saved.id,
+            sender = %user_id,
+            source = ?source,
+            "message sent"
+        );
+
         Ok(SendMessageResult {
             id: saved.id,
             sender_user_id: user_id,

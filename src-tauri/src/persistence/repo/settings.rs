@@ -28,7 +28,18 @@ impl SettingsRepo {
 
     pub async fn get_i64(&self, key: &str, default: i64) -> i64 {
         match self.get_raw(key).await {
-            Ok(Some(record)) => record.setting_value.parse().unwrap_or(default),
+            Ok(Some(record)) => match record.setting_value.parse() {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "settings_repo",
+                        key = %key,
+                        value = %record.setting_value,
+                        "failed to parse setting value as i64: {e}"
+                    );
+                    default
+                }
+            },
             _ => default,
         }
     }

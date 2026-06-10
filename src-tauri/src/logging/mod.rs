@@ -94,6 +94,13 @@ pub async fn read_system_logs(
         return Ok(vec![]);
     }
 
+    // Compute date range from `before` to filter files at the directory level.
+    // We only read files whose date <= the day of `before` (or today if no before).
+    // This avoids opening every log file when the user only wants recent entries.
+    let max_file_date = before.and_then(|ts| {
+        chrono::DateTime::from_timestamp_millis(ts as i64).map(|dt| dt.date_naive())
+    });
+
     let mut entries = Vec::new();
     let mut read_files = tokio::fs::read_dir(log_dir).await?;
 
@@ -109,6 +116,16 @@ pub async fn read_system_logs(
             .strip_prefix("unibot.")
             .and_then(|s| s.strip_suffix(".log"))
             .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
+        // File-level filtering: skip files newer than the query window.
+        // If no `before` is given, we read all files.
+        if let Some(max_date) = max_file_date {
+            if let Some(date) = file_date {
+                if date > max_date {
+                    continue;
+                }
+            }
+        }
 
         let file = tokio::fs::File::open(&path).await?;
         let reader = tokio::io::BufReader::new(file);

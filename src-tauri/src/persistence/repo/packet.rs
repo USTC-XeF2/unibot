@@ -3,8 +3,8 @@ use sqlx::{QueryBuilder, SqlitePool};
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 pub struct ProtocolPacketRecord {
     pub packet_id: String,
-    pub bot_id: String,
-    pub profile_id: String,
+    pub bot_id: Option<String>,
+    pub profile_id: Option<String>,
     pub protocol_type: String,
     pub direction: String,
     pub action_name: String,
@@ -12,7 +12,7 @@ pub struct ProtocolPacketRecord {
     pub related_object_type: Option<String>,
     pub related_object_id: Option<String>,
     pub is_error: i32,
-    pub session_id: String,
+    pub session_id: Option<String>,
     pub created_at: i64,
 }
 

@@ -44,6 +44,12 @@ impl UserService {
         self.repo.upsert_user(&profile).await?;
         core.register_user(profile.clone())?;
 
+        tracing::info!(
+            target: "user_service",
+            user_id = %profile.user_id,
+            nickname = %profile.nickname,
+            "user registered"
+        );
         Ok(profile)
     }
 
@@ -112,6 +118,7 @@ impl UserService {
         }
 
         core.unregister_user(&user_id);
+        tracing::info!(target: "user_service", user_id = %user_id, "user deleted");
         Ok(())
     }
 
