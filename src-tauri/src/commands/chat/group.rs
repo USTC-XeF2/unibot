@@ -391,7 +391,7 @@ pub async fn upload_group_file(
 
     let file_hash = crate::services::group::storage::compute_sha256(&app_data_dir.join(&file_path))
         .await
-        .map_err(|e| e.to_string())?;
+        .into_command_result()?;
 
     let file = GroupFileEntity {
         file_id,

@@ -161,7 +161,8 @@ impl GroupRepo {
             SELECT file_id, group_id, parent_folder_id, file_name, file_size, file_hash,
                    uploader_user_id, created_at AS uploaded_at, expire_at, file_path, download_count
             FROM group_files
-            WHERE group_id = ?1 AND (parent_folder_id = ?2 OR (?2 IS NULL AND parent_folder_id IS NULL))
+            WHERE group_id = ?1
+              AND COALESCE(parent_folder_id, '') = COALESCE(?2, '')
             ORDER BY created_at DESC
             "#,
         )

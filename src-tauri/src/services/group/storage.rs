@@ -90,7 +90,7 @@ pub async fn validate_group_file_path(file_path: &str, app_data_dir: &Path) -> A
 
     let allowed_prefix = tokio::fs::canonicalize(app_data_dir.join("groups"))
         .await
-        .unwrap_or_else(|_| app_data_dir.join("groups"));
+        .map_err(|e| AppError::storage(format!("groups dir not accessible: {e}")))?;
 
     if !canonical.starts_with(&allowed_prefix) {
         return Err(AppError::validation("file path escapes allowed directory"));
