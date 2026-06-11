@@ -181,10 +181,15 @@ impl CoreContainer {
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
-                        if let Some(window) =
-                            app_handle_for_events.get_webview_window(&event_window_label)
+                        if app_handle_for_events
+                            .get_webview_window(&event_window_label)
+                            .is_some()
                         {
-                            let _ = window.emit("chat:event", &event);
+                            let _ = app_handle_for_events.emit_to(
+                                &event_window_label,
+                                "chat:event",
+                                &event,
+                            );
                         } else {
                             break;
                         }
