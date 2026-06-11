@@ -21,59 +21,16 @@ impl ConversationRepo {
         is_pinned: bool,
         updated_at: i64,
     ) -> Result<(), sqlx::Error> {
-        let is_private = scene == "private" || scene == "temp";
-        let is_pinned_i: i64 = if is_pinned { 1 } else { 0 };
-
-        if is_private {
-            let peer = peer_user_id.unwrap_or("");
-            let conversation_id = format!("{owner_user_id}:{scene}:{peer}");
-            sqlx::query(
-                r#"
-                INSERT INTO conversations (
-                    conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                    is_pinned, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6)
-                ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
-                    WHERE conversation_scene IN ('private', 'temp')
-                DO UPDATE SET
-                    is_pinned = excluded.is_pinned,
-                    updated_at = excluded.updated_at
-                "#,
-            )
-            .bind(&conversation_id)
-            .bind(owner_user_id)
-            .bind(scene)
-            .bind(peer)
-            .bind(is_pinned_i)
-            .bind(updated_at)
-            .execute(&self.pool)
-            .await?;
-        } else {
-            let group = group_id.unwrap_or("");
-            let conversation_id = format!("{owner_user_id}:group:{group}");
-            sqlx::query(
-                r#"
-                INSERT INTO conversations (
-                    conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                    is_pinned, updated_at
-                ) VALUES (?1, ?2, 'group', NULL, ?3, ?4, ?5)
-                ON CONFLICT(owner_user_id, conversation_scene, group_id)
-                    WHERE conversation_scene = 'group'
-                DO UPDATE SET
-                    is_pinned = excluded.is_pinned,
-                    updated_at = excluded.updated_at
-                "#,
-            )
-            .bind(&conversation_id)
-            .bind(owner_user_id)
-            .bind(group)
-            .bind(is_pinned_i)
-            .bind(updated_at)
-            .execute(&self.pool)
-            .await?;
-        }
-
-        Ok(())
+        self.upsert_conversation_flag(
+            owner_user_id,
+            scene,
+            peer_user_id,
+            group_id,
+            "is_pinned",
+            is_pinned,
+            updated_at,
+        )
+        .await
     }
 
     pub async fn upsert_conversation_muted(
@@ -85,56 +42,83 @@ impl ConversationRepo {
         is_muted: bool,
         updated_at: i64,
     ) -> Result<(), sqlx::Error> {
+        self.upsert_conversation_flag(
+            owner_user_id,
+            scene,
+            peer_user_id,
+            group_id,
+            "is_muted",
+            is_muted,
+            updated_at,
+        )
+        .await
+    }
+
+    /// Upsert a boolean flag (`is_pinned` or `is_muted`) on the conversations table.
+    /// The `flag_column` is a hard-coded literal (not user input) so formatting the
+    /// SQL string is safe.
+    async fn upsert_conversation_flag(
+        &self,
+        owner_user_id: &str,
+        scene: &str,
+        peer_user_id: Option<&str>,
+        group_id: Option<&str>,
+        flag_column: &str,
+        flag_value: bool,
+        updated_at: i64,
+    ) -> Result<(), sqlx::Error> {
         let is_private = scene == "private" || scene == "temp";
-        let is_muted_i: i64 = if is_muted { 1 } else { 0 };
+        let flag_i: i64 = if flag_value { 1 } else { 0 };
 
         if is_private {
             let peer = peer_user_id.unwrap_or("");
             let conversation_id = format!("{owner_user_id}:{scene}:{peer}");
-            sqlx::query(
+            let sql = format!(
                 r#"
                 INSERT INTO conversations (
                     conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                    is_muted, updated_at
+                    {flag_column}, updated_at
                 ) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6)
                 ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
                     WHERE conversation_scene IN ('private', 'temp')
                 DO UPDATE SET
-                    is_muted = excluded.is_muted,
+                    {flag_column} = excluded.{flag_column},
                     updated_at = excluded.updated_at
-                "#,
-            )
-            .bind(&conversation_id)
-            .bind(owner_user_id)
-            .bind(scene)
-            .bind(peer)
-            .bind(is_muted_i)
-            .bind(updated_at)
-            .execute(&self.pool)
-            .await?;
+                "#
+            );
+            sqlx::query(&sql)
+                .bind(&conversation_id)
+                .bind(owner_user_id)
+                .bind(scene)
+                .bind(peer)
+                .bind(flag_i)
+                .bind(updated_at)
+                .execute(&self.pool)
+                .await?;
         } else {
             let group = group_id.unwrap_or("");
             let conversation_id = format!("{owner_user_id}:group:{group}");
-            sqlx::query(
+            let sql = format!(
                 r#"
                 INSERT INTO conversations (
                     conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                    is_muted, updated_at
+                    {flag_column}, updated_at
                 ) VALUES (?1, ?2, 'group', NULL, ?3, ?4, ?5)
                 ON CONFLICT(owner_user_id, conversation_scene, group_id)
                     WHERE conversation_scene = 'group'
                 DO UPDATE SET
-                    is_muted = excluded.is_muted,
+                    {flag_column} = excluded.{flag_column},
                     updated_at = excluded.updated_at
-                "#,
-            )
-            .bind(&conversation_id)
-            .bind(owner_user_id)
-            .bind(group)
-            .bind(is_muted_i)
-            .bind(updated_at)
-            .execute(&self.pool)
-            .await?;
+                "#
+            );
+            sqlx::query(&sql)
+                .bind(&conversation_id)
+                .bind(owner_user_id)
+                .bind(group)
+                .bind(flag_i)
+                .bind(updated_at)
+                .execute(&self.pool)
+                .await?;
         }
 
         Ok(())
