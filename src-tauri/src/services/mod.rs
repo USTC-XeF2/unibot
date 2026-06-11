@@ -1,4 +1,5 @@
 pub mod bot;
+pub mod conversation;
 pub mod group;
 pub mod interaction;
 pub mod message;
@@ -7,6 +8,7 @@ pub mod settings;
 pub mod user;
 
 pub use bot::{BotService, StatsResult};
+pub use conversation::ConversationService;
 pub use group::{GroupService, MuteGroupMemberResult};
 pub use interaction::InteractionService;
 pub use message::{MessageService, SendMessageResult};
@@ -23,6 +25,7 @@ pub struct ServiceHub {
     pub user: UserService,
     pub bot: BotService,
     pub settings: SettingsService,
+    pub conversation: ConversationService,
 }
 
 impl ServiceHub {
@@ -34,6 +37,7 @@ impl ServiceHub {
         user: UserService,
         bot: BotService,
         settings: SettingsService,
+        conversation: ConversationService,
     ) -> Self {
         Self {
             message,
@@ -43,6 +47,7 @@ impl ServiceHub {
             user,
             bot,
             settings,
+            conversation,
         }
     }
 }

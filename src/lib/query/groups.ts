@@ -4,7 +4,15 @@ import { isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 import type { GroupEvent } from "@/types/event";
-import type { GroupMemberProfile, GroupProfile } from "@/types/group";
+import type {
+  ConversationState,
+  GroupAlbum,
+  GroupCategory,
+  GroupFile,
+  GroupMemberProfile,
+  GroupPhoto,
+  GroupProfile,
+} from "@/types/group";
 
 export function useGroupsQuery() {
   return useQuery({
@@ -73,5 +81,117 @@ export function invalidateGroupEventHistoryQuery(
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.eventHistoryPrefix(userId, groupId),
     refetchType: "active",
+  });
+}
+
+// === Conversation States ===
+
+export function useConversationStatesQuery(userId: string) {
+  return useQuery({
+    queryKey: queryKeys.conversation.states(userId),
+    enabled: isValidUserId(userId),
+    queryFn: () =>
+      invoke<ConversationState[]>("list_conversation_states", { userId }),
+    retry: false,
+  });
+}
+
+export function invalidateConversationStatesQuery(userId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.conversation.states(userId),
+  });
+}
+
+// === Group Categories ===
+
+export function useGroupCategoriesQuery(userId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.categories(userId),
+    enabled: isValidUserId(userId),
+    queryFn: () => invoke<GroupCategory[]>("list_group_categories", { userId }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupCategoriesQuery(userId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.categories(userId),
+  });
+}
+
+// === Group Files ===
+
+export function useGroupFilesQuery(
+  userId: string,
+  groupId: string,
+  parentFolderId?: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupFile[]>("list_group_files", {
+        userId,
+        groupId,
+        parentFolderId: parentFolderId || null,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupFilesQuery(
+  userId: string,
+  groupId: string,
+  parentFolderId?: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
+  });
+}
+
+// === Group Albums ===
+
+export function useGroupAlbumsQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.albums(userId, groupId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupAlbum[]>("list_group_albums", {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupAlbumsQuery(userId: string, groupId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.albums(userId, groupId),
+  });
+}
+
+// === Group Photos ===
+
+export function useGroupPhotosQuery(
+  userId: string,
+  groupId: string,
+  albumId: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.groups.photos(userId, albumId),
+    enabled: isValidUserId(userId) && groupId.length > 0 && albumId.length > 0,
+    queryFn: () =>
+      invoke<GroupPhoto[]>("list_group_photos", {
+        userId,
+        groupId,
+        albumId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupPhotosQuery(userId: string, albumId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.photos(userId, albumId),
   });
 }

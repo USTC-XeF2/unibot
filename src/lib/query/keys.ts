@@ -27,6 +27,16 @@ export const queryKeys = {
       ["groups", "event-history", userId, groupId, limit] as const,
     members: (userId: string, groupId: string) =>
       ["groups", "members", userId, groupId] as const,
+    categories: (userId: string) => ["groups", "categories", userId] as const,
+    files: (userId: string, groupId: string, parentFolderId?: string) =>
+      ["groups", "files", userId, groupId, parentFolderId ?? "root"] as const,
+    albums: (userId: string, groupId: string) =>
+      ["groups", "albums", userId, groupId] as const,
+    photos: (userId: string, albumId: string) =>
+      ["groups", "photos", userId, albumId] as const,
+  },
+  conversation: {
+    states: (userId: string) => ["conversation", "states", userId] as const,
   },
   requests: {
     friendByUser: (userId: string) => ["requests", "friend", userId] as const,

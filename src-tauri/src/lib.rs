@@ -12,17 +12,18 @@ use tauri::Manager;
 
 use commands::{
     bot,
-    chat::{group, message, request, user},
+    chat::{conversation, group, message, request, user},
     log, main, packet,
 };
 use core::CoreContainer;
 use persistence::{
-    BotRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo, init_sqlite_pool,
+    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo,
+    init_sqlite_pool,
 };
 use protocol::ProtocolRuntimeManager;
 use services::{
-    BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
-    SettingsService, UserService,
+    BotService, ConversationService, GroupService, InteractionService, MessageService,
+    RequestService, ServiceHub, SettingsService, UserService,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -44,11 +45,12 @@ pub fn run() {
                     message_repo_for_interaction,
                     group_repo.clone(),
                 ),
-                GroupService::new(group_repo, message_repo.clone()),
+                GroupService::new(group_repo.clone(), message_repo.clone()),
                 RequestService::new(request_user_repo),
                 UserService::new(user_repo.clone()),
                 BotService::new(bot_repo.clone()),
                 SettingsService::new(SettingsRepo::new(pool.clone())),
+                ConversationService::new(ConversationRepo::new(pool.clone())),
             );
 
             let core = CoreContainer::new();
@@ -70,6 +72,11 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .map_err(|err| format!("failed to get app data dir: {err}"))?;
+
+            // Ensure groups directory exists for file storage
+            let groups_dir = app_data_dir.join("groups");
+            std::fs::create_dir_all(&groups_dir)
+                .map_err(|err| format!("failed to create groups dir: {err}"))?;
 
             // Initialize tracing/logging
             let log_level = tauri::async_runtime::block_on(service_hub.settings.get_log_level());
@@ -234,6 +241,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_prevent_default::debug())
         .invoke_handler(tauri::generate_handler![
             main::register_user,
@@ -291,8 +299,24 @@ pub fn run() {
             group::list_group_folders,
             group::upsert_group_file,
             group::list_group_files,
+            group::upload_group_file,
+            group::download_group_file,
+            group::delete_group_file,
+            group::create_group_album,
+            group::list_group_albums,
+            group::delete_group_album,
+            group::upload_group_photo,
+            group::list_group_photos,
+            group::delete_group_photo,
             group::set_group_essence_message,
             group::list_group_essence_messages,
+            conversation::set_conversation_pinned,
+            conversation::set_conversation_muted,
+            conversation::list_conversation_states,
+            conversation::list_group_categories,
+            conversation::create_group_category,
+            conversation::delete_group_category,
+            conversation::set_group_category,
             packet::list_protocol_packets,
             packet::read_protocol_packet,
         ])

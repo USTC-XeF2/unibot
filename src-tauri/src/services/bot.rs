@@ -8,9 +8,9 @@ use std::io::ErrorKind;
 use tauri::Manager;
 
 #[cfg(test)]
-use crate::persistence::SettingsRepo;
+use crate::persistence::{ConversationRepo, SettingsRepo};
 #[cfg(test)]
-use crate::services::SettingsService;
+use crate::services::{ConversationService, SettingsService};
 
 #[derive(Clone)]
 pub struct BotService {
@@ -295,6 +295,7 @@ mod tests {
             UserService::new(user_repo),
             BotService::new(repo.clone()),
             SettingsService::new(SettingsRepo::new(pool.clone())),
+            ConversationService::new(ConversationRepo::new(pool.clone())),
         );
 
         let result = BotService::new(repo.clone())

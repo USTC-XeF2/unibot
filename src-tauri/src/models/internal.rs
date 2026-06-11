@@ -145,6 +145,23 @@ pub enum InternalEvent {
         is_set: bool,
         time: u64,
     },
+    GroupAlbumCreated {
+        album_id: DbId,
+        group_id: DbId,
+        name: String,
+        time: u64,
+    },
+    GroupAlbumDeleted {
+        album_id: DbId,
+        group_id: DbId,
+        time: u64,
+    },
+    GroupPhotoUploaded {
+        photo_id: DbId,
+        album_id: DbId,
+        group_id: DbId,
+        time: u64,
+    },
     Notice {
         group_id: DbId,
         actor: DbId,

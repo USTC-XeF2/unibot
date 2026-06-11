@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupEventPayload, GroupMemberProfile, GroupProfile, GroupRole, GroupWholeMuteState,
-    InternalEvent,
+    GroupCategoryEntity, GroupEventPayload, GroupMemberProfile, GroupProfile, GroupRole,
+    GroupWholeMuteState, InternalEvent,
 };
 use crate::utils::{emit_to_group_members, now_ts};
 
@@ -46,6 +46,7 @@ impl GroupService {
             member_count: 0,
             max_member_count,
             group_status: Default::default(),
+            category_id: None,
         };
 
         self.repo.upsert_group(&group).await?;
@@ -333,6 +334,83 @@ impl GroupService {
         self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
             .get_group_whole_mute(&group_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    // === Group Category ===
+
+    pub async fn list_group_categories(
+        &self,
+        user_id: String,
+    ) -> AppResult<Vec<GroupCategoryEntity>> {
+        self.repo
+            .list_group_categories(&user_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn create_group_category(
+        &self,
+        user_id: String,
+        name: String,
+    ) -> AppResult<GroupCategoryEntity> {
+        if name.trim().is_empty() {
+            return Err(AppError::validation("category name cannot be empty"));
+        }
+        self.repo
+            .create_group_category(&user_id, &name)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_group_category(
+        &self,
+        user_id: String,
+        category_id: String,
+    ) -> AppResult<()> {
+        let category = self
+            .repo
+            .get_group_category_by_id(&category_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("category {} not found", category_id)))?;
+
+        if category.owner_user_id != user_id {
+            return Err(AppError::validation(
+                "cannot delete another user's category",
+            ));
+        }
+
+        self.repo
+            .delete_group_category(&category_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn set_group_category(
+        &self,
+        user_id: String,
+        group_id: String,
+        category_id: Option<String>,
+    ) -> AppResult<()> {
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        if let Some(ref cid) = category_id {
+            let category = self
+                .repo
+                .get_group_category_by_id(cid)
+                .await?
+                .ok_or_else(|| AppError::not_found(format!("category {} not found", cid)))?;
+
+            if category.owner_user_id != user_id {
+                return Err(AppError::validation(
+                    "cannot assign group to another user's category",
+                ));
+            }
+        }
+
+        self.repo
+            .set_group_category(&user_id, &group_id, category_id.as_deref())
             .await
             .map_err(Into::into)
     }

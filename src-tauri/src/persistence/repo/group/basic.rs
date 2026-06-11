@@ -1,8 +1,10 @@
-use crate::models::{GroupMemberProfile, GroupProfile, GroupRole, GroupWholeMuteState};
+use crate::models::{
+    GroupCategoryEntity, GroupMemberProfile, GroupProfile, GroupRole, GroupWholeMuteState,
+};
 use crate::persistence::repo::codecs;
 
 use super::GroupRepo;
-use super::types::{GroupMemberRow, GroupRow, GroupWholeMuteRow};
+use super::types::{GroupCategoryRow, GroupMemberRow, GroupRow, GroupWholeMuteRow, UserGroupRow};
 
 impl GroupRepo {
     pub async fn upsert_group(&self, group: &GroupProfile) -> Result<(), sqlx::Error> {
@@ -54,14 +56,15 @@ impl GroupRepo {
     }
 
     pub async fn list_user_groups(&self, user_id: &str) -> Result<Vec<GroupProfile>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, GroupRow>(
+        let rows = sqlx::query_as::<_, UserGroupRow>(
             r#"
             SELECT g.group_id,
                    g.group_name,
                    g.group_owner_user_id AS owner_user_id,
                    g.member_count,
                    g.max_member_count,
-                   g.group_status
+                   g.group_status,
+                   ug.category_id
             FROM user_groups ug
             JOIN chat_groups g ON g.group_id = ug.group_id
             WHERE ug.owner_user_id = ?1
@@ -401,5 +404,111 @@ impl GroupRepo {
         .await?;
 
         row.map(TryInto::try_into).transpose()
+    }
+
+    // === Group Category ===
+
+    pub async fn list_group_categories(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<Vec<GroupCategoryEntity>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, GroupCategoryRow>(
+            r#"
+            SELECT category_id, owner_user_id, name, sort_order, created_at, updated_at
+            FROM group_categories
+            WHERE owner_user_id = ?1
+            ORDER BY sort_order ASC, created_at ASC
+            "#,
+        )
+        .bind(owner_user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
+
+    pub async fn create_group_category(
+        &self,
+        owner_user_id: &str,
+        name: &str,
+    ) -> Result<GroupCategoryEntity, sqlx::Error> {
+        let category_id = crate::utils::new_db_id();
+        let now = crate::utils::now_ts() as i64;
+
+        sqlx::query(
+            r#"
+            INSERT INTO group_categories (
+                category_id, owner_user_id, name, sort_order, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, 0, ?4, ?4)
+            "#,
+        )
+        .bind(&category_id)
+        .bind(owner_user_id)
+        .bind(name)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(GroupCategoryEntity {
+            category_id,
+            owner_user_id: owner_user_id.to_string(),
+            name: name.to_string(),
+            sort_order: 0,
+            created_at: now as u64,
+            updated_at: now as u64,
+        })
+    }
+
+    pub async fn get_group_category_by_id(
+        &self,
+        category_id: &str,
+    ) -> Result<Option<GroupCategoryEntity>, sqlx::Error> {
+        let row = sqlx::query_as::<_, GroupCategoryRow>(
+            r#"
+            SELECT category_id, owner_user_id, name, sort_order, created_at, updated_at
+            FROM group_categories
+            WHERE category_id = ?1
+            "#,
+        )
+        .bind(category_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
+    pub async fn delete_group_category(&self, category_id: &str) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // FK ON DELETE SET NULL will clear user_groups.category_id
+        sqlx::query("DELETE FROM group_categories WHERE category_id = ?1")
+            .bind(category_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn set_group_category(
+        &self,
+        owner_user_id: &str,
+        group_id: &str,
+        category_id: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE user_groups
+            SET category_id = ?3
+            WHERE owner_user_id = ?1 AND group_id = ?2
+            "#,
+        )
+        .bind(owner_user_id)
+        .bind(group_id)
+        .bind(category_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 }

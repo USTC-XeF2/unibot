@@ -199,7 +199,7 @@ function useLogEntries() {
         level,
         eventType: "system" as EventType,
         source: log.target,
-        message: formatLogMessage(log.msg, log.fields),
+        message: formatLogMessage(log.msg, log.fields ?? undefined),
       };
     });
   }, [systemQuery.data]);
@@ -214,7 +214,7 @@ function useLogEntries() {
         timeLabel: tsToShort(pkt.created_at),
         level,
         eventType: "protocol" as EventType,
-        source: pkt.bot_id.slice(0, 8),
+        source: (pkt.bot_id ?? "system").slice(0, 8),
         message: `${pkt.direction === "receive" ? "←" : "→"} ${pkt.action_name}`,
       };
     });

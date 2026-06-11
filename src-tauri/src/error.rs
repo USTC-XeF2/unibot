@@ -25,6 +25,10 @@ impl AppError {
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::Internal(msg.into())
     }
+
+    pub fn storage(msg: impl Into<String>) -> Self {
+        Self::Storage(msg.into())
+    }
 }
 
 impl std::fmt::Display for AppError {

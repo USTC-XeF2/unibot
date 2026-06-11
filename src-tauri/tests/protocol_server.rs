@@ -1,13 +1,14 @@
 use unibot_lib::core::CoreContainer;
 use unibot_lib::models::UserProfile;
 use unibot_lib::persistence::{
-    BotRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo, migrator,
+    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo,
+    migrator,
 };
 use unibot_lib::protocol::ProtocolRuntimeManager;
 use unibot_lib::protocol::types::BotConfig;
 use unibot_lib::services::{
-    BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
-    SettingsService, UserService,
+    BotService, ConversationService, GroupService, InteractionService, MessageService,
+    RequestService, ServiceHub, SettingsService, UserService,
 };
 use unibot_lib::utils::new_db_id;
 
@@ -43,6 +44,7 @@ async fn setup_test_env(
         UserService::new(user_repo.clone()),
         BotService::new(bot_repo.clone()),
         SettingsService::new(SettingsRepo::new(pool.clone())),
+        ConversationService::new(ConversationRepo::new(pool.clone())),
     );
 
     let temp_dir = std::env::temp_dir().join(format!("unibot-test-{}", new_db_id()));

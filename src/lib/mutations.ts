@@ -3,8 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   invalidateBotStatsQuery,
   invalidateBotsQuery,
+  invalidateConversationStatesQuery,
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
+  invalidateGroupAlbumsQuery,
+  invalidateGroupCategoriesQuery,
+  invalidateGroupFilesQuery,
+  invalidateGroupPhotosQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
   invalidateMessageHistoryQuery,
@@ -416,6 +421,252 @@ export function useSetLogRetentionMutation() {
 export function useTriggerLogCleanupMutation() {
   return useMutation({
     mutationFn: () => invoke<{ deleted_files: number }>("trigger_log_cleanup"),
+  });
+}
+
+export function useSetConversationPinnedMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      scene,
+      peerUserId,
+      groupId,
+      isPinned,
+    }: {
+      userId: string;
+      scene: "private" | "group" | "temp";
+      peerUserId: string | null;
+      groupId: string | null;
+      isPinned: boolean;
+    }) =>
+      invoke("set_conversation_pinned", {
+        userId,
+        scene,
+        peerUserId,
+        groupId,
+        isPinned,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateConversationStatesQuery(variables.userId),
+  });
+}
+
+export function useSetConversationMutedMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      scene,
+      peerUserId,
+      groupId,
+      isMuted,
+    }: {
+      userId: string;
+      scene: "private" | "group" | "temp";
+      peerUserId: string | null;
+      groupId: string | null;
+      isMuted: boolean;
+    }) =>
+      invoke("set_conversation_muted", {
+        userId,
+        scene,
+        peerUserId,
+        groupId,
+        isMuted,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateConversationStatesQuery(variables.userId),
+  });
+}
+
+export function useCreateGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({ userId, name }: { userId: string; name: string }) =>
+      invoke("create_group_category", { userId, name }),
+    onSuccess: (_, variables) =>
+      invalidateGroupCategoriesQuery(variables.userId),
+  });
+}
+
+export function useDeleteGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      categoryId,
+    }: {
+      userId: string;
+      categoryId: string;
+    }) => invoke("delete_group_category", { userId, categoryId }),
+    onSuccess: (_, variables) =>
+      invalidateGroupCategoriesQuery(variables.userId),
+  });
+}
+
+export function useSetGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      categoryId,
+    }: {
+      userId: string;
+      groupId: string;
+      categoryId: string | null;
+    }) => invoke("set_group_category", { userId, groupId, categoryId }),
+    onSuccess: (_, variables) =>
+      Promise.all([
+        invalidateGroupCategoriesQuery(variables.userId),
+        invalidateGroupsQuery(),
+      ]),
+  });
+}
+
+export function useUploadGroupFileMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      parentFolderId,
+      fileName,
+      sourcePath,
+    }: {
+      userId: string;
+      groupId: string;
+      parentFolderId?: string;
+      fileName: string;
+      sourcePath: string;
+    }) =>
+      invoke("upload_group_file", {
+        userId,
+        groupId,
+        parentFolderId: parentFolderId ?? null,
+        fileName,
+        sourcePath,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupFilesQuery(
+        variables.userId,
+        variables.groupId,
+        variables.parentFolderId,
+      ),
+  });
+}
+
+export function useDownloadGroupFileMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      fileId,
+    }: {
+      userId: string;
+      groupId: string;
+      fileId: string;
+    }) =>
+      invoke<string>("download_group_file", {
+        userId,
+        groupId,
+        fileId,
+      }),
+  });
+}
+
+export function useDeleteGroupFileMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      fileId: string;
+      parentFolderId: string;
+    }) =>
+      invoke("delete_group_file", {
+        userId: params.userId,
+        groupId: params.groupId,
+        fileId: params.fileId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupFilesQuery(
+        params.userId,
+        params.groupId,
+        params.parentFolderId,
+      ),
+  });
+}
+
+export function useCreateGroupAlbumMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      name,
+    }: {
+      userId: string;
+      groupId: string;
+      name: string;
+    }) => invoke("create_group_album", { userId, groupId, name }),
+    onSuccess: (_, variables) =>
+      invalidateGroupAlbumsQuery(variables.userId, variables.groupId),
+  });
+}
+
+export function useDeleteGroupAlbumMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      albumId: string;
+    }) =>
+      invoke("delete_group_album", {
+        userId: params.userId,
+        groupId: params.groupId,
+        albumId: params.albumId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupAlbumsQuery(params.userId, params.groupId),
+  });
+}
+
+export function useUploadGroupPhotoMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      albumId,
+      sourcePath,
+      description,
+    }: {
+      userId: string;
+      groupId: string;
+      albumId: string;
+      sourcePath: string;
+      description?: string;
+    }) =>
+      invoke("upload_group_photo", {
+        userId,
+        groupId,
+        albumId,
+        sourcePath,
+        description: description ?? null,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupPhotosQuery(variables.userId, variables.albumId),
+  });
+}
+
+export function useDeleteGroupPhotoMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      albumId: string;
+      photoId: string;
+    }) =>
+      invoke("delete_group_photo", {
+        userId: params.userId,
+        groupId: params.groupId,
+        photoId: params.photoId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupPhotosQuery(params.userId, params.albumId),
   });
 }
 

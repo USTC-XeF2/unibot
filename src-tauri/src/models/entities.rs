@@ -53,6 +53,8 @@ pub struct GroupProfile {
     pub max_member_count: u32,
     #[serde(default)]
     pub group_status: GroupStatus,
+    #[serde(default)]
+    pub category_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -210,6 +212,31 @@ pub struct GroupFileEntity {
     pub uploaded_at: u64,
     pub expire_at: Option<u64>,
     pub download_count: u32,
+    pub file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupAlbumEntity {
+    pub album_id: DbId,
+    pub group_id: DbId,
+    pub name: String,
+    pub cover_url: Option<String>,
+    pub photo_count: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupPhotoEntity {
+    pub photo_id: DbId,
+    pub album_id: DbId,
+    pub group_id: DbId,
+    pub url: String,
+    pub file_path: Option<String>,
+    pub description: Option<String>,
+    pub uploader_user_id: DbId,
+    pub file_size: Option<u64>,
+    pub created_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -310,4 +337,23 @@ pub struct GroupEventEntity {
     pub group_id: DbId,
     pub payload: GroupEventPayload,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupCategoryEntity {
+    pub category_id: DbId,
+    pub owner_user_id: DbId,
+    pub name: String,
+    pub sort_order: i32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConversationState {
+    pub conversation_scene: String,
+    pub peer_user_id: Option<DbId>,
+    pub group_id: Option<DbId>,
+    pub is_pinned: bool,
+    pub is_muted: bool,
 }

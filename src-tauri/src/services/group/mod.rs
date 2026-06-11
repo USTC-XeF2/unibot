@@ -6,6 +6,7 @@ mod basic;
 mod content;
 mod management;
 mod requests;
+pub mod storage;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MuteGroupMemberResult {

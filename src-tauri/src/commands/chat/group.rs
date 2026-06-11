@@ -1,8 +1,10 @@
+use tauri::Manager;
+
 use crate::core::CoreContainer;
 use crate::models::{
-    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity, GroupFileEntity,
-    GroupFolderEntity, GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType,
-    GroupWholeMuteState, RequestState,
+    GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity,
+    GroupFileEntity, GroupFolderEntity, GroupMemberProfile, GroupPhotoEntity, GroupProfile,
+    GroupRequestEntity, GroupRequestType, GroupWholeMuteState, RequestState,
 };
 use crate::services::{MuteGroupMemberResult, ServiceHub};
 
@@ -329,10 +331,11 @@ pub async fn list_group_files(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
+    parent_folder_id: Option<String>,
 ) -> Result<Vec<GroupFileEntity>, String> {
     services
         .group
-        .list_group_files(user_id, group_id)
+        .list_group_files(user_id, group_id, parent_folder_id)
         .await
         .into_command_result()
 }
@@ -354,6 +357,105 @@ pub async fn set_group_essence_message(
 }
 
 #[tauri::command]
+pub async fn upload_group_file(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    parent_folder_id: Option<String>,
+    file_name: String,
+    source_path: String,
+) -> Result<GroupFileEntity, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+    let src_path = std::path::Path::new(&source_path);
+
+    let file_id = crate::utils::new_db_id();
+
+    let file_path = crate::services::group::storage::copy_file_to_groups_dir(
+        src_path,
+        &group_id,
+        &file_id,
+        &file_name,
+        &app_data_dir,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let metadata = tokio::fs::metadata(&app_data_dir.join(&file_path))
+        .await
+        .map_err(|e| format!("failed to get file metadata: {e}"))?;
+
+    let file_hash = crate::services::group::storage::compute_sha256(&app_data_dir.join(&file_path))
+        .await
+        .into_command_result()?;
+
+    let file = GroupFileEntity {
+        file_id,
+        group_id,
+        parent_folder_id: parent_folder_id.unwrap_or_default(),
+        file_name,
+        file_size: metadata.len(),
+        file_hash: Some(file_hash),
+        uploader_user_id: user_id.clone(),
+        uploaded_at: crate::utils::now_ts(),
+        expire_at: None,
+        download_count: 0,
+        file_path: Some(file_path),
+    };
+
+    services
+        .group
+        .upsert_group_file(&core, file)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn download_group_file(
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    file_id: String,
+) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .download_group_file(user_id, group_id, file_id, app_data_dir)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn delete_group_file(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    file_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .delete_group_file(&core, user_id, group_id, file_id, app_data_dir)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
 pub async fn list_group_essence_messages(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
@@ -362,6 +464,121 @@ pub async fn list_group_essence_messages(
     services
         .group
         .list_group_essence_messages(user_id, group_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn create_group_album(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+    name: String,
+) -> Result<GroupAlbumEntity, String> {
+    services
+        .group
+        .create_group_album(&core, user_id, group_id, name)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn list_group_albums(
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+) -> Result<Vec<GroupAlbumEntity>, String> {
+    services
+        .group
+        .list_group_albums(user_id, group_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn delete_group_album(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    album_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .delete_group_album(&core, user_id, group_id, album_id, app_data_dir)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn upload_group_photo(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    album_id: String,
+    source_path: String,
+    description: Option<String>,
+) -> Result<GroupPhotoEntity, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .upload_group_photo(
+            &core,
+            user_id,
+            group_id,
+            album_id,
+            source_path,
+            description,
+            app_data_dir,
+        )
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn list_group_photos(
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+    album_id: String,
+) -> Result<Vec<GroupPhotoEntity>, String> {
+    services
+        .group
+        .list_group_photos(user_id, group_id, album_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn delete_group_photo(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    photo_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .delete_group_photo(&core, user_id, group_id, photo_id, app_data_dir)
         .await
         .into_command_result()
 }

@@ -1,6 +1,15 @@
 import { useQueries } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { Check, Plus, Search, UserPlus, Users } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  Check,
+  Pin,
+  Plus,
+  Search,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import AddFriendDialog from "@/components/chat/add-friend-dialog";
@@ -26,16 +35,22 @@ import { useChatEventBus } from "@/hooks/use-chat-event-bus";
 import { segmentsToNodes } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
+  useCreateGroupCategoryMutation,
   useDeleteFriendMutation,
   useDissolveGroupMutation,
   useLeaveGroupMutation,
   useRenameGroupMutation,
+  useSetConversationMutedMutation,
+  useSetConversationPinnedMutation,
+  useSetGroupCategoryMutation,
   useSetGroupWholeMuteMutation,
 } from "@/lib/mutations";
 import {
   messageHistoryQueryOptions,
+  useConversationStatesQuery,
   useFriendRequestsQuery,
   useFriendsQuery,
+  useGroupCategoriesQuery,
   useGroupRequestsQuery,
   useUserGroupsQuery,
   useUsersQuery,
@@ -53,6 +68,9 @@ type ConversationItem = {
   title: string;
   avatarText: string;
   avatarUrl?: string;
+  isPinned: boolean;
+  isMuted: boolean;
+  categoryId: string | null;
 };
 
 type ConversationSnapshot = {
@@ -100,8 +118,15 @@ function ConversationList({
   const renameGroupMutation = useRenameGroupMutation();
   const dissolveGroupMutation = useDissolveGroupMutation();
   const leaveGroupMutation = useLeaveGroupMutation();
+  const setConversationPinnedMutation = useSetConversationPinnedMutation();
+  const setConversationMutedMutation = useSetConversationMutedMutation();
+  const createGroupCategoryMutation = useCreateGroupCategoryMutation();
+  const setGroupCategoryMutation = useSetGroupCategoryMutation();
 
   const [searchText, setSearchText] = useState("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<
+    string | null
+  >(null);
   const [selectedConversationKey, setSelectedConversationKey] = useState<
     string | null
   >(null);
@@ -112,10 +137,36 @@ function ConversationList({
   const usersQuery = useUsersQuery();
   const groupsQuery = useUserGroupsQuery(currentUserId);
   const friendsQuery = useFriendsQuery(currentUserId);
+  const conversationStatesQuery = useConversationStatesQuery(currentUserId);
+  const groupCategoriesQuery = useGroupCategoriesQuery(currentUserId);
 
   const users = usersQuery.data ?? [];
   const groups = groupsQuery.data ?? [];
   const friendIds = friendsQuery.data ?? [];
+  const conversationStates = conversationStatesQuery.data ?? [];
+  const groupCategories = groupCategoriesQuery.data ?? [];
+
+  // Build state lookup map keyed by "{scene}:{id}"
+  const stateMap = useMemo(() => {
+    const map: Record<string, { isPinned: boolean; isMuted: boolean }> = {};
+    for (const state of conversationStates) {
+      const key =
+        state.conversation_scene === "private" && state.peer_user_id
+          ? `private:${state.peer_user_id}`
+          : `group:${state.group_id}`;
+      map[key] = { isPinned: state.is_pinned, isMuted: state.is_muted };
+    }
+    return map;
+  }, [conversationStates]);
+
+  // Build group-to-category lookup from list_user_groups category_id
+  const groupToCategoryMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const group of groups) {
+      map[group.group_id] = group.category_id ?? null;
+    }
+    return map;
+  }, [groups]);
 
   const conversations = useMemo<ConversationItem[]>(() => {
     if (!currentUserId) {
@@ -129,23 +180,37 @@ function ConversationList({
         (user) =>
           user.user_id !== currentUserId && friendIdSet.has(user.user_id),
       )
-      .map((user) => ({
-        key: `private-${user.user_id}`,
-        source: { scene: "private" as const, peer_user_id: user.user_id },
-        title: user.nickname,
-        avatarText: user.nickname.slice(0, 1).toUpperCase(),
-        avatarUrl: user.avatar,
-      }));
+      .map((user) => {
+        const key = `private:${user.user_id}`;
+        const state = stateMap[key];
+        return {
+          key: `private-${user.user_id}`,
+          source: { scene: "private" as const, peer_user_id: user.user_id },
+          title: user.nickname,
+          avatarText: user.nickname.slice(0, 1).toUpperCase(),
+          avatarUrl: user.avatar,
+          isPinned: state?.isPinned ?? false,
+          isMuted: state?.isMuted ?? false,
+          categoryId: null,
+        };
+      });
 
-    const groupConversations = groups.map((group) => ({
-      key: `group-${group.group_id}`,
-      source: { scene: "group" as const, group_id: group.group_id },
-      title: `${group.group_name} (${group.member_count})`,
-      avatarText: "群",
-    }));
+    const groupConversations = groups.map((group) => {
+      const key = `group:${group.group_id}`;
+      const state = stateMap[key];
+      return {
+        key: `group-${group.group_id}`,
+        source: { scene: "group" as const, group_id: group.group_id },
+        title: `${group.group_name} (${group.member_count})`,
+        avatarText: "群",
+        isPinned: state?.isPinned ?? false,
+        isMuted: state?.isMuted ?? false,
+        categoryId: groupToCategoryMap[group.group_id] ?? null,
+      };
+    });
 
     return [...privateConversations, ...groupConversations];
-  }, [currentUserId, friendIds, groups, users]);
+  }, [currentUserId, friendIds, groups, users, stateMap, groupToCategoryMap]);
 
   const resolveMyGroupRole = async (
     groupId: string,
@@ -276,6 +341,74 @@ function ConversationList({
     }
   };
 
+  const handleTogglePinned = async (
+    source: MessageSource,
+    currentPinned: boolean,
+  ) => {
+    try {
+      await setConversationPinnedMutation.mutateAsync({
+        userId: currentUserId,
+        scene: source.scene,
+        peerUserId: source.scene === "private" ? source.peer_user_id : null,
+        groupId: source.scene === "group" ? source.group_id : null,
+        isPinned: !currentPinned,
+      });
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
+  const handleToggleMuted = async (
+    source: MessageSource,
+    currentMuted: boolean,
+  ) => {
+    try {
+      await setConversationMutedMutation.mutateAsync({
+        userId: currentUserId,
+        scene: source.scene,
+        peerUserId: source.scene === "private" ? source.peer_user_id : null,
+        groupId: source.scene === "group" ? source.group_id : null,
+        isMuted: !currentMuted,
+      });
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
+  const handleSetGroupCategory = async (
+    groupId: string,
+    categoryId: string | null,
+  ) => {
+    try {
+      await setGroupCategoryMutation.mutateAsync({
+        userId: currentUserId,
+        groupId,
+        categoryId,
+      });
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    const name = await promptDialog({
+      title: "新建分类",
+      description: "请输入分类名称",
+      confirmText: "创建",
+    });
+    if (!name || !name.trim()) {
+      return;
+    }
+    try {
+      await createGroupCategoryMutation.mutateAsync({
+        userId: currentUserId,
+        name: name.trim(),
+      });
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
   const friendRequestsQuery = useFriendRequestsQuery(currentUserId, true);
   const groupRequestsQuery = useGroupRequestsQuery(currentUserId, true);
   const hasPendingRequests = useMemo(() => {
@@ -315,6 +448,9 @@ function ConversationList({
 
   const sortedConversations = useMemo(() => {
     return [...conversations].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) {
+        return a.isPinned ? -1 : 1;
+      }
       const timeA = snapshots[a.key]?.lastAt ?? 0;
       const timeB = snapshots[b.key]?.lastAt ?? 0;
       if (timeA !== timeB) {
@@ -325,15 +461,25 @@ function ConversationList({
   }, [conversations, snapshots]);
 
   const filteredConversations = useMemo(() => {
-    const keyword = searchText.trim().toLowerCase();
-    if (!keyword) {
-      return sortedConversations;
+    let result = sortedConversations;
+
+    // Filter by category if selected
+    if (selectedCategoryFilter) {
+      result = result.filter(
+        (c) =>
+          c.source.scene === "group" && c.categoryId === selectedCategoryFilter,
+      );
     }
 
-    return sortedConversations.filter((conversation) =>
-      conversation.title.toLowerCase().includes(keyword),
-    );
-  }, [searchText, sortedConversations]);
+    const keyword = searchText.trim().toLowerCase();
+    if (keyword) {
+      result = result.filter((conversation) =>
+        conversation.title.toLowerCase().includes(keyword),
+      );
+    }
+
+    return result;
+  }, [sortedConversations, searchText, selectedCategoryFilter]);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.key === selectedConversationKey),
@@ -408,6 +554,37 @@ function ConversationList({
         </div>
       </header>
 
+      {/* Category filter bar */}
+      {groupCategories.length > 0 && (
+        <div className="flex items-center gap-1 border-b px-3 py-1.5 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setSelectedCategoryFilter(null)}
+            className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+              selectedCategoryFilter === null
+                ? "bg-primary/15 text-primary font-medium"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            全部
+          </button>
+          {groupCategories.map((cat) => (
+            <button
+              key={cat.category_id}
+              type="button"
+              onClick={() => setSelectedCategoryFilter(cat.category_id)}
+              className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                selectedCategoryFilter === cat.category_id
+                  ? "bg-primary/15 text-primary font-medium"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 space-y-1 overflow-auto p-2">
         {filteredConversations.map((conversation) => {
           const snapshot = snapshots[conversation.key];
@@ -427,7 +604,9 @@ function ConversationList({
                   className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
                     selectedConversation?.key === conversation.key
                       ? "border-primary/40 bg-primary/10"
-                      : "border-transparent hover:border-border hover:bg-muted/40"
+                      : conversation.isPinned
+                        ? "border-transparent bg-accent/60"
+                        : "border-transparent hover:border-border hover:bg-muted/40"
                   }`}
                   onClick={() => setSelectedConversationKey(conversation.key)}
                 >
@@ -438,9 +617,14 @@ function ConversationList({
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate font-medium text-sm">
-                          {conversation.title}
-                        </p>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <p className="truncate font-medium text-sm">
+                            {conversation.title}
+                          </p>
+                          {conversation.isMuted && (
+                            <BellOff className="size-3 shrink-0 text-muted-foreground" />
+                          )}
+                        </div>
                         <span className="shrink-0 text-[11px] text-muted-foreground">
                           {formatConversationPreviewTime(snapshot?.lastAt ?? 0)}
                         </span>
@@ -453,6 +637,45 @@ function ConversationList({
                 </button>
               </ContextMenuTrigger>
               <ContextMenuContent>
+                {/* Pin toggle */}
+                <ContextMenuItem
+                  onSelect={() =>
+                    handleTogglePinned(
+                      conversation.source,
+                      conversation.isPinned,
+                    )
+                  }
+                >
+                  {conversation.isPinned ? (
+                    <>
+                      <Pin className="size-3.5 mr-1.5 rotate-45" /> 取消置顶
+                    </>
+                  ) : (
+                    <>
+                      <Pin className="size-3.5 mr-1.5" /> 置顶会话
+                    </>
+                  )}
+                </ContextMenuItem>
+
+                {/* Mute toggle */}
+                <ContextMenuItem
+                  onSelect={() =>
+                    handleToggleMuted(conversation.source, conversation.isMuted)
+                  }
+                >
+                  {conversation.isMuted ? (
+                    <>
+                      <Bell className="size-3.5 mr-1.5" /> 开启通知
+                    </>
+                  ) : (
+                    <>
+                      <BellOff className="size-3.5 mr-1.5" /> 免打扰
+                    </>
+                  )}
+                </ContextMenuItem>
+
+                <ContextMenuSeparator />
+
                 {privatePeerId !== null ? (
                   <ContextMenuItem
                     variant="destructive"
@@ -463,51 +686,66 @@ function ConversationList({
                 ) : null}
 
                 {groupId !== null ? (
-                  <ContextMenuItem
-                    onSelect={async () => {
-                      const role = await resolveMyGroupRole(groupId);
-                      if (role !== "owner" && role !== "admin") {
-                        toast.error("仅群主或管理员可设置全体禁言");
-                        return;
-                      }
-                      await handleSetWholeMute(groupId);
-                    }}
-                  >
-                    设置全体禁言
-                  </ContextMenuItem>
-                ) : null}
-                {groupId !== null ? (
-                  <ContextMenuItem
-                    onSelect={async () => {
-                      const role = await resolveMyGroupRole(groupId);
-                      if (role !== "owner" && role !== "admin") {
-                        toast.error("仅群主或管理员可修改群昵称");
-                        return;
-                      }
-                      await handleRenameGroup(groupId);
-                    }}
-                  >
-                    修改群昵称
-                  </ContextMenuItem>
-                ) : null}
-                {groupId !== null ? <ContextMenuSeparator /> : null}
-                {groupId !== null ? (
-                  <ContextMenuItem
-                    variant="destructive"
-                    onSelect={async () => {
-                      const role = await resolveMyGroupRole(groupId);
-                      if (role === "owner") {
-                        await handleDissolveGroup(groupId);
-                        return;
-                      }
-                      await handleLeaveGroup(groupId);
-                    }}
-                  >
-                    {groups.find((item) => item.group_id === groupId)
-                      ?.owner_user_id === currentUserId
-                      ? "解散群聊"
-                      : "退出群聊"}
-                  </ContextMenuItem>
+                  <>
+                    <ContextMenuItem
+                      onSelect={async () => {
+                        const role = await resolveMyGroupRole(groupId);
+                        if (role !== "owner" && role !== "admin") {
+                          toast.error("仅群主或管理员可设置全体禁言");
+                          return;
+                        }
+                        await handleSetWholeMute(groupId);
+                      }}
+                    >
+                      设置全体禁言
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={async () => {
+                        const role = await resolveMyGroupRole(groupId);
+                        if (role !== "owner" && role !== "admin") {
+                          toast.error("仅群主或管理员可修改群昵称");
+                          return;
+                        }
+                        await handleRenameGroup(groupId);
+                      }}
+                    >
+                      修改群昵称
+                    </ContextMenuItem>
+
+                    {/* Group category submenu */}
+                    {groupCategories.length > 0 && <ContextMenuSeparator />}
+                    {groupCategories.map((cat) => (
+                      <ContextMenuItem
+                        key={cat.category_id}
+                        onSelect={() =>
+                          handleSetGroupCategory(groupId, cat.category_id)
+                        }
+                      >
+                        移动到: {cat.name}
+                      </ContextMenuItem>
+                    ))}
+                    <ContextMenuItem onSelect={handleCreateCategory}>
+                      + 新建分类
+                    </ContextMenuItem>
+
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      variant="destructive"
+                      onSelect={async () => {
+                        const role = await resolveMyGroupRole(groupId);
+                        if (role === "owner") {
+                          await handleDissolveGroup(groupId);
+                          return;
+                        }
+                        await handleLeaveGroup(groupId);
+                      }}
+                    >
+                      {groups.find((item) => item.group_id === groupId)
+                        ?.owner_user_id === currentUserId
+                        ? "解散群聊"
+                        : "退出群聊"}
+                    </ContextMenuItem>
+                  </>
                 ) : null}
               </ContextMenuContent>
             </ContextMenu>
