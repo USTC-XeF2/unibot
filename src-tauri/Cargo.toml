@@ -39,6 +39,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
+parking_lot = "0.12"
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

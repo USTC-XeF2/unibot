@@ -3,8 +3,8 @@ pub mod json_layer;
 use crate::error::{AppError, AppResult};
 use crate::utils::now_ts;
 use json_layer::JsonLayer;
+use parking_lot::Mutex;
 use std::path::Path;
-use std::sync::Mutex;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::reload::Handle;
@@ -62,7 +62,7 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult
         .with(JsonLayer::new(non_blocking))
         .init();
 
-    *RELOAD_HANDLE.lock().unwrap_or_else(|e| e.into_inner()) = Some(reload_handle);
+    *RELOAD_HANDLE.lock() = Some(reload_handle);
 
     Ok(LogGuard::new(guard))
 }
@@ -75,7 +75,7 @@ pub fn set_log_level(level: &str) -> AppResult<bool> {
         .with_default_directive(parse_level(level).into())
         .from_env_lossy();
 
-    let handle = RELOAD_HANDLE.lock().unwrap_or_else(|e| e.into_inner());
+    let handle = RELOAD_HANDLE.lock();
     match handle.as_ref() {
         Some(h) => {
             h.reload(new_filter)
