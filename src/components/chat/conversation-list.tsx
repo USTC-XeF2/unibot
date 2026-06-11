@@ -31,7 +31,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { useChatEventBus } from "@/hooks/use-chat-event-bus";
 import { segmentsToNodes } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
@@ -111,7 +110,6 @@ function ConversationList({
   onSelectedConversationChange,
 }: ConversationListProps) {
   const currentUserId = useAuthStore((state) => state.currentUserId ?? "");
-  useChatEventBus(currentUserId);
 
   const deleteFriendMutation = useDeleteFriendMutation();
   const setGroupWholeMuteMutation = useSetGroupWholeMuteMutation();
@@ -556,13 +554,13 @@ function ConversationList({
 
       {/* Category filter bar */}
       {groupCategories.length > 0 && (
-        <div className="flex items-center gap-1 border-b px-3 py-1.5 overflow-x-auto">
+        <div className="flex items-center gap-1 overflow-x-auto border-b px-3 py-1.5">
           <button
             type="button"
             onClick={() => setSelectedCategoryFilter(null)}
             className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
               selectedCategoryFilter === null
-                ? "bg-primary/15 text-primary font-medium"
+                ? "bg-primary/15 font-medium text-primary"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
             }`}
           >
@@ -575,7 +573,7 @@ function ConversationList({
               onClick={() => setSelectedCategoryFilter(cat.category_id)}
               className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
                 selectedCategoryFilter === cat.category_id
-                  ? "bg-primary/15 text-primary font-medium"
+                  ? "bg-primary/15 font-medium text-primary"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               }`}
             >
@@ -617,7 +615,7 @@ function ConversationList({
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex min-w-0 items-center gap-1">
                           <p className="truncate font-medium text-sm">
                             {conversation.title}
                           </p>
@@ -648,11 +646,11 @@ function ConversationList({
                 >
                   {conversation.isPinned ? (
                     <>
-                      <Pin className="size-3.5 mr-1.5 rotate-45" /> 取消置顶
+                      <Pin className="mr-1.5 size-3.5 rotate-45" /> 取消置顶
                     </>
                   ) : (
                     <>
-                      <Pin className="size-3.5 mr-1.5" /> 置顶会话
+                      <Pin className="mr-1.5 size-3.5" /> 置顶会话
                     </>
                   )}
                 </ContextMenuItem>
@@ -665,11 +663,11 @@ function ConversationList({
                 >
                   {conversation.isMuted ? (
                     <>
-                      <Bell className="size-3.5 mr-1.5" /> 开启通知
+                      <Bell className="mr-1.5 size-3.5" /> 开启通知
                     </>
                   ) : (
                     <>
-                      <BellOff className="size-3.5 mr-1.5" /> 免打扰
+                      <BellOff className="mr-1.5 size-3.5" /> 免打扰
                     </>
                   )}
                 </ContextMenuItem>
