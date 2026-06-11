@@ -1,4 +1,4 @@
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { listen } from "@tauri-apps/api/event";
 import {
   createContext,
   type ReactNode,
@@ -54,9 +54,10 @@ export function ChatEventBusProvider({
     let cancelled = false;
     let unlisten: (() => void) | null = null;
 
-    const webview = getCurrentWebviewWindow();
-    webview
-      .listen<InternalEventPayload>("chat:event", (event) => {
+    const windowLabel = `chat-${userId}`;
+    listen<InternalEventPayload>(
+      "chat:event",
+      (event) => {
         const payload = event.payload;
         if (!payload) {
           return;
@@ -65,7 +66,11 @@ export function ChatEventBusProvider({
         for (const subscriber of subscribersRef.current) {
           subscriber(payload);
         }
-      })
+      },
+      {
+        target: { kind: "WebviewWindow", label: windowLabel },
+      },
+    )
       .then((fn) => {
         if (cancelled) {
           // effect 已在 listen resolve 前 cleanup，立即解绑避免泄漏
