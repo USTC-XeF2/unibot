@@ -185,12 +185,29 @@ impl CoreContainer {
                             .get_webview_window(&event_window_label)
                             .is_some()
                         {
-                            let _ = app_handle_for_events.emit_to(
+                            tracing::info!(
+                                target: "core",
+                                "emitting chat:event to {}",
+                                event_window_label
+                            );
+                            if let Err(e) = app_handle_for_events.emit_to(
                                 &event_window_label,
                                 "chat:event",
                                 &event,
-                            );
+                            ) {
+                                tracing::error!(
+                                    target: "core",
+                                    "emit_to failed for {}: {}",
+                                    event_window_label,
+                                    e
+                                );
+                            }
                         } else {
+                            tracing::info!(
+                                target: "core",
+                                "window {} gone, stopping event loop",
+                                event_window_label
+                            );
                             break;
                         }
                     }

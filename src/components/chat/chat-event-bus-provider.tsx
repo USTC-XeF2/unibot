@@ -55,10 +55,17 @@ export function ChatEventBusProvider({
     let unlisten: (() => void) | null = null;
 
     const windowLabel = `chat-${userId}`;
+    console.log("[ChatEventBusProvider] registering listener for", windowLabel);
     listen<InternalEventPayload>(
       "chat:event",
       (event) => {
         const payload = event.payload;
+        console.log(
+          "[ChatEventBusProvider] received event:",
+          payload?.kind,
+          "for user",
+          userId,
+        );
         if (!payload) {
           return;
         }
@@ -72,15 +79,21 @@ export function ChatEventBusProvider({
       },
     )
       .then((fn) => {
+        console.log(
+          "[ChatEventBusProvider] listener registered for",
+          windowLabel,
+        );
         if (cancelled) {
-          // effect 已在 listen resolve 前 cleanup，立即解绑避免泄漏
           fn();
           return;
         }
         unlisten = fn;
       })
       .catch((error) => {
-        console.error("failed to listen chat:event", error);
+        console.error(
+          "[ChatEventBusProvider] failed to listen chat:event",
+          error,
+        );
       });
 
     return () => {
