@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -8,6 +10,7 @@ use crate::persistence::{GroupEventRecord, NewGroupEventRecord};
 use crate::utils::{emit_to_group_members, now_ts};
 
 use super::GroupService;
+use super::storage;
 
 impl GroupService {
     pub async fn upsert_announcement(
@@ -215,6 +218,77 @@ impl GroupService {
         .await;
 
         Ok(essence)
+    }
+
+    pub async fn download_group_file(
+        &self,
+        user_id: String,
+        group_id: String,
+        file_id: String,
+        app_data_dir: PathBuf,
+    ) -> AppResult<String> {
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        let file = self
+            .repo
+            .get_group_file_by_id(&file_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("file {} not found", file_id)))?;
+
+        if file.group_id != group_id {
+            return Err(AppError::validation(
+                "file does not belong to the target group",
+            ));
+        }
+
+        let file_path = file
+            .file_path
+            .ok_or_else(|| AppError::not_found("file has no local path"))?;
+
+        let abs_path = storage::validate_group_file_path(&file_path, &app_data_dir).await?;
+
+        Ok(abs_path.to_string_lossy().to_string())
+    }
+
+    pub async fn delete_group_file(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        file_id: String,
+        app_data_dir: PathBuf,
+    ) -> AppResult<()> {
+        core.require_user_context(&user_id)?;
+
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
+
+        let file = self
+            .repo
+            .get_group_file_by_id(&file_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("file {} not found", file_id)))?;
+
+        if file.group_id != group_id {
+            return Err(AppError::validation(
+                "file does not belong to the target group",
+            ));
+        }
+
+        if file.uploader_user_id != user_id
+            && !matches!(operator.role, GroupRole::Owner | GroupRole::Admin)
+        {
+            return Err(AppError::validation(
+                "only uploader or owner/admin can delete files",
+            ));
+        }
+
+        self.repo.delete_group_file(&file_id).await?;
+
+        if let Some(ref file_path) = file.file_path {
+            storage::delete_group_file_disk(file_path, &app_data_dir).await;
+        }
+
+        Ok(())
     }
 
     pub async fn list_group_essence_messages(

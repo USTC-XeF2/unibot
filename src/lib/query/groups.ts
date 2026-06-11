@@ -7,6 +7,7 @@ import type { GroupEvent } from "@/types/event";
 import type {
   ConversationState,
   GroupCategory,
+  GroupFile,
   GroupMemberProfile,
   GroupProfile,
 } from "@/types/group";
@@ -113,5 +114,35 @@ export function useGroupCategoriesQuery(userId: string) {
 export function invalidateGroupCategoriesQuery(userId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.categories(userId),
+  });
+}
+
+// === Group Files ===
+
+export function useGroupFilesQuery(
+  userId: string,
+  groupId: string,
+  parentFolderId?: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupFile[]>("list_group_files", {
+        userId,
+        groupId,
+        parentFolderId: parentFolderId || null,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupFilesQuery(
+  userId: string,
+  groupId: string,
+  parentFolderId?: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
   });
 }

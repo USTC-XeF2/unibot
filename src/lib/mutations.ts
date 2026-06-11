@@ -7,6 +7,7 @@ import {
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
   invalidateGroupCategoriesQuery,
+  invalidateGroupFilesQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
   invalidateMessageHistoryQuery,
@@ -514,6 +515,84 @@ export function useSetGroupCategoryMutation() {
         invalidateGroupCategoriesQuery(variables.userId),
         invalidateGroupsQuery(),
       ]),
+  });
+}
+
+export function useUploadGroupFileMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      fileId,
+      parentFolderId,
+      fileName,
+      fileSize,
+      sourcePath,
+    }: {
+      userId: string;
+      groupId: string;
+      fileId: string;
+      parentFolderId: string;
+      fileName: string;
+      fileSize: number;
+      sourcePath: string;
+    }) =>
+      invoke("upload_group_file", {
+        userId,
+        groupId,
+        fileId,
+        parentFolderId,
+        fileName,
+        fileSize,
+        sourcePath,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupFilesQuery(
+        variables.userId,
+        variables.groupId,
+        variables.parentFolderId,
+      ),
+  });
+}
+
+export function useDownloadGroupFileMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      fileId,
+    }: {
+      userId: string;
+      groupId: string;
+      fileId: string;
+    }) =>
+      invoke<string>("download_group_file", {
+        userId,
+        groupId,
+        fileId,
+      }),
+  });
+}
+
+export function useDeleteGroupFileMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      fileId: string;
+      parentFolderId: string;
+    }) =>
+      invoke("delete_group_file", {
+        userId: params.userId,
+        groupId: params.groupId,
+        fileId: params.fileId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupFilesQuery(
+        params.userId,
+        params.groupId,
+        params.parentFolderId,
+      ),
   });
 }
 
