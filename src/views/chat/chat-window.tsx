@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { ChatEventBusProvider } from "@/components/chat/chat-event-bus-provider";
 import ChatMainPanel from "@/components/chat/chat-main-panel";
 import ConversationList from "@/components/chat/conversation-list";
 import {
@@ -34,29 +35,31 @@ function ChatWindowView() {
   }
 
   return (
-    <main className="flex h-screen w-screen overflow-hidden bg-background">
-      <ResizablePanelGroup orientation="horizontal" className="flex-1">
-        <ResizablePanel defaultSize={240} minSize={200} maxSize={280}>
-          <ConversationList
-            onSelectedConversationChange={setSelectedConversation}
-          />
-        </ResizablePanel>
+    <ChatEventBusProvider userId={currentUserId}>
+      <main className="flex h-screen w-screen overflow-hidden bg-background">
+        <ResizablePanelGroup orientation="horizontal" className="flex-1">
+          <ResizablePanel defaultSize={240} minSize={200} maxSize={280}>
+            <ConversationList
+              onSelectedConversationChange={setSelectedConversation}
+            />
+          </ResizablePanel>
 
-        <ResizableHandle />
+          <ResizableHandle />
 
-        <ResizablePanel>
-          {selectedConversation ? (
-            <ChatMainPanel conversation={selectedConversation} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-              请选择一个会话开始聊天
-            </div>
-          )}
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          <ResizablePanel>
+            {selectedConversation ? (
+              <ChatMainPanel conversation={selectedConversation} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                请选择一个会话开始聊天
+              </div>
+            )}
+          </ResizablePanel>
+        </ResizablePanelGroup>
 
-      <Toaster position="top-center" />
-    </main>
+        <Toaster position="top-center" />
+      </main>
+    </ChatEventBusProvider>
   );
 }
 
