@@ -2,9 +2,9 @@ use tauri::Manager;
 
 use crate::core::CoreContainer;
 use crate::models::{
-    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity, GroupFileEntity,
-    GroupFolderEntity, GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupRequestType,
-    GroupWholeMuteState, RequestState,
+    GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity,
+    GroupFileEntity, GroupFolderEntity, GroupMemberProfile, GroupPhotoEntity, GroupProfile,
+    GroupRequestEntity, GroupRequestType, GroupWholeMuteState, RequestState,
 };
 use crate::services::{MuteGroupMemberResult, ServiceHub};
 
@@ -460,6 +460,123 @@ pub async fn list_group_essence_messages(
     services
         .group
         .list_group_essence_messages(user_id, group_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn create_group_album(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+    name: String,
+) -> Result<GroupAlbumEntity, String> {
+    services
+        .group
+        .create_group_album(&core, user_id, group_id, name)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn list_group_albums(
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+) -> Result<Vec<GroupAlbumEntity>, String> {
+    services
+        .group
+        .list_group_albums(user_id, group_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn delete_group_album(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    album_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .delete_group_album(&core, user_id, group_id, album_id, app_data_dir)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn upload_group_photo(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    album_id: String,
+    photo_id: String,
+    source_path: String,
+    description: Option<String>,
+) -> Result<GroupPhotoEntity, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .upload_group_photo(
+            &core,
+            user_id,
+            group_id,
+            album_id,
+            photo_id,
+            source_path,
+            description,
+            app_data_dir,
+        )
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn list_group_photos(
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+    album_id: String,
+) -> Result<Vec<GroupPhotoEntity>, String> {
+    services
+        .group
+        .list_group_photos(user_id, group_id, album_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
+pub async fn delete_group_photo(
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    app: tauri::AppHandle,
+    user_id: String,
+    group_id: String,
+    photo_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    services
+        .group
+        .delete_group_photo(&core, user_id, group_id, photo_id, app_data_dir)
         .await
         .into_command_result()
 }

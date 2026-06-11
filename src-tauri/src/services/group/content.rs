@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity, GroupEventPayload,
-    GroupFileEntity, GroupFolderEntity, GroupRole, InternalEvent,
+    GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity,
+    GroupEventPayload, GroupFileEntity, GroupFolderEntity, GroupPhotoEntity, GroupRole,
+    InternalEvent,
 };
 use crate::persistence::{GroupEventRecord, NewGroupEventRecord};
 use crate::utils::{emit_to_group_members, now_ts};
@@ -285,6 +286,208 @@ impl GroupService {
         self.repo.delete_group_file(&file_id).await?;
 
         if let Some(ref file_path) = file.file_path {
+            storage::delete_group_file_disk(file_path, &app_data_dir).await;
+        }
+
+        Ok(())
+    }
+
+    pub async fn create_group_album(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        name: String,
+    ) -> AppResult<GroupAlbumEntity> {
+        core.require_user_context(&user_id)?;
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        let album = GroupAlbumEntity {
+            album_id: crate::utils::new_db_id(),
+            group_id,
+            name,
+            cover_url: None,
+            photo_count: 0,
+            created_at: now_ts(),
+            updated_at: now_ts(),
+        };
+
+        self.repo.create_group_album(&album).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &album.group_id,
+            InternalEvent::GroupAlbumCreated {
+                album_id: album.album_id.clone(),
+                group_id: album.group_id.clone(),
+                name: album.name.clone(),
+                time: album.created_at,
+            },
+        )
+        .await;
+
+        Ok(album)
+    }
+
+    pub async fn list_group_albums(
+        &self,
+        user_id: String,
+        group_id: String,
+    ) -> AppResult<Vec<GroupAlbumEntity>> {
+        self.ensure_group_member(&group_id, &user_id).await?;
+        self.repo
+            .list_group_albums(&group_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_group_album(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        album_id: String,
+        app_data_dir: PathBuf,
+    ) -> AppResult<()> {
+        core.require_user_context(&user_id)?;
+
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
+        if !matches!(operator.role, GroupRole::Owner | GroupRole::Admin) {
+            return Err(AppError::validation("only owner/admin can delete albums"));
+        }
+
+        let photos = self.repo.list_group_photos(&album_id).await?;
+        for photo in &photos {
+            if let Some(ref file_path) = photo.file_path {
+                storage::delete_group_file_disk(file_path, &app_data_dir).await;
+            }
+        }
+
+        self.repo.delete_group_album(&album_id).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &group_id,
+            InternalEvent::GroupAlbumDeleted {
+                album_id: album_id.clone(),
+                group_id: group_id.clone(),
+                time: now_ts(),
+            },
+        )
+        .await;
+
+        Ok(())
+    }
+
+    pub async fn upload_group_photo(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        album_id: String,
+        photo_id: String,
+        source_path: String,
+        description: Option<String>,
+        app_data_dir: PathBuf,
+    ) -> AppResult<GroupPhotoEntity> {
+        core.require_user_context(&user_id)?;
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        let src = std::path::Path::new(&source_path);
+        let file_name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&photo_id)
+            .to_string();
+
+        let file_path =
+            storage::copy_file_to_groups_dir(src, &group_id, &photo_id, &file_name, &app_data_dir)
+                .await?;
+
+        let metadata = tokio::fs::metadata(&app_data_dir.join(&file_path))
+            .await
+            .map_err(|e| AppError::storage(format!("failed to get photo metadata: {e}")))?;
+
+        let photo = GroupPhotoEntity {
+            photo_id,
+            album_id,
+            group_id: group_id.clone(),
+            url: file_path.clone(),
+            file_path: Some(file_path),
+            description,
+            uploader_user_id: user_id,
+            file_size: Some(metadata.len()),
+            created_at: now_ts(),
+        };
+
+        self.repo.create_group_photo(&photo).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &group_id,
+            InternalEvent::GroupPhotoUploaded {
+                photo_id: photo.photo_id.clone(),
+                album_id: photo.album_id.clone(),
+                group_id: photo.group_id.clone(),
+                time: photo.created_at,
+            },
+        )
+        .await;
+
+        Ok(photo)
+    }
+
+    pub async fn list_group_photos(
+        &self,
+        user_id: String,
+        group_id: String,
+        album_id: String,
+    ) -> AppResult<Vec<GroupPhotoEntity>> {
+        self.ensure_group_member(&group_id, &user_id).await?;
+        self.repo
+            .list_group_photos(&album_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn delete_group_photo(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        photo_id: String,
+        app_data_dir: PathBuf,
+    ) -> AppResult<()> {
+        core.require_user_context(&user_id)?;
+
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
+
+        let photo = self
+            .repo
+            .get_group_photo_by_id(&photo_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("photo {} not found", photo_id)))?;
+
+        if photo.group_id != group_id {
+            return Err(AppError::validation(
+                "photo does not belong to the target group",
+            ));
+        }
+
+        if photo.uploader_user_id != user_id
+            && !matches!(operator.role, GroupRole::Owner | GroupRole::Admin)
+        {
+            return Err(AppError::validation(
+                "only uploader or owner/admin can delete photos",
+            ));
+        }
+
+        self.repo.delete_group_photo(&photo_id).await?;
+
+        if let Some(ref file_path) = photo.file_path {
             storage::delete_group_file_disk(file_path, &app_data_dir).await;
         }
 

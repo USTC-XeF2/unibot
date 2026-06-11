@@ -6,8 +6,10 @@ import {
   invalidateConversationStatesQuery,
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
+  invalidateGroupAlbumsQuery,
   invalidateGroupCategoriesQuery,
   invalidateGroupFilesQuery,
+  invalidateGroupPhotosQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
   invalidateMessageHistoryQuery,
@@ -593,6 +595,87 @@ export function useDeleteGroupFileMutation() {
         params.groupId,
         params.parentFolderId,
       ),
+  });
+}
+
+export function useCreateGroupAlbumMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      name,
+    }: {
+      userId: string;
+      groupId: string;
+      name: string;
+    }) => invoke("create_group_album", { userId, groupId, name }),
+    onSuccess: (_, variables) =>
+      invalidateGroupAlbumsQuery(variables.userId, variables.groupId),
+  });
+}
+
+export function useDeleteGroupAlbumMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      albumId: string;
+    }) =>
+      invoke("delete_group_album", {
+        userId: params.userId,
+        groupId: params.groupId,
+        albumId: params.albumId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupAlbumsQuery(params.userId, params.groupId),
+  });
+}
+
+export function useUploadGroupPhotoMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      albumId,
+      photoId,
+      sourcePath,
+      description,
+    }: {
+      userId: string;
+      groupId: string;
+      albumId: string;
+      photoId: string;
+      sourcePath: string;
+      description?: string;
+    }) =>
+      invoke("upload_group_photo", {
+        userId,
+        groupId,
+        albumId,
+        photoId,
+        sourcePath,
+        description: description ?? null,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupPhotosQuery(variables.userId, variables.albumId),
+  });
+}
+
+export function useDeleteGroupPhotoMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      albumId: string;
+      photoId: string;
+    }) =>
+      invoke("delete_group_photo", {
+        userId: params.userId,
+        groupId: params.groupId,
+        photoId: params.photoId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupPhotosQuery(params.userId, params.albumId),
   });
 }
 

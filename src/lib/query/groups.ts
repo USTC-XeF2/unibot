@@ -6,9 +6,11 @@ import { queryClient } from "@/lib/query-client";
 import type { GroupEvent } from "@/types/event";
 import type {
   ConversationState,
+  GroupAlbum,
   GroupCategory,
   GroupFile,
   GroupMemberProfile,
+  GroupPhoto,
   GroupProfile,
 } from "@/types/group";
 
@@ -144,5 +146,52 @@ export function invalidateGroupFilesQuery(
 ) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
+  });
+}
+
+// === Group Albums ===
+
+export function useGroupAlbumsQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.albums(userId, groupId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupAlbum[]>("list_group_albums", {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupAlbumsQuery(userId: string, groupId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.albums(userId, groupId),
+  });
+}
+
+// === Group Photos ===
+
+export function useGroupPhotosQuery(
+  userId: string,
+  groupId: string,
+  albumId: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.groups.photos(userId, albumId),
+    enabled: isValidUserId(userId) && groupId.length > 0 && albumId.length > 0,
+    queryFn: () =>
+      invoke<GroupPhoto[]>("list_group_photos", {
+        userId,
+        groupId,
+        albumId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupPhotosQuery(userId: string, albumId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.photos(userId, albumId),
   });
 }
