@@ -70,11 +70,12 @@ pub async fn list_group_event_history(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
-    limit: Option<usize>,
+    limit: Option<i64>,
 ) -> Result<Vec<GroupEventEntity>, String> {
+    let limit = limit.unwrap_or(50).max(1).min(1000);
     services
         .group
-        .list_group_event_history(user_id, group_id, limit.unwrap_or(50))
+        .list_group_event_history(user_id, group_id, limit)
         .await
         .into_command_result()
 }

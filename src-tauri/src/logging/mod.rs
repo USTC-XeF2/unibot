@@ -14,6 +14,17 @@ use tracing_subscriber::{EnvFilter, Registry};
 /// Global reload handle for runtime log level switching.
 static RELOAD_HANDLE: Mutex<Option<Handle<EnvFilter, Registry>>> = Mutex::new(None);
 
+fn parse_level(level: &str) -> LevelFilter {
+    match level.parse::<LevelFilter>() {
+        Ok(filter) => filter,
+        Err(_) => {
+            // tracing is not guaranteed to be initialized here, so fall back to stderr.
+            eprintln!("invalid log level '{level}', falling back to INFO");
+            LevelFilter::INFO
+        }
+    }
+}
+
 /// Guard that keeps the non-blocking writer thread alive.
 pub struct LogGuard {
     _guard: tracing_appender::non_blocking::WorkerGuard,
@@ -32,12 +43,7 @@ impl LogGuard {
 /// * `default_level` - Default log level (e.g. "info" or "debug")
 pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult<LogGuard> {
     let env_filter = EnvFilter::builder()
-        .with_default_directive(
-            default_level
-                .parse::<LevelFilter>()
-                .unwrap_or(LevelFilter::INFO)
-                .into(),
-        )
+        .with_default_directive(parse_level(default_level).into())
         .from_env_lossy();
 
     let appender = tracing_appender::rolling::Builder::new()
@@ -56,7 +62,7 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult
         .with(JsonLayer::new(non_blocking))
         .init();
 
-    *RELOAD_HANDLE.lock().unwrap() = Some(reload_handle);
+    *RELOAD_HANDLE.lock().unwrap_or_else(|e| e.into_inner()) = Some(reload_handle);
 
     Ok(LogGuard::new(guard))
 }
@@ -66,15 +72,10 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult
 /// Returns Ok(true) if the level was changed, Ok(false) if logging is not initialized.
 pub fn set_log_level(level: &str) -> AppResult<bool> {
     let new_filter = EnvFilter::builder()
-        .with_default_directive(
-            level
-                .parse::<LevelFilter>()
-                .unwrap_or(LevelFilter::INFO)
-                .into(),
-        )
+        .with_default_directive(parse_level(level).into())
         .from_env_lossy();
 
-    let handle = RELOAD_HANDLE.lock().unwrap();
+    let handle = RELOAD_HANDLE.lock().unwrap_or_else(|e| e.into_inner());
     match handle.as_ref() {
         Some(h) => {
             h.reload(new_filter)
@@ -98,12 +99,13 @@ pub async fn read_system_logs(
         return Ok(vec![]);
     }
 
-    let min_file_date = since.and_then(|ts| {
-        chrono::DateTime::from_timestamp_millis(ts as i64).map(|dt| dt.date_naive())
-    });
-    let max_file_date = before.and_then(|ts| {
-        chrono::DateTime::from_timestamp_millis(ts as i64).map(|dt| dt.date_naive())
-    });
+    let since_i64 = since.map(|ts| i64::try_from(ts).unwrap_or(i64::MAX));
+    let before_i64 = before.map(|ts| i64::try_from(ts).unwrap_or(i64::MAX));
+
+    let min_file_date = since_i64
+        .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.date_naive()));
+    let max_file_date = before_i64
+        .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.date_naive()));
 
     let mut entries = Vec::new();
     let mut read_files = tokio::fs::read_dir(log_dir)
@@ -170,14 +172,14 @@ pub async fn read_system_logs(
 
                     let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
 
-                    if let Some(since_ts) = since {
-                        if entry_ts < since_ts as i64 {
+                    if let Some(since_ts) = since_i64 {
+                        if entry_ts < since_ts {
                             continue;
                         }
                     }
 
-                    if let Some(before_ts) = before {
-                        if entry_ts >= before_ts as i64 {
+                    if let Some(before_ts) = before_i64 {
+                        if entry_ts >= before_ts {
                             continue;
                         }
                     }
@@ -219,7 +221,9 @@ pub async fn cleanup_old_logs(log_dir: impl AsRef<Path>, retention_days: i64) ->
         return Ok(0);
     }
 
-    let cutoff = now_ts() as i64 - retention_days * 24 * 60 * 60 * 1000;
+    let retention_ms = i128::from(retention_days) * 24 * 60 * 60 * 1000;
+    let now = i128::from(now_ts());
+    let cutoff = (now - retention_ms).max(0) as i64;
     let mut deleted = 0usize;
     let mut read_files = tokio::fs::read_dir(log_dir)
         .await

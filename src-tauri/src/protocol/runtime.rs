@@ -21,7 +21,7 @@ pub struct ProtocolRuntimeManager {
     servers: Mutex<HashMap<String, RunningProtocolServer>>,
     bot_repo: BotRepo,
     service_hub: ServiceHub,
-    core: CoreContainer,
+    core: Arc<CoreContainer>,
     recorder: PacketRecorder,
 }
 
@@ -48,7 +48,7 @@ impl ProtocolRuntimeManager {
             servers: Mutex::new(HashMap::new()),
             bot_repo,
             service_hub,
-            core,
+            core: Arc::new(core),
             recorder,
         }
     }
@@ -113,7 +113,7 @@ impl ProtocolRuntimeManager {
         let adapter: Arc<dyn crate::protocol::ProtocolAdapter> = Arc::new(MilkyAdapter::new());
         let backend = Arc::new(VirtualBackend::new(
             self.service_hub.clone(),
-            Arc::new(self.core.clone()),
+            self.core.clone(),
             adapter.clone(),
         ));
 

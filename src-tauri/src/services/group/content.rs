@@ -599,14 +599,11 @@ impl GroupService {
         &self,
         user_id: String,
         group_id: String,
-        limit: usize,
+        limit: i64,
     ) -> AppResult<Vec<GroupEventEntity>> {
         self.ensure_group_member(&group_id, &user_id).await?;
 
-        let limit_i64 =
-            i64::try_from(limit).map_err(|_| AppError::validation("limit is too large"))?;
-
-        let rows = self.repo.list_group_events(&group_id, limit_i64).await?;
+        let rows = self.repo.list_group_events(&group_id, limit).await?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 

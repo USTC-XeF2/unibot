@@ -511,20 +511,4 @@ impl GroupRepo {
 
         Ok(())
     }
-
-    pub async fn set_member_count(&self, group_id: &str, count: u32) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            UPDATE chat_groups
-            SET member_count = ?2,
-                updated_at = unixepoch() * 1000
-            WHERE group_id = ?1
-            "#,
-        )
-        .bind(group_id)
-        .bind(count)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
 }

@@ -39,7 +39,7 @@ impl GroupService {
             ));
         }
 
-        let group = GroupProfile {
+        let mut group = GroupProfile {
             group_id: group_id.clone(),
             group_name,
             owner_user_id: user_id.clone(),
@@ -88,7 +88,7 @@ impl GroupService {
         }
 
         let total = 1 + dedup_member_ids.len() as u32;
-        self.repo.set_member_count(&group_id, total).await?;
+        group.member_count = total;
 
         Ok(group)
     }
