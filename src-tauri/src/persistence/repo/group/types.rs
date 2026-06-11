@@ -76,7 +76,7 @@ pub(super) struct GroupAnnouncementRow {
 pub(super) struct GroupFileRow {
     pub file_id: String,
     pub group_id: String,
-    pub parent_folder_id: String,
+    pub parent_folder_id: Option<String>,
     pub file_name: String,
     pub file_size: u64,
     pub file_hash: Option<String>,
@@ -115,7 +115,7 @@ pub(super) struct GroupPhotoRow {
 pub(super) struct GroupFolderRow {
     pub folder_id: String,
     pub group_id: String,
-    pub parent_folder_id: String,
+    pub parent_folder_id: Option<String>,
     pub folder_name: String,
     pub creator_user_id: String,
     pub created_at: u64,

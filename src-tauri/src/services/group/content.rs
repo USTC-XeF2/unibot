@@ -282,7 +282,7 @@ impl GroupService {
         let file = GroupFileEntity {
             file_id,
             group_id: group_id.clone(),
-            parent_folder_id: parent_folder_id.unwrap_or_default(),
+            parent_folder_id,
             file_name,
             file_size: metadata.len(),
             file_hash: Some(file_hash),
@@ -416,13 +416,16 @@ impl GroupService {
         }
 
         let photos = self.repo.list_group_photos(&album_id, &group_id).await?;
+
+        // Delete database records first (in a transaction) so the source of truth
+        // is updated atomically. Disk cleanup is best-effort after that.
+        self.repo.delete_group_album(&album_id).await?;
+
         for photo in &photos {
             if let Some(ref file_path) = photo.file_path {
                 storage::delete_group_file_disk(file_path, &app_data_dir).await;
             }
         }
-
-        self.repo.delete_group_album(&album_id).await?;
 
         emit_to_group_members(
             core,

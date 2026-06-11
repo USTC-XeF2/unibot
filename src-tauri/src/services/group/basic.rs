@@ -168,7 +168,6 @@ impl GroupService {
         };
 
         self.repo.upsert_group_member(&member).await?;
-        self.repo.increment_member_count(&group_id).await?;
 
         self.save_group_event(
             &group_id,

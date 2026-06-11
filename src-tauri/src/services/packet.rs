@@ -25,7 +25,7 @@ impl PacketService {
         before: Option<u64>,
         limit: i64,
     ) -> AppResult<Vec<ProtocolPacketRecord>> {
-        let limit = limit.min(1000);
+        let limit = limit.max(1).min(1000);
         self.repo
             .list_packets(
                 bot_id.as_deref(),
@@ -49,6 +49,19 @@ impl PacketService {
             .ok_or_else(|| AppError::not_found(format!("packet {} not found", packet_id)))?;
 
         let file_path = app_data_dir.join(&packet.file_path);
+        let canonical = tokio::fs::canonicalize(&file_path)
+            .await
+            .map_err(|e| AppError::storage(format!("packet file not found: {e}")))?;
+        let allowed_prefix = tokio::fs::canonicalize(&app_data_dir)
+            .await
+            .map_err(|e| AppError::storage(format!("app data dir not accessible: {e}")))?;
+
+        if !canonical.starts_with(&allowed_prefix) {
+            return Err(AppError::validation(
+                "packet file path escapes app data directory",
+            ));
+        }
+
         tokio::fs::read_to_string(&file_path)
             .await
             .map_err(|e| AppError::storage(format!("failed to read packet file: {e}")))

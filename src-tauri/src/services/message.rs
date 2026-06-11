@@ -242,7 +242,7 @@ impl MessageService {
             .repo
             .mark_message_recalled(&message_id, &user_id)
             .await?
-            .ok_or_else(|| AppError::conflict("message already recalled"))?;
+            .ok_or_else(|| AppError::conflict("message was recalled concurrently"))?;
 
         let entity: MessageEntity = row.try_into()?;
         let recipients = recipients_for_source(

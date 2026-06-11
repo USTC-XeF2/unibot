@@ -207,7 +207,7 @@ pub struct GroupAnnouncementEntity {
 pub struct GroupFileEntity {
     pub file_id: String,
     pub group_id: DbId,
-    pub parent_folder_id: String,
+    pub parent_folder_id: Option<String>,
     pub file_name: String,
     pub file_size: u64,
     pub file_hash: Option<String>,
@@ -246,7 +246,7 @@ pub struct GroupPhotoEntity {
 pub struct GroupFolderEntity {
     pub folder_id: String,
     pub group_id: DbId,
-    pub parent_folder_id: String,
+    pub parent_folder_id: Option<String>,
     pub folder_name: String,
     pub creator_user_id: DbId,
     pub created_at: u64,

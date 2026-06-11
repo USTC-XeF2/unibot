@@ -114,8 +114,9 @@ impl InteractionRepo {
         let row = sqlx::query_as::<_, PokeRow>(
             r#"
             INSERT INTO pokes (
-                poke_id, message_scene, peer_id, sender_user_id, target_user_id, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                poke_id, message_scene, peer_id, sender_user_id, target_user_id,
+                is_recalled, recalled_by_user_id, recalled_at, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, NULL, ?6)
             RETURNING poke_id AS id, message_scene AS source_type, peer_id AS source_id,
                       sender_user_id, target_user_id,
                       is_recalled, recalled_by_user_id, recalled_at,

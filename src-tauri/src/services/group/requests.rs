@@ -188,10 +188,6 @@ impl GroupService {
                 AppError::not_found(format!("group request {} not found", request_id))
             })?;
 
-        if state == RequestState::Accepted {
-            self.repo.increment_member_count(&handled.group_id).await?;
-        }
-
         let event = InternalEvent::GroupRequestHandled {
             request_id: handled.request_id.clone(),
             group_id: handled.group_id.clone(),

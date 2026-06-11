@@ -43,7 +43,7 @@ export type ConversationState = {
 export type GroupFile = {
   file_id: string;
   group_id: string;
-  parent_folder_id: string;
+  parent_folder_id: string | null;
   file_name: string;
   file_size: number;
   file_hash: string | null;
@@ -57,7 +57,7 @@ export type GroupFile = {
 export type GroupFolder = {
   folder_id: string;
   group_id: string;
-  parent_folder_id: string;
+  parent_folder_id: string | null;
   folder_name: string;
   creator_user_id: string;
   created_at: number;

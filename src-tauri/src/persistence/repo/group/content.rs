@@ -58,12 +58,6 @@ impl GroupRepo {
     }
 
     pub async fn upsert_group_folder(&self, folder: &GroupFolderEntity) -> Result<(), sqlx::Error> {
-        let parent = if folder.parent_folder_id.is_empty() || folder.parent_folder_id == "/" {
-            None::<String>
-        } else {
-            Some(folder.parent_folder_id.clone())
-        };
-
         sqlx::query(
             r#"
             INSERT INTO group_folders (
@@ -77,7 +71,7 @@ impl GroupRepo {
         )
         .bind(&folder.folder_id)
         .bind(&folder.group_id)
-        .bind(parent)
+        .bind(&folder.parent_folder_id)
         .bind(&folder.folder_name)
         .bind(&folder.creator_user_id)
         .bind(folder.created_at as i64)
@@ -97,7 +91,7 @@ impl GroupRepo {
             SELECT
                 gf.folder_id,
                 gf.group_id,
-                COALESCE(gf.parent_folder_id, '') AS parent_folder_id,
+                gf.parent_folder_id,
                 gf.folder_name,
                 gf.creator_user_id,
                 gf.created_at,
@@ -162,7 +156,7 @@ impl GroupRepo {
                    uploader_user_id, created_at AS uploaded_at, expire_at, file_path, download_count
             FROM group_files
             WHERE group_id = ?1
-              AND COALESCE(parent_folder_id, '') = COALESCE(?2, '')
+              AND parent_folder_id IS ?2
             ORDER BY created_at DESC
             "#,
         )

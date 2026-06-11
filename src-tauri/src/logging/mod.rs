@@ -147,40 +147,54 @@ pub async fn read_system_logs(
         let reader = tokio::io::BufReader::new(file);
         let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
 
-        while let Ok(Some(line)) = lines.next_line().await {
-            if line.trim().is_empty() {
-                continue;
-            }
-            let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                continue;
-            };
+        loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                        continue;
+                    };
 
-            if value.get("ts").is_none() {
-                if let Some(date) = file_date {
-                    let ts = date
-                        .and_hms_opt(0, 0, 0)
-                        .unwrap_or_default()
-                        .and_utc()
-                        .timestamp_millis();
-                    value["ts"] = ts.into();
+                    if value.get("ts").is_none() {
+                        if let Some(date) = file_date {
+                            let ts = date
+                                .and_hms_opt(0, 0, 0)
+                                .unwrap_or_default()
+                                .and_utc()
+                                .timestamp_millis();
+                            value["ts"] = ts.into();
+                        }
+                    }
+
+                    let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
+
+                    if let Some(since_ts) = since {
+                        if entry_ts < since_ts as i64 {
+                            continue;
+                        }
+                    }
+
+                    if let Some(before_ts) = before {
+                        if entry_ts >= before_ts as i64 {
+                            continue;
+                        }
+                    }
+
+                    entries.push(value);
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "log_reader",
+                        path = %path.display(),
+                        error = %e,
+                        "failed to read log line; stopping file"
+                    );
+                    break;
                 }
             }
-
-            let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
-
-            if let Some(since_ts) = since {
-                if entry_ts < since_ts as i64 {
-                    continue;
-                }
-            }
-
-            if let Some(before_ts) = before {
-                if entry_ts >= before_ts as i64 {
-                    continue;
-                }
-            }
-
-            entries.push(value);
         }
     }
 

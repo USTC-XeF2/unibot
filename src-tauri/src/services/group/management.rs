@@ -37,7 +37,6 @@ impl GroupService {
         self.repo
             .remove_group_member(&group_id, &target_user_id)
             .await?;
-        self.repo.decrement_member_count(&group_id).await?;
 
         let event = InternalEvent::Notice {
             group_id: group_id.clone(),
@@ -175,7 +174,6 @@ impl GroupService {
         }
 
         self.repo.remove_group_member(&group_id, &user_id).await?;
-        self.repo.decrement_member_count(&group_id).await?;
 
         Ok(())
     }
