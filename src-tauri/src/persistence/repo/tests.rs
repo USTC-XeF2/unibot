@@ -30,6 +30,7 @@ fn make_group(group_id: &str, name: &str, owner_id: &str) -> GroupProfile {
         member_count: 0,
         max_member_count: 500,
         group_status: Default::default(),
+        category_id: None,
     }
 }
 

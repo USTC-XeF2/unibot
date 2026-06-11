@@ -525,27 +525,21 @@ export function useUploadGroupFileMutation() {
     mutationFn: ({
       userId,
       groupId,
-      fileId,
       parentFolderId,
       fileName,
-      fileSize,
       sourcePath,
     }: {
       userId: string;
       groupId: string;
-      fileId: string;
-      parentFolderId: string;
+      parentFolderId?: string;
       fileName: string;
-      fileSize: number;
       sourcePath: string;
     }) =>
       invoke("upload_group_file", {
         userId,
         groupId,
-        fileId,
-        parentFolderId,
+        parentFolderId: parentFolderId ?? null,
         fileName,
-        fileSize,
         sourcePath,
       }),
     onSuccess: (_, variables) =>
@@ -637,14 +631,12 @@ export function useUploadGroupPhotoMutation() {
       userId,
       groupId,
       albumId,
-      photoId,
       sourcePath,
       description,
     }: {
       userId: string;
       groupId: string;
       albumId: string;
-      photoId: string;
       sourcePath: string;
       description?: string;
     }) =>
@@ -652,7 +644,6 @@ export function useUploadGroupPhotoMutation() {
         userId,
         groupId,
         albumId,
-        photoId,
         sourcePath,
         description: description ?? null,
       }),

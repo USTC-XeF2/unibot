@@ -4,14 +4,25 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{AppError, AppResult};
 
-/// Sanitize a file name by replacing path separators and control characters.
+/// Sanitize a file name by replacing path separators, control characters,
+/// and directory traversal sequences.
 /// Falls back to `file_id` if the sanitized name is empty.
 pub fn sanitize_file_name(name: &str, file_id: &str) -> String {
-    let sanitized: String = name
+    // Replace path separators and null byte
+    let mut sanitized = name
         .replace(['/', '\\', '\0'], "_")
+        .replace("..", "_")
         .replace('\n', "_")
         .replace('\r', "_");
-    if sanitized.trim().is_empty() {
+
+    // Replace other control characters (0x01-0x1F and 0x7F)
+    sanitized = sanitized
+        .chars()
+        .map(|c| if c.is_control() { '_' } else { c })
+        .collect();
+
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() || trimmed == "." {
         file_id.to_string()
     } else {
         sanitized

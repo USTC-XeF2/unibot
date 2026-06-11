@@ -7,6 +7,7 @@ export type GroupProfile = {
   member_count: number;
   max_member_count: number;
   group_status: GroupStatus;
+  category_id?: string | null;
 };
 
 export type GroupRole = "owner" | "admin" | "member";

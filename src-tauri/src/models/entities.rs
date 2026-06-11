@@ -53,6 +53,8 @@ pub struct GroupProfile {
     pub max_member_count: u32,
     #[serde(default)]
     pub group_status: GroupStatus,
+    #[serde(default)]
+    pub category_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

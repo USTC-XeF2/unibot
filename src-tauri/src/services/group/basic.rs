@@ -46,6 +46,7 @@ impl GroupService {
             member_count: 0,
             max_member_count,
             group_status: Default::default(),
+            category_id: None,
         };
 
         self.repo.upsert_group(&group).await?;
@@ -365,9 +366,21 @@ impl GroupService {
 
     pub async fn delete_group_category(
         &self,
-        _user_id: String,
+        user_id: String,
         category_id: String,
     ) -> AppResult<()> {
+        let category = self
+            .repo
+            .get_group_category_by_id(&category_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("category {} not found", category_id)))?;
+
+        if category.owner_user_id != user_id {
+            return Err(AppError::validation(
+                "cannot delete another user's category",
+            ));
+        }
+
         self.repo
             .delete_group_category(&category_id)
             .await
@@ -381,6 +394,21 @@ impl GroupService {
         category_id: Option<String>,
     ) -> AppResult<()> {
         self.ensure_group_member(&group_id, &user_id).await?;
+
+        if let Some(ref cid) = category_id {
+            let category = self
+                .repo
+                .get_group_category_by_id(cid)
+                .await?
+                .ok_or_else(|| AppError::not_found(format!("category {} not found", cid)))?;
+
+            if category.owner_user_id != user_id {
+                return Err(AppError::validation(
+                    "cannot assign group to another user's category",
+                ));
+            }
+        }
+
         self.repo
             .set_group_category(&user_id, &group_id, category_id.as_deref())
             .await

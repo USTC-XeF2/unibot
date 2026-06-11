@@ -246,6 +246,31 @@ impl GroupRepo {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    pub async fn get_group_album_by_id(
+        &self,
+        album_id: &str,
+    ) -> Result<Option<GroupAlbumEntity>, sqlx::Error> {
+        let row = sqlx::query_as::<_, GroupAlbumRow>(
+            r#"
+            SELECT
+                a.album_id,
+                a.group_id,
+                a.name,
+                a.cover_url,
+                COALESCE((SELECT COUNT(*) FROM group_photos p WHERE p.album_id = a.album_id), 0) AS photo_count,
+                a.created_at,
+                a.updated_at
+            FROM group_albums a
+            WHERE a.album_id = ?1
+            "#,
+        )
+        .bind(album_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
     pub async fn delete_group_album(&self, album_id: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query("DELETE FROM group_albums WHERE album_id = ?1")
             .bind(album_id)
@@ -279,6 +304,7 @@ impl GroupRepo {
     pub async fn list_group_photos(
         &self,
         album_id: &str,
+        group_id: &str,
     ) -> Result<Vec<GroupPhotoEntity>, sqlx::Error> {
         let rows = sqlx::query_as::<_, GroupPhotoRow>(
             r#"
@@ -295,10 +321,12 @@ impl GroupRepo {
             FROM group_photos p
             JOIN group_albums a ON a.album_id = p.album_id
             WHERE p.album_id = ?1
+              AND a.group_id = ?2
             ORDER BY p.created_at DESC
             "#,
         )
         .bind(album_id)
+        .bind(group_id)
         .fetch_all(&self.pool)
         .await?;
 

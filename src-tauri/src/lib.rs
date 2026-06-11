@@ -73,6 +73,11 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|err| format!("failed to get app data dir: {err}"))?;
 
+            // Ensure groups directory exists for file storage
+            let groups_dir = app_data_dir.join("groups");
+            std::fs::create_dir_all(&groups_dir)
+                .map_err(|err| format!("failed to create groups dir: {err}"))?;
+
             // Initialize tracing/logging
             let log_level = tauri::async_runtime::block_on(service_hub.settings.get_log_level());
             let logs_dir = app_data_dir.join("logs");

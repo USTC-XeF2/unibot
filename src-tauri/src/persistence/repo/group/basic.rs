@@ -4,7 +4,7 @@ use crate::models::{
 use crate::persistence::repo::codecs;
 
 use super::GroupRepo;
-use super::types::{GroupCategoryRow, GroupMemberRow, GroupRow, GroupWholeMuteRow};
+use super::types::{GroupCategoryRow, GroupMemberRow, GroupRow, GroupWholeMuteRow, UserGroupRow};
 
 impl GroupRepo {
     pub async fn upsert_group(&self, group: &GroupProfile) -> Result<(), sqlx::Error> {
@@ -56,14 +56,15 @@ impl GroupRepo {
     }
 
     pub async fn list_user_groups(&self, user_id: &str) -> Result<Vec<GroupProfile>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, GroupRow>(
+        let rows = sqlx::query_as::<_, UserGroupRow>(
             r#"
             SELECT g.group_id,
                    g.group_name,
                    g.group_owner_user_id AS owner_user_id,
                    g.member_count,
                    g.max_member_count,
-                   g.group_status
+                   g.group_status,
+                   ug.category_id
             FROM user_groups ug
             JOIN chat_groups g ON g.group_id = ug.group_id
             WHERE ug.owner_user_id = ?1
@@ -456,6 +457,24 @@ impl GroupRepo {
             created_at: now as u64,
             updated_at: now as u64,
         })
+    }
+
+    pub async fn get_group_category_by_id(
+        &self,
+        category_id: &str,
+    ) -> Result<Option<GroupCategoryEntity>, sqlx::Error> {
+        let row = sqlx::query_as::<_, GroupCategoryRow>(
+            r#"
+            SELECT category_id, owner_user_id, name, sort_order, created_at, updated_at
+            FROM group_categories
+            WHERE category_id = ?1
+            "#,
+        )
+        .bind(category_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
     }
 
     pub async fn delete_group_category(&self, category_id: &str) -> Result<(), sqlx::Error> {

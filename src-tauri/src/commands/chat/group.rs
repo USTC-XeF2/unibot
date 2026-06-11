@@ -363,10 +363,8 @@ pub async fn upload_group_file(
     app: tauri::AppHandle,
     user_id: String,
     group_id: String,
-    file_id: String,
-    parent_folder_id: String,
+    parent_folder_id: Option<String>,
     file_name: String,
-    file_size: u64,
     source_path: String,
 ) -> Result<GroupFileEntity, String> {
     let app_data_dir = app
@@ -374,6 +372,8 @@ pub async fn upload_group_file(
         .app_data_dir()
         .map_err(|e| format!("failed to get app data dir: {e}"))?;
     let src_path = std::path::Path::new(&source_path);
+
+    let file_id = crate::utils::new_db_id();
 
     let file_path = crate::services::group::storage::copy_file_to_groups_dir(
         src_path,
@@ -385,6 +385,10 @@ pub async fn upload_group_file(
     .await
     .map_err(|e| e.to_string())?;
 
+    let metadata = tokio::fs::metadata(&app_data_dir.join(&file_path))
+        .await
+        .map_err(|e| format!("failed to get file metadata: {e}"))?;
+
     let file_hash = crate::services::group::storage::compute_sha256(&app_data_dir.join(&file_path))
         .await
         .map_err(|e| e.to_string())?;
@@ -392,9 +396,9 @@ pub async fn upload_group_file(
     let file = GroupFileEntity {
         file_id,
         group_id,
-        parent_folder_id,
+        parent_folder_id: parent_folder_id.unwrap_or_default(),
         file_name,
-        file_size,
+        file_size: metadata.len(),
         file_hash: Some(file_hash),
         uploader_user_id: user_id.clone(),
         uploaded_at: crate::utils::now_ts(),
@@ -521,7 +525,6 @@ pub async fn upload_group_photo(
     user_id: String,
     group_id: String,
     album_id: String,
-    photo_id: String,
     source_path: String,
     description: Option<String>,
 ) -> Result<GroupPhotoEntity, String> {
@@ -537,7 +540,6 @@ pub async fn upload_group_photo(
             user_id,
             group_id,
             album_id,
-            photo_id,
             source_path,
             description,
             app_data_dir,

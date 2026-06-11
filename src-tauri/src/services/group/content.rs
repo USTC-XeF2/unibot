@@ -246,9 +246,11 @@ impl GroupService {
             .file_path
             .ok_or_else(|| AppError::not_found("file has no local path"))?;
 
-        let abs_path = storage::validate_group_file_path(&file_path, &app_data_dir).await?;
+        // Validate path is within allowed directory, then return the relative path
+        // so the frontend can use convertFileSrc() to build an asset:// URL.
+        storage::validate_group_file_path(&file_path, &app_data_dir).await?;
 
-        Ok(abs_path.to_string_lossy().to_string())
+        Ok(file_path)
     }
 
     pub async fn delete_group_file(
@@ -283,11 +285,12 @@ impl GroupService {
             ));
         }
 
-        self.repo.delete_group_file(&file_id).await?;
-
+        // Delete from disk first to avoid orphan files if disk delete fails
         if let Some(ref file_path) = file.file_path {
             storage::delete_group_file_disk(file_path, &app_data_dir).await;
         }
+
+        self.repo.delete_group_file(&file_id).await?;
 
         Ok(())
     }
@@ -357,7 +360,7 @@ impl GroupService {
             return Err(AppError::validation("only owner/admin can delete albums"));
         }
 
-        let photos = self.repo.list_group_photos(&album_id).await?;
+        let photos = self.repo.list_group_photos(&album_id, &group_id).await?;
         for photo in &photos {
             if let Some(ref file_path) = photo.file_path {
                 storage::delete_group_file_disk(file_path, &app_data_dir).await;
@@ -387,13 +390,27 @@ impl GroupService {
         user_id: String,
         group_id: String,
         album_id: String,
-        photo_id: String,
         source_path: String,
         description: Option<String>,
         app_data_dir: PathBuf,
     ) -> AppResult<GroupPhotoEntity> {
         core.require_user_context(&user_id)?;
         self.ensure_group_member(&group_id, &user_id).await?;
+
+        // Verify album belongs to the group
+        let album = self
+            .repo
+            .get_group_album_by_id(&album_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("album {} not found", album_id)))?;
+
+        if album.group_id != group_id {
+            return Err(AppError::validation(
+                "album does not belong to the target group",
+            ));
+        }
+
+        let photo_id = crate::utils::new_db_id();
 
         let src = std::path::Path::new(&source_path);
         let file_name = src
@@ -448,7 +465,7 @@ impl GroupService {
     ) -> AppResult<Vec<GroupPhotoEntity>> {
         self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
-            .list_group_photos(&album_id)
+            .list_group_photos(&album_id, &group_id)
             .await
             .map_err(Into::into)
     }
@@ -485,11 +502,12 @@ impl GroupService {
             ));
         }
 
-        self.repo.delete_group_photo(&photo_id).await?;
-
+        // Delete from disk first to avoid orphan files if disk delete fails
         if let Some(ref file_path) = photo.file_path {
             storage::delete_group_file_disk(file_path, &app_data_dir).await;
         }
+
+        self.repo.delete_group_photo(&photo_id).await?;
 
         Ok(())
     }

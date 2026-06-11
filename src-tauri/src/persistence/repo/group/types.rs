@@ -16,6 +16,17 @@ pub(super) struct GroupRow {
 }
 
 #[derive(sqlx::FromRow)]
+pub(super) struct UserGroupRow {
+    pub group_id: String,
+    pub group_name: String,
+    pub owner_user_id: String,
+    pub member_count: u32,
+    pub max_member_count: u32,
+    pub group_status: String,
+    pub category_id: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
 pub(super) struct GroupMemberRow {
     pub group_id: String,
     pub user_id: String,
@@ -144,6 +155,23 @@ impl TryFrom<GroupRow> for GroupProfile {
             member_count: row.member_count,
             max_member_count: row.max_member_count,
             group_status: codecs::group_status_from_db(&row.group_status)?,
+            category_id: None,
+        })
+    }
+}
+
+impl TryFrom<UserGroupRow> for GroupProfile {
+    type Error = sqlx::Error;
+
+    fn try_from(row: UserGroupRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            group_id: row.group_id,
+            group_name: row.group_name,
+            owner_user_id: row.owner_user_id,
+            member_count: row.member_count,
+            max_member_count: row.max_member_count,
+            group_status: codecs::group_status_from_db(&row.group_status)?,
+            category_id: row.category_id,
         })
     }
 }

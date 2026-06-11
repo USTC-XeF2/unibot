@@ -159,15 +159,14 @@ function ConversationList({
     return map;
   }, [conversationStates]);
 
-  // Build group-to-category lookup (placeholder: will use list_user_groups
-  // category_id once that API exposes it)
+  // Build group-to-category lookup from list_user_groups category_id
   const groupToCategoryMap = useMemo(() => {
     const map: Record<string, string | null> = {};
-    for (const cat of groupCategories) {
-      map[cat.category_id] = cat.name;
+    for (const group of groups) {
+      map[group.group_id] = group.category_id ?? null;
     }
     return map;
-  }, [groupCategories]);
+  }, [groups]);
 
   const conversations = useMemo<ConversationItem[]>(() => {
     if (!currentUserId) {
