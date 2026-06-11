@@ -113,7 +113,7 @@ function SettingsView() {
 
       <Card>
         <CardContent className="space-y-3 pt-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex items-center gap-2 font-medium text-sm">
             <Database className="size-4" />
             数据库状态
           </div>
@@ -180,7 +180,7 @@ function SettingsView() {
 
       <Card>
         <CardContent className="space-y-4 pt-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex items-center gap-2 font-medium text-sm">
             <FileText className="size-4" />
             日志设置
           </div>

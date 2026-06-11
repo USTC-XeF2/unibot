@@ -344,7 +344,7 @@ function BotConfigSheet({
                   <span className="font-medium">{config.event_transport}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground shrink-0">Token</span>
+                  <span className="shrink-0 text-muted-foreground">Token</span>
                   <code className="truncate rounded bg-muted px-1.5 py-0.5 text-xs">
                     {config.access_token}
                   </code>

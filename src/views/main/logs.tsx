@@ -153,7 +153,7 @@ function MultiSelectCombobox<T extends string>({
     >
       <ComboboxChips
         ref={anchorRef}
-        className="scrollbar-none overflow-x-auto overflow-y-hidden whitespace-nowrap flex-nowrap h-8"
+        className="scrollbar-none h-8 flex-nowrap overflow-x-auto overflow-y-hidden whitespace-nowrap"
       >
         {value.map((selected) => {
           const selectedOption = options.find(
@@ -167,7 +167,7 @@ function MultiSelectCombobox<T extends string>({
         })}
         <ComboboxChipsInput
           placeholder={value.length === 0 ? placeholder : ""}
-          className="shrink-0 min-w-0"
+          className="min-w-0 shrink-0"
         />
       </ComboboxChips>
 

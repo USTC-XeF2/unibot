@@ -11,7 +11,7 @@ function PacketDirectionBadge({ direction }: { direction: string }) {
   const isReceive = direction === "receive";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-xs ${
         isReceive
           ? "border-sky-500/30 bg-sky-500/10 text-sky-600"
           : "border-green-500/30 bg-green-500/10 text-green-600"
@@ -179,7 +179,7 @@ export default function PacketsView() {
               ) : packetJson ? (
                 <div className="space-y-3">
                   {selectedPacket && (
-                    <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="space-y-1 text-muted-foreground text-xs">
                       <p>
                         <span className="font-medium">动作:</span>{" "}
                         {selectedPacket.action_name}

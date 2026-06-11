@@ -899,7 +899,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
       <header className="flex items-center justify-between border-b px-4 py-2">
         <Button
           variant="ghost"
-          className="h-7 px-1 text-sm font-semibold"
+          className="h-7 px-1 font-semibold text-sm"
           onClick={() => {
             if (conversation.scene === "group") {
               setInfoSheetOpen(true);

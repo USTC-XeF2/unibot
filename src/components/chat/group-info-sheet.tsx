@@ -129,7 +129,7 @@ export default function GroupInfoSheet({
           <Field>
             <div className="flex items-center gap-3 py-2">
               <Avatar className="size-12">
-                <AvatarFallback className="text-lg bg-primary/10">
+                <AvatarFallback className="bg-primary/10 text-lg">
                   {groupName.slice(0, 1)}
                 </AvatarFallback>
               </Avatar>
