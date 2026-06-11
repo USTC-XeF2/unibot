@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::core::CoreContainer;
+use crate::error::{AppError, AppResult};
 use crate::models::{InternalEvent, MessageSource};
 use crate::persistence::GroupRepo;
 
@@ -33,18 +34,12 @@ pub async fn emit_to_group_members(
     group_repo: &GroupRepo,
     group_id: &str,
     event: InternalEvent,
-) {
-    match group_repo.list_group_members(group_id).await {
-        Ok(members) => {
-            emit_to_users(core, members.iter().map(|member| &member.user_id), event);
-        }
-        Err(err) => {
-            tracing::warn!(
-                target: "utils",
-                "failed to list group members for group {group_id}: {err}"
-            );
-        }
-    }
+) -> AppResult<()> {
+    let members = group_repo.list_group_members(group_id).await.map_err(|e| {
+        AppError::storage(format!("failed to list group members for {group_id}: {e}"))
+    })?;
+    emit_to_users(core, members.iter().map(|member| &member.user_id), event);
+    Ok(())
 }
 
 pub async fn recipients_for_source(

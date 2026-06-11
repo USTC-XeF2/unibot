@@ -99,14 +99,15 @@ pub async fn validate_group_file_path(file_path: &str, app_data_dir: &Path) -> A
     Ok(canonical)
 }
 
-/// Delete a file from disk. Logs errors but never fails.
-pub async fn delete_group_file_disk(file_path: &str, app_data_dir: &Path) {
+/// Delete a file from disk. Returns an error if the file exists but could not be removed.
+pub async fn delete_group_file_disk(file_path: &str, app_data_dir: &Path) -> AppResult<()> {
     let full = app_data_dir.join(file_path);
-    if let Err(e) = tokio::fs::remove_file(&full).await {
-        tracing::warn!(
-            path = %full.display(),
-            error = %e,
-            "failed to delete group file from disk"
-        );
+    match tokio::fs::remove_file(&full).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(AppError::storage(format!(
+            "failed to delete group file {} from disk: {e}",
+            full.display()
+        ))),
     }
 }

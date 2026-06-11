@@ -67,106 +67,69 @@ impl ConversationRepo {
         let is_private = scene == "private" || scene == "temp";
         let flag_i: i64 = if flag_value { 1 } else { 0 };
 
-        match (is_private, flag_column) {
-            (true, "is_pinned") => {
-                let peer = peer_user_id.unwrap_or("");
-                let conversation_id = format!("{owner_user_id}:{scene}:{peer}");
-                sqlx::query(
-                    r#"
-                    INSERT INTO conversations (
-                        conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                        is_pinned, updated_at
-                    ) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6)
-                    ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
-                        WHERE conversation_scene IN ('private', 'temp')
-                    DO UPDATE SET
-                        is_pinned = excluded.is_pinned,
-                        updated_at = excluded.updated_at
-                    "#,
-                )
-                .bind(&conversation_id)
-                .bind(owner_user_id)
-                .bind(scene)
-                .bind(peer)
-                .bind(flag_i)
-                .bind(updated_at)
-                .execute(&self.pool)
-                .await?;
-            }
-            (true, "is_muted") => {
-                let peer = peer_user_id.unwrap_or("");
-                let conversation_id = format!("{owner_user_id}:{scene}:{peer}");
-                sqlx::query(
-                    r#"
-                    INSERT INTO conversations (
-                        conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                        is_muted, updated_at
-                    ) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6)
-                    ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
-                        WHERE conversation_scene IN ('private', 'temp')
-                    DO UPDATE SET
-                        is_muted = excluded.is_muted,
-                        updated_at = excluded.updated_at
-                    "#,
-                )
-                .bind(&conversation_id)
-                .bind(owner_user_id)
-                .bind(scene)
-                .bind(peer)
-                .bind(flag_i)
-                .bind(updated_at)
-                .execute(&self.pool)
-                .await?;
-            }
-            (false, "is_pinned") => {
-                let group = group_id.unwrap_or("");
-                let conversation_id = format!("{owner_user_id}:group:{group}");
-                sqlx::query(
-                    r#"
-                    INSERT INTO conversations (
-                        conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                        is_pinned, updated_at
-                    ) VALUES (?1, ?2, 'group', NULL, ?3, ?4, ?5)
-                    ON CONFLICT(owner_user_id, conversation_scene, group_id)
-                        WHERE conversation_scene = 'group'
-                    DO UPDATE SET
-                        is_pinned = excluded.is_pinned,
-                        updated_at = excluded.updated_at
-                    "#,
-                )
-                .bind(&conversation_id)
-                .bind(owner_user_id)
-                .bind(group)
-                .bind(flag_i)
-                .bind(updated_at)
-                .execute(&self.pool)
-                .await?;
-            }
-            (false, "is_muted") => {
-                let group = group_id.unwrap_or("");
-                let conversation_id = format!("{owner_user_id}:group:{group}");
-                sqlx::query(
-                    r#"
-                    INSERT INTO conversations (
-                        conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
-                        is_muted, updated_at
-                    ) VALUES (?1, ?2, 'group', NULL, ?3, ?4, ?5)
-                    ON CONFLICT(owner_user_id, conversation_scene, group_id)
-                        WHERE conversation_scene = 'group'
-                    DO UPDATE SET
-                        is_muted = excluded.is_muted,
-                        updated_at = excluded.updated_at
-                    "#,
-                )
-                .bind(&conversation_id)
-                .bind(owner_user_id)
-                .bind(group)
-                .bind(flag_i)
-                .bind(updated_at)
-                .execute(&self.pool)
-                .await?;
-            }
-            _ => unreachable!(),
+        if is_private {
+            let peer = peer_user_id.unwrap_or("");
+            let conversation_id = format!("{owner_user_id}:{scene}:{peer}");
+            let (pinned_i, muted_i) = if flag_column == "is_pinned" {
+                (flag_i, 0)
+            } else {
+                (0, flag_i)
+            };
+            sqlx::query(
+                r#"
+                INSERT INTO conversations (
+                    conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
+                    is_pinned, is_muted, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7)
+                ON CONFLICT(owner_user_id, conversation_scene, peer_user_id)
+                    WHERE conversation_scene IN ('private', 'temp')
+                DO UPDATE SET
+                    is_pinned = CASE WHEN ?8 = 'is_pinned' THEN excluded.is_pinned ELSE is_pinned END,
+                    is_muted = CASE WHEN ?8 = 'is_muted' THEN excluded.is_muted ELSE is_muted END,
+                    updated_at = excluded.updated_at
+                "#,
+            )
+            .bind(&conversation_id)
+            .bind(owner_user_id)
+            .bind(scene)
+            .bind(peer)
+            .bind(pinned_i)
+            .bind(muted_i)
+            .bind(updated_at)
+            .bind(flag_column)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            let group = group_id.unwrap_or("");
+            let conversation_id = format!("{owner_user_id}:group:{group}");
+            let (pinned_i, muted_i) = if flag_column == "is_pinned" {
+                (flag_i, 0)
+            } else {
+                (0, flag_i)
+            };
+            sqlx::query(
+                r#"
+                INSERT INTO conversations (
+                    conversation_id, owner_user_id, conversation_scene, peer_user_id, group_id,
+                    is_pinned, is_muted, updated_at
+                ) VALUES (?1, ?2, 'group', NULL, ?3, ?4, ?5, ?6)
+                ON CONFLICT(owner_user_id, conversation_scene, group_id)
+                    WHERE conversation_scene = 'group'
+                DO UPDATE SET
+                    is_pinned = CASE WHEN ?7 = 'is_pinned' THEN excluded.is_pinned ELSE is_pinned END,
+                    is_muted = CASE WHEN ?7 = 'is_muted' THEN excluded.is_muted ELSE is_muted END,
+                    updated_at = excluded.updated_at
+                "#,
+            )
+            .bind(&conversation_id)
+            .bind(owner_user_id)
+            .bind(group)
+            .bind(pinned_i)
+            .bind(muted_i)
+            .bind(updated_at)
+            .bind(flag_column)
+            .execute(&self.pool)
+            .await?;
         }
 
         Ok(())

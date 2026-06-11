@@ -43,7 +43,7 @@ impl GroupService {
                 time: announcement.updated_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(announcement)
     }
@@ -83,7 +83,7 @@ impl GroupService {
                 time: folder.updated_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(folder)
     }
@@ -123,7 +123,7 @@ impl GroupService {
                 time: file.uploaded_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(file)
     }
@@ -216,7 +216,7 @@ impl GroupService {
                 time: essence.created_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(essence)
     }
@@ -328,9 +328,9 @@ impl GroupService {
             ));
         }
 
-        // Delete from disk first to avoid orphan files if disk delete fails
+        // Delete from disk first to avoid orphan files if disk delete fails.
         if let Some(ref file_path) = file.file_path {
-            storage::delete_group_file_disk(file_path, &app_data_dir).await;
+            storage::delete_group_file_disk(file_path, &app_data_dir).await?;
         }
 
         self.repo.delete_group_file(&file_id).await?;
@@ -345,7 +345,7 @@ impl GroupService {
                 time: now_ts(),
             },
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -383,7 +383,7 @@ impl GroupService {
                 time: album.created_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(album)
     }
@@ -423,7 +423,16 @@ impl GroupService {
 
         for photo in &photos {
             if let Some(ref file_path) = photo.file_path {
-                storage::delete_group_file_disk(file_path, &app_data_dir).await;
+                if let Err(e) = storage::delete_group_file_disk(file_path, &app_data_dir).await {
+                    tracing::warn!(
+                        target: "group_content",
+                        album_id = %album_id,
+                        group_id = %group_id,
+                        file_path = %file_path,
+                        error = %e,
+                        "failed to delete album photo file from disk after DB cleanup"
+                    );
+                }
             }
         }
 
@@ -437,7 +446,7 @@ impl GroupService {
                 time: now_ts(),
             },
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -510,7 +519,7 @@ impl GroupService {
                 time: photo.created_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(photo)
     }
@@ -560,9 +569,9 @@ impl GroupService {
             ));
         }
 
-        // Delete from disk first to avoid orphan files if disk delete fails
+        // Delete from disk first to avoid orphan files if disk delete fails.
         if let Some(ref file_path) = photo.file_path {
-            storage::delete_group_file_disk(file_path, &app_data_dir).await;
+            storage::delete_group_file_disk(file_path, &app_data_dir).await?;
         }
 
         self.repo.delete_group_photo(&photo_id).await?;
@@ -578,7 +587,7 @@ impl GroupService {
                 time: now_ts(),
             },
         )
-        .await;
+        .await?;
 
         Ok(())
     }

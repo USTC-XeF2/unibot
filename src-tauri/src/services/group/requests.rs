@@ -104,7 +104,7 @@ impl GroupService {
 
         match created.request_type {
             GroupRequestType::Join => {
-                emit_to_group_members(core, &self.repo, &created.group_id, event.clone()).await;
+                emit_to_group_members(core, &self.repo, &created.group_id, event.clone()).await?;
                 emit_to_users(core, [&user_id], event);
             }
             GroupRequestType::Invite => {
@@ -198,7 +198,7 @@ impl GroupService {
             state,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, &handled.group_id, event.clone()).await;
+        emit_to_group_members(core, &self.repo, &handled.group_id, event.clone()).await?;
         emit_to_users(core, [&handled.initiator_user_id], event.clone());
         if let Some(ref target_user_id) = handled.target_user_id {
             emit_to_users(core, [target_user_id], event);
@@ -233,7 +233,7 @@ impl GroupService {
                         time: event_time,
                     },
                 )
-                .await;
+                .await?;
             }
         }
 

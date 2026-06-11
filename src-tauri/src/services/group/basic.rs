@@ -190,7 +190,7 @@ impl GroupService {
                 time: event_time,
             },
         )
-        .await;
+        .await?;
 
         Ok(member)
     }
@@ -283,7 +283,7 @@ impl GroupService {
             mute_until: result.mute_until,
             time: event_time,
         };
-        emit_to_group_members(core, &self.repo, &group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await?;
 
         Ok(result)
     }
@@ -324,7 +324,7 @@ impl GroupService {
             mute_until: state.mute_until,
             time: state.updated_at,
         };
-        emit_to_group_members(core, &self.repo, &group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await?;
 
         Ok(state)
     }
