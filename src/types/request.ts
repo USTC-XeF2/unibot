@@ -5,7 +5,7 @@ export type FriendRequestEntity = {
   request_id: string;
   initiator_user_id: string;
   target_user_id: string;
-  comment: string;
+  comment: string | null;
   state: RequestState;
   created_at: number;
   handled_at: number | null;

@@ -45,7 +45,7 @@ impl GroupService {
             notice_type: NoticeType::Kick,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await;
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
         emit_to_users(core, [&target_user_id], event);
 
         Ok(())
@@ -92,7 +92,7 @@ impl GroupService {
             notice_type: NoticeType::AdminChange,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, &group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await?;
 
         Ok(updated)
     }
@@ -127,7 +127,7 @@ impl GroupService {
             target_user_id: target_user_id.clone(),
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, &group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await?;
 
         Ok(updated)
     }

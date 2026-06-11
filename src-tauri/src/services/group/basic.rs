@@ -39,7 +39,7 @@ impl GroupService {
             ));
         }
 
-        let group = GroupProfile {
+        let mut group = GroupProfile {
             group_id: group_id.clone(),
             group_name,
             owner_user_id: user_id.clone(),
@@ -87,6 +87,9 @@ impl GroupService {
             }
         }
 
+        let total = 1 + dedup_member_ids.len() as u32;
+        group.member_count = total;
+
         Ok(group)
     }
 
@@ -120,7 +123,7 @@ impl GroupService {
             .get_group_member(group_id, user_id)
             .await?
             .ok_or_else(|| {
-                AppError::validation(format!("user {} is not in group {}", user_id, group_id))
+                AppError::not_found(format!("user {} is not in group {}", user_id, group_id))
             })?;
         Ok(member)
     }
@@ -187,7 +190,7 @@ impl GroupService {
                 time: event_time,
             },
         )
-        .await;
+        .await?;
 
         Ok(member)
     }
@@ -280,7 +283,7 @@ impl GroupService {
             mute_until: result.mute_until,
             time: event_time,
         };
-        emit_to_group_members(core, &self.repo, &group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await?;
 
         Ok(result)
     }
@@ -321,7 +324,7 @@ impl GroupService {
             mute_until: state.mute_until,
             time: state.updated_at,
         };
-        emit_to_group_members(core, &self.repo, &group_id, event).await;
+        emit_to_group_members(core, &self.repo, &group_id, event).await?;
 
         Ok(state)
     }

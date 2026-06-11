@@ -4,6 +4,7 @@ use crate::persistence::BotRepo;
 use crate::protocol::types::{BotConfig, HttpConfig};
 use crate::utils::new_db_id;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::io::ErrorKind;
 use tauri::Manager;
 
@@ -215,11 +216,11 @@ impl BotService {
 
     async fn allocate_port(&self) -> AppResult<u16> {
         let bots = self.repo.list_bots().await?;
-        let mut used = Vec::new();
+        let mut used = HashSet::new();
         for bot in bots {
             if let Ok(text) = tokio::fs::read_to_string(&bot.config_path).await {
                 if let Ok(cfg) = serde_json::from_str::<BotConfig>(&text) {
-                    used.push(cfg.http.port);
+                    used.insert(cfg.http.port);
                 }
             }
         }
@@ -244,10 +245,10 @@ mod tests {
     async fn delete_bot_removes_database_record_when_config_cleanup_fails(
         pool: sqlx::SqlitePool,
     ) -> Result<(), sqlx::Error> {
-        use crate::persistence::{GroupRepo, InteractionRepo, MessageRepo};
+        use crate::persistence::{GroupRepo, InteractionRepo, MessageRepo, PacketRepo};
         use crate::services::{
-            GroupService, InteractionService, MessageService, RequestService, ServiceHub,
-            UserService,
+            GroupService, InteractionService, MessageService, PacketService, RequestService,
+            ServiceHub, UserService,
         };
 
         migrator::run_migrations(&pool)
@@ -283,20 +284,21 @@ mod tests {
 
         let message_repo = MessageRepo::new(pool.clone());
         let group_repo = GroupRepo::new(pool.clone());
-        let service_hub = ServiceHub::new(
-            MessageService::new(message_repo.clone(), group_repo.clone()),
-            InteractionService::new(
+        let service_hub = ServiceHub {
+            message: MessageService::new(message_repo.clone(), group_repo.clone()),
+            interaction: InteractionService::new(
                 InteractionRepo::new(pool.clone()),
                 message_repo.clone(),
                 group_repo.clone(),
             ),
-            GroupService::new(group_repo, message_repo),
-            RequestService::new(user_repo.clone()),
-            UserService::new(user_repo),
-            BotService::new(repo.clone()),
-            SettingsService::new(SettingsRepo::new(pool.clone())),
-            ConversationService::new(ConversationRepo::new(pool.clone())),
-        );
+            group: GroupService::new(group_repo, message_repo),
+            request: RequestService::new(user_repo.clone()),
+            user: UserService::new(user_repo),
+            bot: BotService::new(repo.clone()),
+            settings: SettingsService::new(SettingsRepo::new(pool.clone())),
+            conversation: ConversationService::new(ConversationRepo::new(pool.clone())),
+            packet: PacketService::new(PacketRepo::new(pool.clone())),
+        };
 
         let result = BotService::new(repo.clone())
             .delete_bot(

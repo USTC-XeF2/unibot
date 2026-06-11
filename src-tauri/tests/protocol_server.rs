@@ -1,14 +1,14 @@
 use unibot_lib::core::CoreContainer;
 use unibot_lib::models::UserProfile;
 use unibot_lib::persistence::{
-    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo,
-    migrator,
+    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, PacketRepo, SettingsRepo,
+    UserRepo, migrator,
 };
 use unibot_lib::protocol::ProtocolRuntimeManager;
 use unibot_lib::protocol::types::BotConfig;
 use unibot_lib::services::{
     BotService, ConversationService, GroupService, InteractionService, MessageService,
-    RequestService, ServiceHub, SettingsService, UserService,
+    PacketService, RequestService, ServiceHub, SettingsService, UserService,
 };
 use unibot_lib::utils::new_db_id;
 
@@ -36,16 +36,21 @@ async fn setup_test_env(
     user_repo.upsert_user(&user).await.unwrap();
     core.register_user(user).unwrap();
 
-    let service_hub = ServiceHub::new(
-        MessageService::new(message_repo.clone(), group_repo.clone()),
-        InteractionService::new(interaction_repo, message_repo.clone(), group_repo.clone()),
-        GroupService::new(group_repo, message_repo.clone()),
-        RequestService::new(user_repo.clone()),
-        UserService::new(user_repo.clone()),
-        BotService::new(bot_repo.clone()),
-        SettingsService::new(SettingsRepo::new(pool.clone())),
-        ConversationService::new(ConversationRepo::new(pool.clone())),
-    );
+    let service_hub = ServiceHub {
+        message: MessageService::new(message_repo.clone(), group_repo.clone()),
+        interaction: InteractionService::new(
+            interaction_repo,
+            message_repo.clone(),
+            group_repo.clone(),
+        ),
+        group: GroupService::new(group_repo, message_repo.clone()),
+        request: RequestService::new(user_repo.clone()),
+        user: UserService::new(user_repo.clone()),
+        bot: BotService::new(bot_repo.clone()),
+        settings: SettingsService::new(SettingsRepo::new(pool.clone())),
+        conversation: ConversationService::new(ConversationRepo::new(pool.clone())),
+        packet: PacketService::new(PacketRepo::new(pool.clone())),
+    };
 
     let temp_dir = std::env::temp_dir().join(format!("unibot-test-{}", new_db_id()));
     tokio::fs::create_dir_all(&temp_dir).await.unwrap();

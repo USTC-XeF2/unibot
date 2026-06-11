@@ -385,6 +385,10 @@ async fn smoke_group_requests(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error>
     let user_groups = repo.list_user_groups("10002").await?;
     assert!(user_groups.iter().any(|g| g.group_id == "20001"));
 
+    // member_count must reflect both owner and accepted joiner
+    let group = repo.get_group("20001").await?;
+    assert_eq!(group.map(|g| g.member_count), Some(2));
+
     Ok(())
 }
 

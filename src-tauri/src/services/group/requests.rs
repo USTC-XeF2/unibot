@@ -1,7 +1,8 @@
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupEventPayload, GroupRequestEntity, GroupRequestType, GroupRole, InternalEvent, RequestState,
+    GroupEventPayload, GroupRequestEntity, GroupRequestType, GroupRole, GroupStatus, InternalEvent,
+    RequestState,
 };
 use crate::persistence::NewGroupRequestRecord;
 use crate::utils::{emit_to_group_members, emit_to_users, now_ts};
@@ -18,10 +19,17 @@ impl GroupService {
         target_user_id: Option<String>,
         comment: Option<String>,
     ) -> AppResult<GroupRequestEntity> {
-        self.repo
+        let group = self
+            .repo
             .get_group(&group_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("group {} not found", group_id)))?;
+
+        if group.group_status != GroupStatus::Active {
+            return Err(AppError::validation(
+                "cannot create request for non-active group",
+            ));
+        }
 
         core.require_user_context(&user_id)?;
 
@@ -96,7 +104,7 @@ impl GroupService {
 
         match created.request_type {
             GroupRequestType::Join => {
-                emit_to_group_members(core, &self.repo, &created.group_id, event.clone()).await;
+                emit_to_group_members(core, &self.repo, &created.group_id, event.clone()).await?;
                 emit_to_users(core, [&user_id], event);
             }
             GroupRequestType::Invite => {
@@ -190,7 +198,7 @@ impl GroupService {
             state,
             time: now_ts(),
         };
-        emit_to_group_members(core, &self.repo, &handled.group_id, event.clone()).await;
+        emit_to_group_members(core, &self.repo, &handled.group_id, event.clone()).await?;
         emit_to_users(core, [&handled.initiator_user_id], event.clone());
         if let Some(ref target_user_id) = handled.target_user_id {
             emit_to_users(core, [target_user_id], event);
@@ -225,7 +233,7 @@ impl GroupService {
                         time: event_time,
                     },
                 )
-                .await;
+                .await?;
             }
         }
 

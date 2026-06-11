@@ -8,7 +8,8 @@ use crate::error::{AppError, AppResult};
 /// and directory traversal sequences.
 /// Falls back to `file_id` if the sanitized name is empty.
 pub fn sanitize_file_name(name: &str, file_id: &str) -> String {
-    // Replace path separators and null byte
+    // Replace path separators and null byte first so that `..` cannot form
+    // a path component boundary later.
     let mut sanitized = name
         .replace(['/', '\\', '\0'], "_")
         .replace("..", "_")
@@ -20,6 +21,12 @@ pub fn sanitize_file_name(name: &str, file_id: &str) -> String {
         .chars()
         .map(|c| if c.is_control() { '_' } else { c })
         .collect();
+
+    // Defense in depth: any remaining ".." sequence (should not happen after
+    // the replacement above) is collapsed.
+    while sanitized.contains("..") {
+        sanitized = sanitized.replace("..", "_");
+    }
 
     let trimmed = sanitized.trim();
     if trimmed.is_empty() || trimmed == "." {
@@ -65,7 +72,7 @@ pub async fn compute_sha256(path: &Path) -> AppResult<String> {
         .await
         .map_err(|e| AppError::storage(format!("failed to open file for hash: {e}")))?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 8192];
+    let mut buf = [0u8; 65536];
 
     loop {
         let n = tokio::io::AsyncReadExt::read(&mut file, &mut buf)
@@ -99,14 +106,15 @@ pub async fn validate_group_file_path(file_path: &str, app_data_dir: &Path) -> A
     Ok(canonical)
 }
 
-/// Delete a file from disk. Logs errors but never fails.
-pub async fn delete_group_file_disk(file_path: &str, app_data_dir: &Path) {
+/// Delete a file from disk. Returns an error if the file exists but could not be removed.
+pub async fn delete_group_file_disk(file_path: &str, app_data_dir: &Path) -> AppResult<()> {
     let full = app_data_dir.join(file_path);
-    if let Err(e) = tokio::fs::remove_file(&full).await {
-        eprintln!(
-            "failed to delete group file from disk {}: {}",
-            full.display(),
-            e
-        );
+    match tokio::fs::remove_file(&full).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(AppError::storage(format!(
+            "failed to delete group file {} from disk: {e}",
+            full.display()
+        ))),
     }
 }

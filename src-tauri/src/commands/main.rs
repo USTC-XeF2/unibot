@@ -1,5 +1,5 @@
 use crate::core::CoreContainer;
-use crate::models::{GroupProfile, UserProfile};
+use crate::models::UserProfile;
 use crate::persistence::db_pool::DB_FILE_NAME;
 use crate::services::{ServiceHub, StatsResult};
 
@@ -28,13 +28,6 @@ pub async fn list_users(
     services: tauri::State<'_, ServiceHub>,
 ) -> Result<Vec<UserProfile>, String> {
     services.user.list_users().await.into_command_result()
-}
-
-#[tauri::command]
-pub async fn list_groups(
-    services: tauri::State<'_, ServiceHub>,
-) -> Result<Vec<GroupProfile>, String> {
-    services.group.list_groups().await.into_command_result()
 }
 
 #[tauri::command]

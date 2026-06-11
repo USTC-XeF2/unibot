@@ -43,7 +43,7 @@ impl GroupService {
                 time: announcement.updated_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(announcement)
     }
@@ -83,7 +83,7 @@ impl GroupService {
                 time: folder.updated_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(folder)
     }
@@ -123,7 +123,7 @@ impl GroupService {
                 time: file.uploaded_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(file)
     }
@@ -216,7 +216,7 @@ impl GroupService {
                 time: essence.created_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(essence)
     }
@@ -253,6 +253,49 @@ impl GroupService {
         Ok(file_path)
     }
 
+    pub async fn upload_group_file(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        parent_folder_id: Option<String>,
+        file_name: String,
+        source_path: String,
+        app_data_dir: PathBuf,
+    ) -> AppResult<GroupFileEntity> {
+        core.require_user_context(&user_id)?;
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        let file_id = crate::utils::new_db_id();
+        let src = std::path::Path::new(&source_path);
+
+        let file_path =
+            storage::copy_file_to_groups_dir(src, &group_id, &file_id, &file_name, &app_data_dir)
+                .await?;
+
+        let metadata = tokio::fs::metadata(&app_data_dir.join(&file_path))
+            .await
+            .map_err(|e| AppError::storage(format!("failed to get file metadata: {e}")))?;
+
+        let file_hash = storage::compute_sha256(&app_data_dir.join(&file_path)).await?;
+
+        let file = GroupFileEntity {
+            file_id,
+            group_id: group_id.clone(),
+            parent_folder_id,
+            file_name,
+            file_size: metadata.len(),
+            file_hash: Some(file_hash),
+            uploader_user_id: user_id,
+            uploaded_at: crate::utils::now_ts(),
+            expire_at: None,
+            download_count: 0,
+            file_path: Some(file_path),
+        };
+
+        self.upsert_group_file(core, file).await
+    }
+
     pub async fn delete_group_file(
         &self,
         core: &CoreContainer,
@@ -285,12 +328,24 @@ impl GroupService {
             ));
         }
 
-        // Delete from disk first to avoid orphan files if disk delete fails
+        // Delete from disk first to avoid orphan files if disk delete fails.
         if let Some(ref file_path) = file.file_path {
-            storage::delete_group_file_disk(file_path, &app_data_dir).await;
+            storage::delete_group_file_disk(file_path, &app_data_dir).await?;
         }
 
         self.repo.delete_group_file(&file_id).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &group_id,
+            InternalEvent::GroupFileDeleted {
+                file_id: file_id.clone(),
+                group_id: group_id.clone(),
+                time: now_ts(),
+            },
+        )
+        .await?;
 
         Ok(())
     }
@@ -328,7 +383,7 @@ impl GroupService {
                 time: album.created_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(album)
     }
@@ -361,13 +416,25 @@ impl GroupService {
         }
 
         let photos = self.repo.list_group_photos(&album_id, &group_id).await?;
+
+        // Delete database records first (in a transaction) so the source of truth
+        // is updated atomically. Disk cleanup is best-effort after that.
+        self.repo.delete_group_album(&album_id).await?;
+
         for photo in &photos {
             if let Some(ref file_path) = photo.file_path {
-                storage::delete_group_file_disk(file_path, &app_data_dir).await;
+                if let Err(e) = storage::delete_group_file_disk(file_path, &app_data_dir).await {
+                    tracing::warn!(
+                        target: "group_content",
+                        album_id = %album_id,
+                        group_id = %group_id,
+                        file_path = %file_path,
+                        error = %e,
+                        "failed to delete album photo file from disk after DB cleanup"
+                    );
+                }
             }
         }
-
-        self.repo.delete_group_album(&album_id).await?;
 
         emit_to_group_members(
             core,
@@ -379,7 +446,7 @@ impl GroupService {
                 time: now_ts(),
             },
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -452,7 +519,7 @@ impl GroupService {
                 time: photo.created_at,
             },
         )
-        .await;
+        .await?;
 
         Ok(photo)
     }
@@ -502,12 +569,25 @@ impl GroupService {
             ));
         }
 
-        // Delete from disk first to avoid orphan files if disk delete fails
+        // Delete from disk first to avoid orphan files if disk delete fails.
         if let Some(ref file_path) = photo.file_path {
-            storage::delete_group_file_disk(file_path, &app_data_dir).await;
+            storage::delete_group_file_disk(file_path, &app_data_dir).await?;
         }
 
         self.repo.delete_group_photo(&photo_id).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &group_id,
+            InternalEvent::GroupPhotoDeleted {
+                photo_id: photo_id.clone(),
+                album_id: photo.album_id.clone(),
+                group_id: group_id.clone(),
+                time: now_ts(),
+            },
+        )
+        .await?;
 
         Ok(())
     }
@@ -528,14 +608,11 @@ impl GroupService {
         &self,
         user_id: String,
         group_id: String,
-        limit: usize,
+        limit: i64,
     ) -> AppResult<Vec<GroupEventEntity>> {
         self.ensure_group_member(&group_id, &user_id).await?;
 
-        let limit_i64 =
-            i64::try_from(limit).map_err(|_| AppError::validation("limit is too large"))?;
-
-        let rows = self.repo.list_group_events(&group_id, limit_i64).await?;
+        let rows = self.repo.list_group_events(&group_id, limit).await?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 

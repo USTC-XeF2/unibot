@@ -186,6 +186,9 @@ pub struct PokeEntity {
     pub source: MessageSource,
     pub sender_user_id: DbId,
     pub target_user_id: DbId,
+    pub is_recalled: bool,
+    pub recalled_by_user_id: Option<DbId>,
+    pub recalled_at: Option<u64>,
     pub created_at: u64,
 }
 
@@ -204,7 +207,7 @@ pub struct GroupAnnouncementEntity {
 pub struct GroupFileEntity {
     pub file_id: String,
     pub group_id: DbId,
-    pub parent_folder_id: String,
+    pub parent_folder_id: Option<String>,
     pub file_name: String,
     pub file_size: u64,
     pub file_hash: Option<String>,
@@ -243,7 +246,7 @@ pub struct GroupPhotoEntity {
 pub struct GroupFolderEntity {
     pub folder_id: String,
     pub group_id: DbId,
-    pub parent_folder_id: String,
+    pub parent_folder_id: Option<String>,
     pub folder_name: String,
     pub creator_user_id: DbId,
     pub created_at: u64,
@@ -265,7 +268,7 @@ pub struct FriendRequestEntity {
     pub request_id: DbId,
     pub initiator_user_id: DbId,
     pub target_user_id: DbId,
-    pub comment: String,
+    pub comment: Option<String>,
     pub state: RequestState,
     pub created_at: u64,
     pub handled_at: Option<u64>,
@@ -312,7 +315,7 @@ pub struct GroupEssenceMessageEntity {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GroupEventPayload {
     MemberJoined {
@@ -331,7 +334,7 @@ pub enum GroupEventPayload {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GroupEventEntity {
     pub event_id: DbId,
     pub group_id: DbId,
