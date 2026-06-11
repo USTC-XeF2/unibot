@@ -218,7 +218,12 @@ impl MessageService {
                         .group_repo
                         .get_group_member(group_id, &user_id)
                         .await?
-                        .ok_or_else(|| AppError::validation("operator is not in group"))?;
+                        .ok_or_else(|| {
+                            AppError::not_found(format!(
+                                "user {} is not in group {}",
+                                user_id, group_id
+                            ))
+                        })?;
                     if matches!(operator_member.role, GroupRole::Member) {
                         return Err(AppError::validation(
                             "only sender/owner/admin can recall group messages",
@@ -263,14 +268,25 @@ impl MessageService {
     }
 }
 
+fn parse_message_common(
+    row: &MessageRecord,
+) -> AppResult<(MessageSource, Vec<MessageSegment>, MessageRecallInfo)> {
+    let source: MessageSource = (row.source_type.as_str(), row.source_id.clone())
+        .try_into()
+        .map_err(AppError::internal)?;
+    let content: Vec<MessageSegment> = serde_json::from_str(&row.content_json)?;
+    let recall = MessageRecallInfo {
+        recalled: row.is_recalled,
+        recalled_by_user_id: row.recalled_by_user_id.clone(),
+    };
+    Ok((source, content, recall))
+}
+
 impl TryFrom<MessageRecord> for SendMessageResult {
     type Error = AppError;
 
     fn try_from(row: MessageRecord) -> Result<Self, Self::Error> {
-        let source: MessageSource = (row.source_type.as_str(), row.source_id)
-            .try_into()
-            .map_err(AppError::internal)?;
-        let content: Vec<MessageSegment> = serde_json::from_str(&row.content_json)?;
+        let (source, content, recall) = parse_message_common(&row)?;
 
         Ok(Self {
             id: row.id,
@@ -279,10 +295,7 @@ impl TryFrom<MessageRecord> for SendMessageResult {
             bot_id: row.bot_id,
             content,
             quoted_message_id: row.quoted_message_id,
-            recall: MessageRecallInfo {
-                recalled: row.is_recalled,
-                recalled_by_user_id: row.recalled_by_user_id,
-            },
+            recall,
             created_at: row.created_at,
         })
     }
@@ -292,10 +305,7 @@ impl TryFrom<MessageRecord> for MessageEntity {
     type Error = AppError;
 
     fn try_from(row: MessageRecord) -> Result<Self, Self::Error> {
-        let source: MessageSource = (row.source_type.as_str(), row.source_id)
-            .try_into()
-            .map_err(AppError::internal)?;
-        let content: Vec<MessageSegment> = serde_json::from_str(&row.content_json)?;
+        let (source, content, recall) = parse_message_common(&row)?;
 
         Ok(Self {
             message_id: row.id,
@@ -305,10 +315,7 @@ impl TryFrom<MessageRecord> for MessageEntity {
             content,
             quoted_message_id: row.quoted_message_id,
             created_at: row.created_at,
-            recall: MessageRecallInfo {
-                recalled: row.is_recalled,
-                recalled_by_user_id: row.recalled_by_user_id,
-            },
+            recall,
         })
     }
 }

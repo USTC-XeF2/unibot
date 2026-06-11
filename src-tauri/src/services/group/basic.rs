@@ -87,6 +87,9 @@ impl GroupService {
             }
         }
 
+        let total = 1 + dedup_member_ids.len() as u32;
+        self.repo.set_member_count(&group_id, total).await?;
+
         Ok(group)
     }
 
@@ -120,7 +123,7 @@ impl GroupService {
             .get_group_member(group_id, user_id)
             .await?
             .ok_or_else(|| {
-                AppError::validation(format!("user {} is not in group {}", user_id, group_id))
+                AppError::not_found(format!("user {} is not in group {}", user_id, group_id))
             })?;
         Ok(member)
     }
@@ -165,6 +168,7 @@ impl GroupService {
         };
 
         self.repo.upsert_group_member(&member).await?;
+        self.repo.increment_member_count(&group_id).await?;
 
         self.save_group_event(
             &group_id,

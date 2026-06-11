@@ -1,5 +1,6 @@
 pub mod json_layer;
 
+use crate::error::{AppError, AppResult};
 use crate::utils::now_ts;
 use json_layer::JsonLayer;
 use std::path::Path;
@@ -29,7 +30,7 @@ impl LogGuard {
 /// # Arguments
 /// * `log_dir` - Directory where log files are written (daily rotation)
 /// * `default_level` - Default log level (e.g. "info" or "debug")
-pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> anyhow::Result<LogGuard> {
+pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult<LogGuard> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(
             default_level
@@ -43,7 +44,8 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> anyhow::R
         .rotation(tracing_appender::rolling::Rotation::DAILY)
         .filename_prefix("unibot")
         .filename_suffix("log")
-        .build(log_dir)?;
+        .build(log_dir)
+        .map_err(|e| AppError::internal(format!("failed to create log appender: {e}")))?;
 
     let (non_blocking, guard) = tracing_appender::non_blocking(appender);
 
@@ -62,7 +64,7 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> anyhow::R
 /// Change the log level at runtime.
 ///
 /// Returns Ok(true) if the level was changed, Ok(false) if logging is not initialized.
-pub fn set_log_level(level: &str) -> anyhow::Result<bool> {
+pub fn set_log_level(level: &str) -> AppResult<bool> {
     let new_filter = EnvFilter::builder()
         .with_default_directive(
             level
@@ -75,7 +77,8 @@ pub fn set_log_level(level: &str) -> anyhow::Result<bool> {
     let handle = RELOAD_HANDLE.lock().unwrap();
     match handle.as_ref() {
         Some(h) => {
-            h.reload(new_filter)?;
+            h.reload(new_filter)
+                .map_err(|e| AppError::internal(format!("failed to reload log filter: {e}")))?;
             Ok(true)
         }
         None => Ok(false),
@@ -89,15 +92,12 @@ pub async fn read_system_logs(
     since: Option<u64>,
     before: Option<u64>,
     limit: usize,
-) -> anyhow::Result<Vec<serde_json::Value>> {
+) -> AppResult<Vec<serde_json::Value>> {
     let log_dir = log_dir.as_ref();
     if !log_dir.exists() {
         return Ok(vec![]);
     }
 
-    // Compute date range from `since` / `before` to filter files at the directory level.
-    // We only read files whose date falls within [since_day, before_day].
-    // This avoids opening every log file when the user only wants a specific window.
     let min_file_date = since.and_then(|ts| {
         chrono::DateTime::from_timestamp_millis(ts as i64).map(|dt| dt.date_naive())
     });
@@ -106,22 +106,26 @@ pub async fn read_system_logs(
     });
 
     let mut entries = Vec::new();
-    let mut read_files = tokio::fs::read_dir(log_dir).await?;
+    let mut read_files = tokio::fs::read_dir(log_dir)
+        .await
+        .map_err(|e| AppError::storage(format!("failed to read log directory: {e}")))?;
 
-    while let Some(entry) = read_files.next_entry().await? {
+    while let Some(entry) = read_files
+        .next_entry()
+        .await
+        .map_err(|e| AppError::storage(format!("failed to read directory entry: {e}")))?
+    {
         let path = entry.path();
         let name = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) if n.ends_with(".log") => n,
             _ => continue,
         };
 
-        // Parse date from filename: unibot.YYYY-MM-DD.log
         let file_date = name
             .strip_prefix("unibot.")
             .and_then(|s| s.strip_suffix(".log"))
             .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
-        // File-level filtering: skip files outside the [since, before] date window.
         if let Some(min_date) = min_file_date {
             if let Some(date) = file_date {
                 if date < min_date {
@@ -137,7 +141,9 @@ pub async fn read_system_logs(
             }
         }
 
-        let file = tokio::fs::File::open(&path).await?;
+        let file = tokio::fs::File::open(&path)
+            .await
+            .map_err(|e| AppError::storage(format!("failed to open log file: {e}")))?;
         let reader = tokio::io::BufReader::new(file);
         let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
 
@@ -149,7 +155,6 @@ pub async fn read_system_logs(
                 continue;
             };
 
-            // Add file date as a fallback for entries without ts
             if value.get("ts").is_none() {
                 if let Some(date) = file_date {
                     let ts = date
@@ -163,14 +168,12 @@ pub async fn read_system_logs(
 
             let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
 
-            // Filter by since cursor
             if let Some(since_ts) = since {
                 if entry_ts < since_ts as i64 {
                     continue;
                 }
             }
 
-            // Filter by before cursor
             if let Some(before_ts) = before {
                 if entry_ts >= before_ts as i64 {
                     continue;
@@ -181,7 +184,6 @@ pub async fn read_system_logs(
         }
     }
 
-    // Sort by timestamp descending (newest first)
     entries.sort_by(|a, b| {
         let a_ts = a.get("ts").and_then(|v| v.as_i64()).unwrap_or(0);
         let b_ts = b.get("ts").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -193,10 +195,7 @@ pub async fn read_system_logs(
 }
 
 /// Clean up log files older than retention_days.
-pub async fn cleanup_old_logs(
-    log_dir: impl AsRef<Path>,
-    retention_days: i64,
-) -> anyhow::Result<usize> {
+pub async fn cleanup_old_logs(log_dir: impl AsRef<Path>, retention_days: i64) -> AppResult<usize> {
     if retention_days <= 0 {
         return Ok(0);
     }
@@ -208,9 +207,15 @@ pub async fn cleanup_old_logs(
 
     let cutoff = now_ts() as i64 - retention_days * 24 * 60 * 60 * 1000;
     let mut deleted = 0usize;
-    let mut read_files = tokio::fs::read_dir(log_dir).await?;
+    let mut read_files = tokio::fs::read_dir(log_dir)
+        .await
+        .map_err(|e| AppError::storage(format!("failed to read log directory: {e}")))?;
 
-    while let Some(entry) = read_files.next_entry().await? {
+    while let Some(entry) = read_files
+        .next_entry()
+        .await
+        .map_err(|e| AppError::storage(format!("failed to read directory entry: {e}")))?
+    {
         let path = entry.path();
         let name = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) if n.ends_with(".log") => n,

@@ -26,6 +26,9 @@ struct PokeRow {
     source_id: String,
     sender_user_id: String,
     target_user_id: String,
+    is_recalled: bool,
+    recalled_by_user_id: Option<String>,
+    recalled_at: Option<u64>,
     created_at: u64,
 }
 
@@ -114,7 +117,9 @@ impl InteractionRepo {
                 poke_id, message_scene, peer_id, sender_user_id, target_user_id, created_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             RETURNING poke_id AS id, message_scene AS source_type, peer_id AS source_id,
-                      sender_user_id, target_user_id, created_at
+                      sender_user_id, target_user_id,
+                      is_recalled, recalled_by_user_id, recalled_at,
+                      created_at
             "#,
         )
         .bind(&id)
@@ -147,6 +152,9 @@ impl InteractionRepo {
                        END AS source_id,
                        sender_user_id,
                        target_user_id,
+                       is_recalled,
+                       recalled_by_user_id,
+                       recalled_at,
                        created_at
                 FROM pokes
                 WHERE message_scene = 'private'
@@ -171,6 +179,9 @@ impl InteractionRepo {
                        peer_id AS source_id,
                        sender_user_id,
                        target_user_id,
+                       is_recalled,
+                       recalled_by_user_id,
+                       recalled_at,
                        created_at
                 FROM pokes
                 WHERE message_scene = ?1 AND peer_id = ?2
@@ -224,6 +235,9 @@ impl TryFrom<PokeRow> for PokeEntity {
             source,
             sender_user_id: row.sender_user_id,
             target_user_id: row.target_user_id,
+            is_recalled: row.is_recalled,
+            recalled_by_user_id: row.recalled_by_user_id,
+            recalled_at: row.recalled_at,
             created_at: row.created_at,
         })
     }

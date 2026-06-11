@@ -16,7 +16,7 @@ pub async fn send_message(
     quoted_message_id: Option<String>,
     bot_id: Option<String>,
 ) -> Result<SendMessageResult, String> {
-    match services
+    let result = services
         .message
         .send(
             &core,
@@ -26,19 +26,16 @@ pub async fn send_message(
             quoted_message_id,
             bot_id,
         )
-        .await
-    {
-        Ok(result) => Ok(result),
-        Err(err) => {
-            tracing::error!(
-                target: "message_command",
-                user_id = %user_id,
-                error = %err,
-                "message send failed"
-            );
-            Err(err.to_string())
-        }
+        .await;
+    if let Err(ref err) = result {
+        tracing::error!(
+            target: "message_command",
+            user_id = %user_id,
+            error = %err,
+            "message send failed"
+        );
     }
+    result.into_command_result()
 }
 
 #[tauri::command]

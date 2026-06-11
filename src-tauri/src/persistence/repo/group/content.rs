@@ -273,10 +273,19 @@ impl GroupRepo {
     }
 
     pub async fn delete_group_album(&self, album_id: &str) -> Result<bool, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("DELETE FROM group_photos WHERE album_id = ?1")
+            .bind(album_id)
+            .execute(&mut *tx)
+            .await?;
+
         let result = sqlx::query("DELETE FROM group_albums WHERE album_id = ?1")
             .bind(album_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+
+        tx.commit().await?;
         Ok(result.rows_affected() > 0)
     }
 

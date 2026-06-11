@@ -103,10 +103,10 @@ pub async fn validate_group_file_path(file_path: &str, app_data_dir: &Path) -> A
 pub async fn delete_group_file_disk(file_path: &str, app_data_dir: &Path) {
     let full = app_data_dir.join(file_path);
     if let Err(e) = tokio::fs::remove_file(&full).await {
-        eprintln!(
-            "failed to delete group file from disk {}: {}",
-            full.display(),
-            e
+        tracing::warn!(
+            path = %full.display(),
+            error = %e,
+            "failed to delete group file from disk"
         );
     }
 }

@@ -162,6 +162,17 @@ pub enum InternalEvent {
         group_id: DbId,
         time: u64,
     },
+    GroupFileDeleted {
+        file_id: String,
+        group_id: DbId,
+        time: u64,
+    },
+    GroupPhotoDeleted {
+        photo_id: DbId,
+        album_id: DbId,
+        group_id: DbId,
+        time: u64,
+    },
     Notice {
         group_id: DbId,
         actor: DbId,

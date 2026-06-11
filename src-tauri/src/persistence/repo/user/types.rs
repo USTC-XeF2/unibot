@@ -44,7 +44,7 @@ impl TryFrom<FriendRequestRow> for FriendRequestEntity {
             request_id: row.request_id,
             initiator_user_id: row.initiator_user_id,
             target_user_id: row.target_user_id,
-            comment: row.comment.unwrap_or_default(),
+            comment: row.comment,
             state: codecs::request_state_from_db(&row.state)?,
             created_at: row.created_at,
             handled_at: row.handled_at,

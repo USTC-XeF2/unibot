@@ -1,7 +1,8 @@
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupEventPayload, GroupRequestEntity, GroupRequestType, GroupRole, InternalEvent, RequestState,
+    GroupEventPayload, GroupRequestEntity, GroupRequestType, GroupRole, GroupStatus, InternalEvent,
+    RequestState,
 };
 use crate::persistence::NewGroupRequestRecord;
 use crate::utils::{emit_to_group_members, emit_to_users, now_ts};
@@ -18,10 +19,17 @@ impl GroupService {
         target_user_id: Option<String>,
         comment: Option<String>,
     ) -> AppResult<GroupRequestEntity> {
-        self.repo
+        let group = self
+            .repo
             .get_group(&group_id)
             .await?
             .ok_or_else(|| AppError::not_found(format!("group {} not found", group_id)))?;
+
+        if group.group_status != GroupStatus::Active {
+            return Err(AppError::validation(
+                "cannot create request for non-active group",
+            ));
+        }
 
         core.require_user_context(&user_id)?;
 
@@ -179,6 +187,10 @@ impl GroupService {
             .ok_or_else(|| {
                 AppError::not_found(format!("group request {} not found", request_id))
             })?;
+
+        if state == RequestState::Accepted {
+            self.repo.increment_member_count(&handled.group_id).await?;
+        }
 
         let event = InternalEvent::GroupRequestHandled {
             request_id: handled.request_id.clone(),

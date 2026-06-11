@@ -3,6 +3,7 @@ pub mod conversation;
 pub mod group;
 pub mod interaction;
 pub mod message;
+pub mod packet;
 pub mod request;
 pub mod settings;
 pub mod user;
@@ -12,6 +13,7 @@ pub use conversation::ConversationService;
 pub use group::{GroupService, MuteGroupMemberResult};
 pub use interaction::InteractionService;
 pub use message::{MessageService, SendMessageResult};
+pub use packet::PacketService;
 pub use request::RequestService;
 pub use settings::SettingsService;
 pub use user::UserService;
@@ -26,28 +28,5 @@ pub struct ServiceHub {
     pub bot: BotService,
     pub settings: SettingsService,
     pub conversation: ConversationService,
-}
-
-impl ServiceHub {
-    pub fn new(
-        message: MessageService,
-        interaction: InteractionService,
-        group: GroupService,
-        request: RequestService,
-        user: UserService,
-        bot: BotService,
-        settings: SettingsService,
-        conversation: ConversationService,
-    ) -> Self {
-        Self {
-            message,
-            interaction,
-            group,
-            request,
-            user,
-            bot,
-            settings,
-            conversation,
-        }
-    }
+    pub packet: PacketService,
 }

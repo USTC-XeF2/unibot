@@ -17,13 +17,13 @@ use commands::{
 };
 use core::CoreContainer;
 use persistence::{
-    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo,
-    init_sqlite_pool,
+    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, PacketRepo, SettingsRepo,
+    UserRepo, init_sqlite_pool,
 };
 use protocol::ProtocolRuntimeManager;
 use services::{
     BotService, ConversationService, GroupService, InteractionService, MessageService,
-    RequestService, ServiceHub, SettingsService, UserService,
+    PacketService, RequestService, ServiceHub, SettingsService, UserService,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,20 +38,21 @@ pub fn run() {
             let bot_repo = BotRepo::new(pool.clone());
             let request_user_repo = user_repo.clone();
             let message_repo_for_interaction = message_repo.clone();
-            let service_hub = ServiceHub::new(
-                MessageService::new(message_repo.clone(), group_repo.clone()),
-                InteractionService::new(
+            let service_hub = ServiceHub {
+                message: MessageService::new(message_repo.clone(), group_repo.clone()),
+                interaction: InteractionService::new(
                     interaction_repo,
                     message_repo_for_interaction,
                     group_repo.clone(),
                 ),
-                GroupService::new(group_repo.clone(), message_repo.clone()),
-                RequestService::new(request_user_repo),
-                UserService::new(user_repo.clone()),
-                BotService::new(bot_repo.clone()),
-                SettingsService::new(SettingsRepo::new(pool.clone())),
-                ConversationService::new(ConversationRepo::new(pool.clone())),
-            );
+                group: GroupService::new(group_repo.clone(), message_repo.clone()),
+                request: RequestService::new(request_user_repo),
+                user: UserService::new(user_repo.clone()),
+                bot: BotService::new(bot_repo.clone()),
+                settings: SettingsService::new(SettingsRepo::new(pool.clone())),
+                conversation: ConversationService::new(ConversationRepo::new(pool.clone())),
+                packet: PacketService::new(PacketRepo::new(pool.clone())),
+            };
 
             let core = CoreContainer::new();
             let persisted_users = tauri::async_runtime::block_on(service_hub.user.list_users())
@@ -246,7 +247,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             main::register_user,
             main::list_users,
-            main::list_groups,
             main::delete_user,
             main::open_user_chat_window,
             main::get_db_status,
@@ -277,6 +277,7 @@ pub fn run() {
             request::list_friend_requests,
             request::handle_friend_request,
             request::delete_friend,
+            group::list_groups,
             group::upsert_group,
             group::upsert_group_member,
             group::list_group_members,
@@ -313,10 +314,10 @@ pub fn run() {
             conversation::set_conversation_pinned,
             conversation::set_conversation_muted,
             conversation::list_conversation_states,
-            conversation::list_group_categories,
-            conversation::create_group_category,
-            conversation::delete_group_category,
-            conversation::set_group_category,
+            group::list_group_categories,
+            group::create_group_category,
+            group::delete_group_category,
+            group::set_group_category,
             packet::list_protocol_packets,
             packet::read_protocol_packet,
         ])

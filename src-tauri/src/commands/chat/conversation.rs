@@ -1,4 +1,4 @@
-use crate::models::{ConversationState, GroupCategoryEntity};
+use crate::models::ConversationState;
 use crate::services::ServiceHub;
 
 use super::super::IntoCommandResult;
@@ -43,58 +43,6 @@ pub async fn list_conversation_states(
     services
         .conversation
         .list_conversation_states(user_id)
-        .await
-        .into_command_result()
-}
-
-#[tauri::command]
-pub async fn list_group_categories(
-    services: tauri::State<'_, ServiceHub>,
-    user_id: String,
-) -> Result<Vec<GroupCategoryEntity>, String> {
-    services
-        .group
-        .list_group_categories(user_id)
-        .await
-        .into_command_result()
-}
-
-#[tauri::command]
-pub async fn create_group_category(
-    services: tauri::State<'_, ServiceHub>,
-    user_id: String,
-    name: String,
-) -> Result<GroupCategoryEntity, String> {
-    services
-        .group
-        .create_group_category(user_id, name)
-        .await
-        .into_command_result()
-}
-
-#[tauri::command]
-pub async fn delete_group_category(
-    services: tauri::State<'_, ServiceHub>,
-    user_id: String,
-    category_id: String,
-) -> Result<(), String> {
-    services
-        .group
-        .delete_group_category(user_id, category_id)
-        .await
-        .into_command_result()
-}
-
-#[tauri::command]
-pub async fn set_group_category(
-    services: tauri::State<'_, ServiceHub>,
-    user_id: String,
-    group_id: String,
-    category_id: Option<String>,
-) -> Result<(), String> {
-    services
-        .group
-        .set_group_category(user_id, group_id, category_id)
         .await
         .into_command_result()
 }

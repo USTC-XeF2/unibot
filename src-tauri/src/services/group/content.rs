@@ -253,6 +253,49 @@ impl GroupService {
         Ok(file_path)
     }
 
+    pub async fn upload_group_file(
+        &self,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        parent_folder_id: Option<String>,
+        file_name: String,
+        source_path: String,
+        app_data_dir: PathBuf,
+    ) -> AppResult<GroupFileEntity> {
+        core.require_user_context(&user_id)?;
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        let file_id = crate::utils::new_db_id();
+        let src = std::path::Path::new(&source_path);
+
+        let file_path =
+            storage::copy_file_to_groups_dir(src, &group_id, &file_id, &file_name, &app_data_dir)
+                .await?;
+
+        let metadata = tokio::fs::metadata(&app_data_dir.join(&file_path))
+            .await
+            .map_err(|e| AppError::storage(format!("failed to get file metadata: {e}")))?;
+
+        let file_hash = storage::compute_sha256(&app_data_dir.join(&file_path)).await?;
+
+        let file = GroupFileEntity {
+            file_id,
+            group_id: group_id.clone(),
+            parent_folder_id: parent_folder_id.unwrap_or_default(),
+            file_name,
+            file_size: metadata.len(),
+            file_hash: Some(file_hash),
+            uploader_user_id: user_id,
+            uploaded_at: crate::utils::now_ts(),
+            expire_at: None,
+            download_count: 0,
+            file_path: Some(file_path),
+        };
+
+        self.upsert_group_file(core, file).await
+    }
+
     pub async fn delete_group_file(
         &self,
         core: &CoreContainer,
@@ -291,6 +334,18 @@ impl GroupService {
         }
 
         self.repo.delete_group_file(&file_id).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &group_id,
+            InternalEvent::GroupFileDeleted {
+                file_id: file_id.clone(),
+                group_id: group_id.clone(),
+                time: now_ts(),
+            },
+        )
+        .await;
 
         Ok(())
     }
@@ -508,6 +563,19 @@ impl GroupService {
         }
 
         self.repo.delete_group_photo(&photo_id).await?;
+
+        emit_to_group_members(
+            core,
+            &self.repo,
+            &group_id,
+            InternalEvent::GroupPhotoDeleted {
+                photo_id: photo_id.clone(),
+                album_id: photo.album_id.clone(),
+                group_id: group_id.clone(),
+                time: now_ts(),
+            },
+        )
+        .await;
 
         Ok(())
     }
