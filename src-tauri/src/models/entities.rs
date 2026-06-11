@@ -210,6 +210,31 @@ pub struct GroupFileEntity {
     pub uploaded_at: u64,
     pub expire_at: Option<u64>,
     pub download_count: u32,
+    pub file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupAlbumEntity {
+    pub album_id: DbId,
+    pub group_id: DbId,
+    pub name: String,
+    pub cover_url: Option<String>,
+    pub photo_count: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupPhotoEntity {
+    pub photo_id: DbId,
+    pub album_id: DbId,
+    pub group_id: DbId,
+    pub url: String,
+    pub file_path: Option<String>,
+    pub description: Option<String>,
+    pub uploader_user_id: DbId,
+    pub file_size: Option<u64>,
+    pub created_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

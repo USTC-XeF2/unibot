@@ -329,10 +329,11 @@ pub async fn list_group_files(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
+    parent_folder_id: Option<String>,
 ) -> Result<Vec<GroupFileEntity>, String> {
     services
         .group
-        .list_group_files(user_id, group_id)
+        .list_group_files(user_id, group_id, parent_folder_id)
         .await
         .into_command_result()
 }

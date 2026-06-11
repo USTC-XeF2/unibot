@@ -1,6 +1,7 @@
 use crate::models::{
-    GroupAnnouncementEntity, GroupCategoryEntity, GroupEssenceMessageEntity, GroupFileEntity,
-    GroupFolderEntity, GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupWholeMuteState,
+    GroupAlbumEntity, GroupAnnouncementEntity, GroupCategoryEntity, GroupEssenceMessageEntity,
+    GroupFileEntity, GroupFolderEntity, GroupMemberProfile, GroupPhotoEntity, GroupProfile,
+    GroupRequestEntity, GroupWholeMuteState,
 };
 use crate::persistence::repo::codecs;
 
@@ -71,6 +72,32 @@ pub(super) struct GroupFileRow {
     pub uploader_user_id: String,
     pub uploaded_at: u64,
     pub expire_at: Option<u64>,
+    pub file_path: Option<String>,
+    pub download_count: u32,
+}
+
+#[derive(sqlx::FromRow)]
+pub(super) struct GroupAlbumRow {
+    pub album_id: String,
+    pub group_id: String,
+    pub name: String,
+    pub cover_url: Option<String>,
+    pub photo_count: u32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(sqlx::FromRow)]
+pub(super) struct GroupPhotoRow {
+    pub photo_id: String,
+    pub album_id: String,
+    pub group_id: String,
+    pub url: String,
+    pub file_path: Option<String>,
+    pub description: Option<String>,
+    pub uploader_user_id: String,
+    pub file_size: Option<i64>,
+    pub created_at: i64,
 }
 
 #[derive(sqlx::FromRow)]
@@ -201,7 +228,42 @@ impl TryFrom<GroupFileRow> for GroupFileEntity {
             uploader_user_id: row.uploader_user_id,
             uploaded_at: row.uploaded_at,
             expire_at: row.expire_at,
-            download_count: 0,
+            download_count: row.download_count,
+            file_path: row.file_path,
+        })
+    }
+}
+
+impl TryFrom<GroupAlbumRow> for GroupAlbumEntity {
+    type Error = sqlx::Error;
+
+    fn try_from(row: GroupAlbumRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            album_id: row.album_id,
+            group_id: row.group_id,
+            name: row.name,
+            cover_url: row.cover_url,
+            photo_count: row.photo_count,
+            created_at: row.created_at as u64,
+            updated_at: row.updated_at as u64,
+        })
+    }
+}
+
+impl TryFrom<GroupPhotoRow> for GroupPhotoEntity {
+    type Error = sqlx::Error;
+
+    fn try_from(row: GroupPhotoRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            photo_id: row.photo_id,
+            album_id: row.album_id,
+            group_id: row.group_id,
+            url: row.url,
+            file_path: row.file_path,
+            description: row.description,
+            uploader_user_id: row.uploader_user_id,
+            file_size: row.file_size.map(|s| s as u64),
+            created_at: row.created_at as u64,
         })
     }
 }

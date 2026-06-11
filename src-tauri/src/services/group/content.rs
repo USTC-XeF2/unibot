@@ -128,10 +128,11 @@ impl GroupService {
         &self,
         user_id: String,
         group_id: String,
+        parent_folder_id: Option<String>,
     ) -> AppResult<Vec<GroupFileEntity>> {
         self.ensure_group_member(&group_id, &user_id).await?;
         self.repo
-            .list_group_files(&group_id)
+            .list_group_files(&group_id, parent_folder_id.as_deref())
             .await
             .map_err(Into::into)
     }
