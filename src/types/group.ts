@@ -21,3 +21,20 @@ export type GroupMemberProfile = {
   last_sent_at: number;
   mute_until: number | null;
 };
+
+export type GroupCategory = {
+  category_id: string;
+  owner_user_id: string;
+  name: string;
+  sort_order: number;
+  created_at: number;
+  updated_at: number;
+};
+
+export type ConversationState = {
+  conversation_scene: "private" | "group" | "temp";
+  peer_user_id: string | null;
+  group_id: string | null;
+  is_pinned: boolean;
+  is_muted: boolean;
+};

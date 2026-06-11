@@ -1,3 +1,4 @@
+pub mod conversation;
 pub mod group;
 pub mod message;
 pub mod request;

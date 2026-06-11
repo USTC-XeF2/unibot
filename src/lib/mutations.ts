@@ -3,8 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   invalidateBotStatsQuery,
   invalidateBotsQuery,
+  invalidateConversationStatesQuery,
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
+  invalidateGroupCategoriesQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
   invalidateMessageHistoryQuery,
@@ -416,6 +418,102 @@ export function useSetLogRetentionMutation() {
 export function useTriggerLogCleanupMutation() {
   return useMutation({
     mutationFn: () => invoke<{ deleted_files: number }>("trigger_log_cleanup"),
+  });
+}
+
+export function useSetConversationPinnedMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      scene,
+      peerUserId,
+      groupId,
+      isPinned,
+    }: {
+      userId: string;
+      scene: "private" | "group" | "temp";
+      peerUserId: string | null;
+      groupId: string | null;
+      isPinned: boolean;
+    }) =>
+      invoke("set_conversation_pinned", {
+        userId,
+        scene,
+        peerUserId,
+        groupId,
+        isPinned,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateConversationStatesQuery(variables.userId),
+  });
+}
+
+export function useSetConversationMutedMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      scene,
+      peerUserId,
+      groupId,
+      isMuted,
+    }: {
+      userId: string;
+      scene: "private" | "group" | "temp";
+      peerUserId: string | null;
+      groupId: string | null;
+      isMuted: boolean;
+    }) =>
+      invoke("set_conversation_muted", {
+        userId,
+        scene,
+        peerUserId,
+        groupId,
+        isMuted,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateConversationStatesQuery(variables.userId),
+  });
+}
+
+export function useCreateGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({ userId, name }: { userId: string; name: string }) =>
+      invoke("create_group_category", { userId, name }),
+    onSuccess: (_, variables) =>
+      invalidateGroupCategoriesQuery(variables.userId),
+  });
+}
+
+export function useDeleteGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      categoryId,
+    }: {
+      userId: string;
+      categoryId: string;
+    }) => invoke("delete_group_category", { userId, categoryId }),
+    onSuccess: (_, variables) =>
+      invalidateGroupCategoriesQuery(variables.userId),
+  });
+}
+
+export function useSetGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      groupId,
+      categoryId,
+    }: {
+      userId: string;
+      groupId: string;
+      categoryId: string | null;
+    }) => invoke("set_group_category", { userId, groupId, categoryId }),
+    onSuccess: (_, variables) =>
+      Promise.all([
+        invalidateGroupCategoriesQuery(variables.userId),
+        invalidateGroupsQuery(),
+      ]),
   });
 }
 

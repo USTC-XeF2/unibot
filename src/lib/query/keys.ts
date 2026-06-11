@@ -27,6 +27,10 @@ export const queryKeys = {
       ["groups", "event-history", userId, groupId, limit] as const,
     members: (userId: string, groupId: string) =>
       ["groups", "members", userId, groupId] as const,
+    categories: (userId: string) => ["groups", "categories", userId] as const,
+  },
+  conversation: {
+    states: (userId: string) => ["conversation", "states", userId] as const,
   },
   requests: {
     friendByUser: (userId: string) => ["requests", "friend", userId] as const,

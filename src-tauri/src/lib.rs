@@ -12,17 +12,18 @@ use tauri::Manager;
 
 use commands::{
     bot,
-    chat::{group, message, request, user},
+    chat::{conversation, group, message, request, user},
     log, main, packet,
 };
 use core::CoreContainer;
 use persistence::{
-    BotRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo, init_sqlite_pool,
+    BotRepo, ConversationRepo, GroupRepo, InteractionRepo, MessageRepo, SettingsRepo, UserRepo,
+    init_sqlite_pool,
 };
 use protocol::ProtocolRuntimeManager;
 use services::{
-    BotService, GroupService, InteractionService, MessageService, RequestService, ServiceHub,
-    SettingsService, UserService,
+    BotService, ConversationService, GroupService, InteractionService, MessageService,
+    RequestService, ServiceHub, SettingsService, UserService,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -44,11 +45,12 @@ pub fn run() {
                     message_repo_for_interaction,
                     group_repo.clone(),
                 ),
-                GroupService::new(group_repo, message_repo.clone()),
+                GroupService::new(group_repo.clone(), message_repo.clone()),
                 RequestService::new(request_user_repo),
                 UserService::new(user_repo.clone()),
                 BotService::new(bot_repo.clone()),
                 SettingsService::new(SettingsRepo::new(pool.clone())),
+                ConversationService::new(ConversationRepo::new(pool.clone())),
             );
 
             let core = CoreContainer::new();
@@ -293,6 +295,13 @@ pub fn run() {
             group::list_group_files,
             group::set_group_essence_message,
             group::list_group_essence_messages,
+            conversation::set_conversation_pinned,
+            conversation::set_conversation_muted,
+            conversation::list_conversation_states,
+            conversation::list_group_categories,
+            conversation::create_group_category,
+            conversation::delete_group_category,
+            conversation::set_group_category,
             packet::list_protocol_packets,
             packet::read_protocol_packet,
         ])

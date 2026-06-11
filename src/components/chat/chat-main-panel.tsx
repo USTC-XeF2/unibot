@@ -9,6 +9,8 @@ import ChatMessageItem, {
   type ChatContextAction,
 } from "@/components/chat/chat-message-item";
 import FacePicker from "@/components/chat/face-picker";
+import GroupInfoSheet from "@/components/chat/group-info-sheet";
+import GroupMembersPanel from "@/components/chat/group-members-panel";
 import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
@@ -30,6 +32,7 @@ import {
 import {
   invalidateGroupMembersQuery,
   sourceFromInternalEvent,
+  useConversationStatesQuery,
   useGroupEventHistoryQuery,
   useGroupMembersQuery,
   useMessageHistoryQuery,
@@ -122,6 +125,8 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   const [groupMembersById, setGroupMembersById] = useState<
     Record<string, GroupMemberProfile>
   >({});
+  const [membersPanelOpen, setMembersPanelOpen] = useState(false);
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
   const [currentUnixTime, setCurrentUnixTime] = useState(Date.now());
   const sendMessageMutation = useSendMessageMutation();
   const recallMessageMutation = useRecallMessageMutation();
@@ -136,6 +141,19 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
     conversation.scene === "group" ? conversation.group_id : "",
     conversation.scene === "group",
   );
+
+  const conversationStatesQuery = useConversationStatesQuery(currentUserId);
+
+  const myConversationState = useMemo(() => {
+    if (conversation.scene !== "group") return null;
+    return (
+      conversationStatesQuery.data?.find(
+        (s) =>
+          s.conversation_scene === "group" &&
+          s.group_id === conversation.group_id,
+      ) ?? null
+    );
+  }, [conversationStatesQuery.data, conversation]);
 
   const conversationTitle = useMemo(() => {
     if (conversation.scene === "private") {
@@ -878,8 +896,18 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <header className="flex items-center border-b px-4 py-2">
-        <p className="font-semibold text-sm">{conversationTitle}</p>
+      <header className="flex items-center justify-between border-b px-4 py-2">
+        <Button
+          variant="ghost"
+          className="h-7 px-1 text-sm font-semibold"
+          onClick={() => {
+            if (conversation.scene === "group") {
+              setInfoSheetOpen(true);
+            }
+          }}
+        >
+          {conversationTitle}
+        </Button>
       </header>
 
       <ResizablePanelGroup orientation="vertical" className="flex-1">
@@ -971,6 +999,40 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
           />
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {conversation.scene === "group" && (
+        <>
+          <GroupMembersPanel
+            open={membersPanelOpen}
+            onOpenChange={setMembersPanelOpen}
+            groupId={conversation.group_id}
+            groupName={
+              groups.find((g) => g.group_id === conversation.group_id)
+                ?.group_name ?? ""
+            }
+            members={groupMembersQuery.data ?? []}
+            currentUserId={currentUserId}
+            myRole={myGroupRole}
+          />
+          <GroupInfoSheet
+            open={infoSheetOpen}
+            onOpenChange={setInfoSheetOpen}
+            groupId={conversation.group_id}
+            groupName={
+              groups.find((g) => g.group_id === conversation.group_id)
+                ?.group_name ?? ""
+            }
+            memberCount={
+              groups.find((g) => g.group_id === conversation.group_id)
+                ?.member_count ?? 0
+            }
+            members={groupMembersQuery.data ?? []}
+            currentUserId={currentUserId}
+            isPinned={myConversationState?.is_pinned ?? false}
+            isMuted={myConversationState?.is_muted ?? false}
+          />
+        </>
+      )}
     </div>
   );
 }

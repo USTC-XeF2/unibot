@@ -4,7 +4,12 @@ import { isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 import type { GroupEvent } from "@/types/event";
-import type { GroupMemberProfile, GroupProfile } from "@/types/group";
+import type {
+  ConversationState,
+  GroupCategory,
+  GroupMemberProfile,
+  GroupProfile,
+} from "@/types/group";
 
 export function useGroupsQuery() {
   return useQuery({
@@ -73,5 +78,40 @@ export function invalidateGroupEventHistoryQuery(
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.eventHistoryPrefix(userId, groupId),
     refetchType: "active",
+  });
+}
+
+// === Conversation States ===
+
+export function useConversationStatesQuery(userId: string) {
+  return useQuery({
+    queryKey: queryKeys.conversation.states(userId),
+    enabled: isValidUserId(userId),
+    queryFn: () =>
+      invoke<ConversationState[]>("list_conversation_states", { userId }),
+    retry: false,
+  });
+}
+
+export function invalidateConversationStatesQuery(userId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.conversation.states(userId),
+  });
+}
+
+// === Group Categories ===
+
+export function useGroupCategoriesQuery(userId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.categories(userId),
+    enabled: isValidUserId(userId),
+    queryFn: () => invoke<GroupCategory[]>("list_group_categories", { userId }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupCategoriesQuery(userId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.categories(userId),
   });
 }

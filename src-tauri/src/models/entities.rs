@@ -311,3 +311,22 @@ pub struct GroupEventEntity {
     pub payload: GroupEventPayload,
     pub created_at: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupCategoryEntity {
+    pub category_id: DbId,
+    pub owner_user_id: DbId,
+    pub name: String,
+    pub sort_order: i32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConversationState {
+    pub conversation_scene: String,
+    pub peer_user_id: Option<DbId>,
+    pub group_id: Option<DbId>,
+    pub is_pinned: bool,
+    pub is_muted: bool,
+}

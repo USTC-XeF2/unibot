@@ -1,6 +1,6 @@
 use crate::models::{
-    GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity, GroupFolderEntity,
-    GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupWholeMuteState,
+    GroupAnnouncementEntity, GroupCategoryEntity, GroupEssenceMessageEntity, GroupFileEntity,
+    GroupFolderEntity, GroupMemberProfile, GroupProfile, GroupRequestEntity, GroupWholeMuteState,
 };
 use crate::persistence::repo::codecs;
 
@@ -94,6 +94,16 @@ pub(super) struct GroupEssenceRow {
     pub operator_user_id: String,
     pub is_set: bool,
     pub created_at: u64,
+}
+
+#[derive(sqlx::FromRow)]
+pub(super) struct GroupCategoryRow {
+    pub category_id: String,
+    pub owner_user_id: String,
+    pub name: String,
+    pub sort_order: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 impl TryFrom<GroupRow> for GroupProfile {
@@ -209,6 +219,21 @@ impl TryFrom<GroupFolderRow> for GroupFolderEntity {
             created_at: row.created_at,
             updated_at: row.updated_at,
             file_count: row.file_count,
+        })
+    }
+}
+
+impl TryFrom<GroupCategoryRow> for GroupCategoryEntity {
+    type Error = sqlx::Error;
+
+    fn try_from(row: GroupCategoryRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            category_id: row.category_id,
+            owner_user_id: row.owner_user_id,
+            name: row.name,
+            sort_order: row.sort_order,
+            created_at: row.created_at as u64,
+            updated_at: row.updated_at as u64,
         })
     }
 }
