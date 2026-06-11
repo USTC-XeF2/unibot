@@ -1,160 +1,34 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import {
-  invalidateFriendRequestsQuery,
-  invalidateFriendsQuery,
-  invalidateGroupEventHistoryQuery,
-  invalidateGroupRequestsQueries,
-  invalidateGroupsQuery,
-  invalidateMessageHistoryQueries,
-  invalidateMessageHistoryQuery,
-  invalidatePokeHistoryQueries,
-  invalidatePokeHistoryQuery,
-  sourceFromInternalEvent,
-} from "@/lib/query";
+  type ChatEventSubscriber,
+  useChatEventBusContext,
+} from "@/components/chat/chat-event-bus-provider";
 import type { InternalEventPayload } from "@/types/event";
 
-type ChatEventSubscriber = (payload: InternalEventPayload) => void;
-
-const subscribers = new Set<ChatEventSubscriber>();
-let activeUserId: string | null = null;
-let activeUnlisten: UnlistenFn | null = null;
-let setupPromise: Promise<void> | null = null;
-
-function dispatchToSubscribers(payload: InternalEventPayload) {
-  for (const subscriber of subscribers) {
-    subscriber(payload);
-  }
-}
-
-function handleQueryInvalidation(
-  userId: string,
-  payload: InternalEventPayload,
-) {
-  const source = sourceFromInternalEvent(payload, userId);
-  if (source) {
-    invalidateMessageHistoryQuery(userId, source);
-    invalidatePokeHistoryQuery(userId, source);
-    if (source.scene === "group") {
-      invalidateGroupEventHistoryQuery(userId, source.group_id);
-    }
-  } else {
-    invalidateMessageHistoryQueries(userId);
-    invalidatePokeHistoryQueries(userId);
-  }
-
-  if (
-    payload.kind === "friend_request_created" ||
-    payload.kind === "friend_request_handled" ||
-    payload.kind === "group_request_created" ||
-    payload.kind === "group_request_handled"
-  ) {
-    invalidateFriendRequestsQuery(userId);
-    invalidateGroupRequestsQueries(userId);
-
-    if (payload.kind === "friend_request_handled") {
-      invalidateFriendsQuery(userId);
-    }
-
-    if (
-      payload.kind === "group_request_handled" &&
-      payload.state === "accepted"
-    ) {
-      const shouldRefreshGroups =
-        payload.initiator_user_id === userId ||
-        payload.target_user_id === userId;
-      if (shouldRefreshGroups) {
-        invalidateGroupsQuery();
-      }
-    }
-  }
-
-  if (
-    payload.kind === "group_member_joined" &&
-    payload.target_user_id === userId
-  ) {
-    invalidateGroupsQuery();
-  }
-}
-
-function detachListener() {
-  if (activeUnlisten) {
-    activeUnlisten();
-    activeUnlisten = null;
-  }
-  activeUserId = null;
-}
-
-async function ensureListener(userId: string) {
-  if (activeUserId === userId && activeUnlisten) {
-    return;
-  }
-
-  if (setupPromise) {
-    await setupPromise;
-    if (activeUserId === userId && activeUnlisten) {
-      return;
-    }
-  }
-
-  setupPromise = (async () => {
-    detachListener();
-    activeUserId = userId;
-    activeUnlisten = await listen<InternalEventPayload>(
-      "chat:event",
-      (event) => {
-        const payload = event.payload;
-        if (!payload) {
-          return;
-        }
-
-        handleQueryInvalidation(userId, payload);
-        dispatchToSubscribers(payload);
-      },
-    );
-  })();
-
-  try {
-    await setupPromise;
-  } finally {
-    setupPromise = null;
-  }
-}
-
+/**
+ * 订阅当前窗口的聊天事件，执行组件级回调。
+ * Query 失效由 ChatEventBusProvider 统一处理，此 hook 只负责组件回调。
+ *
+ * @param userId 当前窗口用户 id；为空时不订阅。
+ * @param onEvent 组件级回调；不传则不订阅。
+ */
 export function useChatEventBus(
   userId: string,
   onEvent?: (payload: InternalEventPayload) => void,
 ) {
+  const { subscribe } = useChatEventBusContext();
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
-
-  const subscriberRef = useRef<ChatEventSubscriber | null>(null);
-  if (!subscriberRef.current) {
-    subscriberRef.current = (payload) => {
-      onEventRef.current?.(payload);
-    };
-  }
 
   useEffect(() => {
     if (!userId) {
       return;
     }
 
-    const subscriber = subscriberRef.current;
-    if (!subscriber) {
-      return;
-    }
-
-    subscribers.add(subscriber);
-
-    ensureListener(userId);
-
-    return () => {
-      subscribers.delete(subscriber);
-
-      if (subscribers.size === 0) {
-        detachListener();
-      }
+    const subscriber: ChatEventSubscriber = (payload) => {
+      onEventRef.current?.(payload);
     };
-  }, [userId]);
+
+    return subscribe(subscriber);
+  }, [userId, subscribe]);
 }
