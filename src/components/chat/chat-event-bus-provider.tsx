@@ -122,7 +122,7 @@ export function ChatEventBusProvider({
             }
           },
           {
-            target: { kind: "WebviewWindow", label: windowLabel },
+            target: windowLabel,
           },
         );
       })
