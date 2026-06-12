@@ -6,9 +6,10 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::error::{AppError, AppResult};
-use crate::models::{InternalEvent, UserProfile};
+use crate::models::{DevToolsEvent, InternalEvent, UserProfile};
 
 pub const DEFAULT_EVENT_BUS_CAPACITY: usize = 256;
+pub const DEFAULT_DEV_TOOLS_CAPACITY: usize = 1024;
 
 #[derive(Clone, Debug)]
 pub struct UserContext {
@@ -53,6 +54,7 @@ impl UserContext {
 #[derive(Clone)]
 pub struct CoreContainer {
     users: Arc<RwLock<HashMap<String, UserContext>>>,
+    devtools_tx: broadcast::Sender<DevToolsEvent>,
 }
 
 impl Default for CoreContainer {
@@ -63,8 +65,10 @@ impl Default for CoreContainer {
 
 impl CoreContainer {
     pub fn new() -> Self {
+        let (devtools_tx, _) = broadcast::channel(DEFAULT_DEV_TOOLS_CAPACITY);
         Self {
             users: Arc::new(RwLock::new(HashMap::new())),
+            devtools_tx,
         }
     }
 
@@ -104,6 +108,10 @@ impl CoreContainer {
             .values()
             .cloned()
             .collect()
+    }
+
+    pub fn subscribe_devtools_events(&self) -> broadcast::Receiver<DevToolsEvent> {
+        self.devtools_tx.subscribe()
     }
 
     pub fn require_user_context(&self, user_id: &str) -> AppResult<UserContext> {
