@@ -104,6 +104,40 @@ pub async fn get_db_schema(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<D
 }
 
 async fn fetch_db_schema(pool: &sqlx::SqlitePool) -> crate::error::AppResult<DbSchema> {
+    fn validate_sqlite_identifier(name: &str) -> bool {
+        !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+    }
+
+    fn escape_sqlite_identifier(name: &str) -> String {
+        name.replace('\'', "''")
+    }
+
+    // SQLite's table-valued pragma functions (e.g. `FROM pragma_table_info(?)`)
+    // are not parsed correctly by the SQLite version used in sqlx's test
+    // environment, so we use the direct PRAGMA statement form here. The table
+    // name has already been validated as a plain SQLite identifier above, and
+    // single quotes are escaped defensively.
+    fn pragma_table_info_sql(table_name: &str) -> String {
+        format!(
+            "PRAGMA table_info('{}')",
+            escape_sqlite_identifier(table_name)
+        )
+    }
+
+    fn pragma_index_list_sql(table_name: &str) -> String {
+        format!(
+            "PRAGMA index_list('{}')",
+            escape_sqlite_identifier(table_name)
+        )
+    }
+
+    fn pragma_index_info_sql(index_name: &str) -> String {
+        format!(
+            "PRAGMA index_info('{}')",
+            escape_sqlite_identifier(index_name)
+        )
+    }
+
     let tables: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     )
@@ -113,11 +147,11 @@ async fn fetch_db_schema(pool: &sqlx::SqlitePool) -> crate::error::AppResult<DbS
 
     let mut result = Vec::new();
     for (name, sql) in tables {
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        if !validate_sqlite_identifier(&name) {
             continue;
         }
 
-        let columns: Vec<DbColumn> = sqlx::query(&format!("PRAGMA table_info('{}')", name))
+        let columns: Vec<DbColumn> = sqlx::query(&pragma_table_info_sql(&name))
             .fetch_all(pool)
             .await
             .map_err(|e| AppError::storage(format!("failed to get table info for {name}: {e}")))?
@@ -133,7 +167,7 @@ async fn fetch_db_schema(pool: &sqlx::SqlitePool) -> crate::error::AppResult<DbS
             .collect();
 
         let index_list: Vec<(i64, String, bool, String, bool)> =
-            sqlx::query_as(&format!("PRAGMA index_list('{}')", name))
+            sqlx::query_as(&pragma_index_list_sql(&name))
                 .fetch_all(pool)
                 .await
                 .map_err(|e| {
@@ -142,16 +176,15 @@ async fn fetch_db_schema(pool: &sqlx::SqlitePool) -> crate::error::AppResult<DbS
 
         let mut indexes = Vec::new();
         for (seq, idx_name, unique, origin, partial) in index_list {
-            let index_columns: Vec<String> =
-                sqlx::query(&format!("PRAGMA index_info('{}')", idx_name))
-                    .fetch_all(pool)
-                    .await
-                    .map_err(|e| {
-                        AppError::storage(format!("failed to get index info for {idx_name}: {e}"))
-                    })?
-                    .into_iter()
-                    .map(|row: sqlx::sqlite::SqliteRow| row.get::<String, _>("name"))
-                    .collect();
+            let index_columns: Vec<String> = sqlx::query(&pragma_index_info_sql(&idx_name))
+                .fetch_all(pool)
+                .await
+                .map_err(|e| {
+                    AppError::storage(format!("failed to get index info for {idx_name}: {e}"))
+                })?
+                .into_iter()
+                .map(|row: sqlx::sqlite::SqliteRow| row.get::<String, _>("name"))
+                .collect();
 
             indexes.push(DbIndex {
                 seq,

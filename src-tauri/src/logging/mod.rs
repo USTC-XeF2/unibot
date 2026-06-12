@@ -57,10 +57,18 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult
 
     let (filter, reload_handle) = tracing_subscriber::reload::Layer::new(env_filter);
 
+    // Only mirror logs to stderr in dev builds. Release builds rely solely on
+    // the JSON log file appender to avoid unnecessary runtime overhead.
+    let stderr_layer = if cfg!(debug_assertions) {
+        Some(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+    } else {
+        None
+    };
+
     tracing_subscriber::registry()
         .with(filter)
         .with(JsonLayer::new(non_blocking))
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(stderr_layer)
         .init();
 
     *RELOAD_HANDLE.lock() = Some(reload_handle);

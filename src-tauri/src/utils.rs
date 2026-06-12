@@ -26,12 +26,11 @@ where
         if let Ok(ctx) = core.require_user_context(user_id.as_ref()) {
             let _ = ctx.event_tx.send(event.clone());
         }
-
-        core.send_devtools_event(DevToolsEvent {
-            recipient_user_id: user_id.as_ref().to_string(),
-            event: event.clone(),
-        });
     }
+
+    // Emit a single copy to the devtools firehose. The event stream panel
+    // shows what the system produced, not per-recipient delivery logs.
+    core.send_devtools_event(DevToolsEvent { event });
 }
 
 pub async fn emit_to_group_members(
