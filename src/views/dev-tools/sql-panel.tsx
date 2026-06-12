@@ -43,7 +43,10 @@ export function SqlPanel() {
           setResult(data);
           toast.success("执行成功");
         },
-        onError: (err) => toast.error(`执行失败: ${err}`),
+        onError: (err) => {
+          setResult(null);
+          toast.error(`执行失败: ${err}`);
+        },
       },
     );
   };
@@ -81,7 +84,7 @@ export function SqlPanel() {
 
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-card/60 p-3">
         {execute.isError && (
-          <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          <div className="mb-3 rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs">
             执行失败: {execute.error?.message || "未知错误"}
           </div>
         )}
@@ -93,49 +96,46 @@ export function SqlPanel() {
         )}
 
         {result && (
-          <div className="h-full">
-            {result.rows.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                {result.rows_affected !== undefined
-                  ? `受影响行数: ${result.rows_affected}`
-                  : "无返回数据"}
+          <>
+            {result.rows_affected !== undefined && (
+              <p className="mb-2 text-muted-foreground text-sm">
+                受影响行数: {result.rows_affected}
               </p>
-            ) : (
-              <div className="overflow-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted">
-                    <tr>
-                      {result.columns.map((col) => (
-                        <th
-                          key={col}
-                          className="px-3 py-2 text-left font-medium"
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {result.rows.map((row) => (
-                      <tr key={row.map(String).join("|")}>
-                        {row.map((cell, cidx) => {
-                          const colName = result.columns[cidx];
-                          return (
-                            <td
-                              key={`${colName}-${String(cell)}`}
-                              className="px-3 py-2"
-                            >
-                              {cell === null ? "NULL" : String(cell)}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             )}
-          </div>
+
+            {result.rows.length === 0 ? (
+              <p className="text-muted-foreground text-sm">无返回数据</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-muted">
+                  <tr>
+                    {result.columns.map((col) => (
+                      <th key={col} className="px-3 py-2 text-left font-medium">
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {result.rows.map((row, ridx) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: row data may contain duplicates; index disambiguates
+                    <tr key={`row-${ridx}-${row.map(String).join("|")}`}>
+                      {row.map((cell, cidx) => {
+                        return (
+                          <td // biome-ignore lint/suspicious/noArrayIndexKey: cell data may contain duplicates; index disambiguates
+                            key={`cell-${ridx}-${cidx}`}
+                            className="px-3 py-2"
+                          >
+                            {cell === null ? "NULL" : String(cell)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
     </div>
