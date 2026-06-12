@@ -60,6 +60,7 @@ pub fn init_logging(log_dir: impl AsRef<Path>, default_level: &str) -> AppResult
     tracing_subscriber::registry()
         .with(filter)
         .with(JsonLayer::new(non_blocking))
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     *RELOAD_HANDLE.lock() = Some(reload_handle);
