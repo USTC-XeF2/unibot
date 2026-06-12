@@ -1,19 +1,31 @@
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  useComboboxAnchor,
+} from "@/components/ui/combobox";
+import { Input } from "@/components/ui/input";
 import { useSystemLogsQuery } from "@/lib/query";
 import type { SystemLogEntry } from "@/types/log";
 
-const LEVELS = ["all", "trace", "debug", "info", "warn", "error"] as const;
 const PAGE_SIZE = 100;
+
+const LEVEL_OPTIONS = [
+  { value: "trace", label: "TRACE" },
+  { value: "debug", label: "DEBUG" },
+  { value: "info", label: "INFO" },
+  { value: "warn", label: "WARN" },
+  { value: "error", label: "ERROR" },
+] as const;
+
+type LevelValue = (typeof LEVEL_OPTIONS)[number]["value"];
 
 function levelColorClass(level: string): string {
   const lower = level.toLowerCase();
@@ -70,22 +82,73 @@ function formatLogMessage(entry: SystemLogEntry): string {
   return `{${entries.length} fields}`;
 }
 
+function LevelCombobox({
+  value,
+  onValueChange,
+}: {
+  value: LevelValue[];
+  onValueChange: (value: LevelValue[]) => void;
+}) {
+  const anchorRef = useComboboxAnchor();
+
+  return (
+    <Combobox
+      multiple
+      value={value}
+      onValueChange={(nextValue) => onValueChange(nextValue as LevelValue[])}
+    >
+      <ComboboxChips
+        ref={anchorRef}
+        className="scrollbar-none h-8 flex-nowrap overflow-x-auto overflow-y-hidden whitespace-nowrap"
+      >
+        {value.map((selected) => {
+          const option = LEVEL_OPTIONS.find((o) => o.value === selected);
+          return (
+            <ComboboxChip key={selected} className="shrink-0">
+              {option?.label ?? selected}
+            </ComboboxChip>
+          );
+        })}
+        <ComboboxChipsInput
+          placeholder={value.length === 0 ? "等级" : ""}
+          className="min-w-0 shrink-0"
+        />
+      </ComboboxChips>
+
+      <ComboboxContent anchor={anchorRef}>
+        <ComboboxList>
+          {LEVEL_OPTIONS.map((option) => (
+            <ComboboxItem key={option.value} value={option.value}>
+              {option.label}
+            </ComboboxItem>
+          ))}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
+}
+
 export function LogsPanel() {
   const logsQuery = useSystemLogsQuery({ limit: 500 });
   const [keyword, setKeyword] = useState("");
-  const [level, setLevel] = useState<(typeof LEVELS)[number]>("all");
+  const [levels, setLevels] = useState<LevelValue[]>([]);
   const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     const entries = logsQuery.data ?? [];
     const lower = keyword.trim().toLowerCase();
     return entries.filter((entry) => {
-      if (level !== "all" && entry.level.toLowerCase() !== level) return false;
+      if (
+        levels.length > 0 &&
+        !levels.includes(entry.level.toLowerCase() as LevelValue)
+      ) {
+        return false;
+      }
       if (!lower) return true;
       const text = JSON.stringify(entry).toLowerCase();
       return text.includes(lower);
     });
-  }, [logsQuery.data, keyword, level]);
+  }, [logsQuery.data, keyword, levels]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -95,38 +158,31 @@ export function LogsPanel() {
   }, [filtered, safePage]);
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="搜索关键字..."
-            value={keyword}
-            onChange={(e) => {
-              setKeyword(e.target.value);
-              setPage(1);
-            }}
-            className="pl-8"
-          />
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+      <div className="shrink-0 rounded-xl border bg-card/60 p-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="搜索关键字..."
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value);
+                setPage(1);
+              }}
+              className="pl-8"
+            />
+          </div>
+          <div className="w-40">
+            <LevelCombobox
+              value={levels}
+              onValueChange={(value) => {
+                setLevels(value);
+                setPage(1);
+              }}
+            />
+          </div>
         </div>
-        <Select
-          value={level}
-          onValueChange={(value) => {
-            setLevel(value as (typeof LEVELS)[number]);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {LEVELS.map((l) => (
-              <SelectItem key={l} value={l}>
-                {l.toUpperCase()}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-card/60 p-3">
@@ -134,7 +190,7 @@ export function LogsPanel() {
           <p className="text-muted-foreground text-sm">读取中...</p>
         ) : logsQuery.isError ? (
           <p className="text-destructive text-sm">读取失败</p>
-        ) : filtered.length === 0 ? (
+        ) : paginated.length === 0 ? (
           <p className="text-muted-foreground text-sm">无匹配日志</p>
         ) : (
           <div className="space-y-2">
@@ -165,7 +221,7 @@ export function LogsPanel() {
         )}
       </div>
 
-      <div className="flex items-center justify-between text-xs">
+      <div className="shrink-0 flex items-center justify-between text-xs">
         <span className="text-muted-foreground">
           共 {filtered.length} 条 · 第 {safePage} / {totalPages} 页
         </span>
