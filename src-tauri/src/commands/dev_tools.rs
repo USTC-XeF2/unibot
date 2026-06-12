@@ -7,6 +7,22 @@ use super::IntoCommandResult;
 use crate::core::CoreContainer;
 use crate::error::AppError;
 
+const WRITE_KEYWORDS: &[&str] = &[
+    "INSERT", "UPDATE", "DELETE", "REPLACE", "DROP", "CREATE", "ALTER", "TRUNCATE",
+];
+
+fn is_write_query(query: &str) -> bool {
+    let normalized = query.to_uppercase();
+    WRITE_KEYWORDS.iter().any(|kw| normalized.contains(kw))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SqlQueryResult {
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<serde_json::Value>>,
+    pub rows_affected: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbColumn {
     pub cid: i64,
@@ -38,6 +54,75 @@ pub struct DbTable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbSchema {
     pub tables: Vec<DbTable>,
+}
+
+#[tauri::command]
+pub async fn execute_sql(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    query: String,
+    allow_write: bool,
+) -> Result<SqlQueryResult, String> {
+    let result = async {
+        if !allow_write && is_write_query(&query) {
+            return Err(AppError::validation(
+                "write queries require allow_write=true",
+            ));
+        }
+
+        if query.trim().is_empty() {
+            return Err(AppError::validation("query is empty"));
+        }
+
+        let rows = sqlx::query(&query)
+            .fetch_all(pool.inner())
+            .await
+            .map_err(|e| AppError::storage(format!("failed to execute sql: {e}")))?;
+
+        if rows.is_empty() {
+            return Ok(SqlQueryResult {
+                columns: vec![],
+                rows: vec![],
+                rows_affected: None,
+            });
+        }
+
+        let columns: Vec<String> = rows[0]
+            .columns()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
+
+        let mut result_rows = Vec::new();
+        for row in rows {
+            let mut values = Vec::new();
+            for (idx, _) in columns.iter().enumerate() {
+                let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
+                    serde_json::Value::Number(v.into())
+                } else if let Ok(v) = row.try_get::<f64, _>(idx) {
+                    serde_json::Number::from_f64(v)
+                        .map_or(serde_json::Value::Null, serde_json::Value::Number)
+                } else if let Ok(v) = row.try_get::<String, _>(idx) {
+                    serde_json::Value::String(v)
+                } else if let Ok(v) = row.try_get::<bool, _>(idx) {
+                    serde_json::Value::Bool(v)
+                } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
+                    serde_json::Value::String(format!("<BLOB {} bytes>", v.len()))
+                } else {
+                    serde_json::Value::Null
+                };
+                values.push(value);
+            }
+            result_rows.push(values);
+        }
+
+        Ok(SqlQueryResult {
+            columns,
+            rows: result_rows,
+            rows_affected: None,
+        })
+    }
+    .await;
+    result.into_command_result()
 }
 
 #[tauri::command]
