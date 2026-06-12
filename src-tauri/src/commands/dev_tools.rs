@@ -12,8 +12,40 @@ const WRITE_KEYWORDS: &[&str] = &[
 ];
 
 fn is_write_query(query: &str) -> bool {
-    let normalized = query.to_uppercase();
-    WRITE_KEYWORDS.iter().any(|kw| normalized.contains(kw))
+    let mut normalized = query.to_uppercase();
+
+    // Skip leading whitespace and simple SQL comments so that commented-out
+    // write statements are still detected while "SELECT 'INSERT' ..." is not.
+    loop {
+        normalized = normalized.trim_start().to_string();
+        if normalized.starts_with("--") {
+            if let Some(idx) = normalized.find('\n') {
+                normalized = normalized[idx..].to_string();
+                continue;
+            }
+            return false;
+        }
+        if normalized.starts_with("/*") {
+            if let Some(idx) = normalized.find("*/") {
+                normalized = normalized[idx + 2..].to_string();
+                continue;
+            }
+            return false;
+        }
+        break;
+    }
+
+    WRITE_KEYWORDS.iter().any(|kw| {
+        normalized.starts_with(kw) && {
+            let after = &normalized[kw.len()..];
+            after.is_empty()
+                || after
+                    .chars()
+                    .next()
+                    .map(|c| c.is_whitespace() || c == '(')
+                    .unwrap_or(false)
+        }
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,73 +88,79 @@ pub struct DbSchema {
     pub tables: Vec<DbTable>,
 }
 
+async fn execute_sql_query(
+    pool: &sqlx::SqlitePool,
+    query: &str,
+    allow_write: bool,
+) -> crate::error::AppResult<SqlQueryResult> {
+    if !allow_write && is_write_query(query) {
+        return Err(AppError::validation(
+            "write queries require allow_write=true",
+        ));
+    }
+
+    if query.trim().is_empty() {
+        return Err(AppError::validation("query is empty"));
+    }
+
+    let rows = sqlx::query(query)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| AppError::storage(format!("failed to execute sql: {e}")))?;
+
+    if rows.is_empty() {
+        return Ok(SqlQueryResult {
+            columns: vec![],
+            rows: vec![],
+            rows_affected: None,
+        });
+    }
+
+    let columns: Vec<String> = rows[0]
+        .columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
+
+    let mut result_rows = Vec::new();
+    for row in rows {
+        let mut values = Vec::new();
+        for (idx, _) in columns.iter().enumerate() {
+            let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
+                serde_json::Value::Number(v.into())
+            } else if let Ok(v) = row.try_get::<f64, _>(idx) {
+                serde_json::Number::from_f64(v)
+                    .map_or(serde_json::Value::Null, serde_json::Value::Number)
+            } else if let Ok(v) = row.try_get::<String, _>(idx) {
+                serde_json::Value::String(v)
+            } else if let Ok(v) = row.try_get::<bool, _>(idx) {
+                serde_json::Value::Bool(v)
+            } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
+                serde_json::Value::String(format!("<BLOB {} bytes>", v.len()))
+            } else {
+                serde_json::Value::Null
+            };
+            values.push(value);
+        }
+        result_rows.push(values);
+    }
+
+    Ok(SqlQueryResult {
+        columns,
+        rows: result_rows,
+        rows_affected: None,
+    })
+}
+
 #[tauri::command]
 pub async fn execute_sql(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     query: String,
     allow_write: bool,
 ) -> Result<SqlQueryResult, String> {
-    let result = async {
-        if !allow_write && is_write_query(&query) {
-            return Err(AppError::validation(
-                "write queries require allow_write=true",
-            ));
-        }
-
-        if query.trim().is_empty() {
-            return Err(AppError::validation("query is empty"));
-        }
-
-        let rows = sqlx::query(&query)
-            .fetch_all(pool.inner())
-            .await
-            .map_err(|e| AppError::storage(format!("failed to execute sql: {e}")))?;
-
-        if rows.is_empty() {
-            return Ok(SqlQueryResult {
-                columns: vec![],
-                rows: vec![],
-                rows_affected: None,
-            });
-        }
-
-        let columns: Vec<String> = rows[0]
-            .columns()
-            .iter()
-            .map(|c| c.name().to_string())
-            .collect();
-
-        let mut result_rows = Vec::new();
-        for row in rows {
-            let mut values = Vec::new();
-            for (idx, _) in columns.iter().enumerate() {
-                let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
-                    serde_json::Value::Number(v.into())
-                } else if let Ok(v) = row.try_get::<f64, _>(idx) {
-                    serde_json::Number::from_f64(v)
-                        .map_or(serde_json::Value::Null, serde_json::Value::Number)
-                } else if let Ok(v) = row.try_get::<String, _>(idx) {
-                    serde_json::Value::String(v)
-                } else if let Ok(v) = row.try_get::<bool, _>(idx) {
-                    serde_json::Value::Bool(v)
-                } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
-                    serde_json::Value::String(format!("<BLOB {} bytes>", v.len()))
-                } else {
-                    serde_json::Value::Null
-                };
-                values.push(value);
-            }
-            result_rows.push(values);
-        }
-
-        Ok(SqlQueryResult {
-            columns,
-            rows: result_rows,
-            rows_affected: None,
-        })
-    }
-    .await;
-    result.into_command_result()
+    execute_sql_query(pool.inner(), &query, allow_write)
+        .await
+        .into_command_result()
 }
 
 #[tauri::command]
@@ -388,9 +426,39 @@ async fn fetch_table_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::{fetch_db_schema, fetch_table_rows};
+    use super::{execute_sql_query, fetch_db_schema, fetch_table_rows, is_write_query};
     use crate::models::UserProfile;
     use crate::persistence::{UserRepo, migrator};
+
+    #[test]
+    fn detects_write_queries() {
+        let writes = [
+            "INSERT INTO users VALUES ('x')",
+            "UPDATE users SET name = 'x'",
+            "DELETE FROM users",
+            "REPLACE INTO users VALUES ('x')",
+            "DROP TABLE users",
+            "CREATE TABLE foo (id INTEGER)",
+            "ALTER TABLE users ADD COLUMN x TEXT",
+            "TRUNCATE TABLE users",
+        ];
+        for q in writes {
+            assert!(is_write_query(q), "expected write: {q}");
+        }
+    }
+
+    #[test]
+    fn read_queries_are_not_write() {
+        let reads = [
+            "SELECT * FROM users",
+            "PRAGMA table_info(users)",
+            "EXPLAIN SELECT * FROM users",
+            "SELECT 'INSERT' FROM users",
+        ];
+        for q in reads {
+            assert!(!is_write_query(q), "expected read: {q}");
+        }
+    }
 
     fn make_profile(user_id: &str, nickname: &str) -> UserProfile {
         UserProfile {
@@ -400,6 +468,56 @@ mod tests {
             signature: "".to_string(),
             account_status: Default::default(),
         }
+    }
+
+    #[sqlx::test]
+    async fn execute_sql_rejects_write_without_allow_write(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let result = execute_sql_query(
+            &pool,
+            "INSERT INTO im_accounts (user_id, nickname) VALUES ('99999', 'Eve')",
+            false,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("write queries require allow_write=true")
+        );
+    }
+
+    #[sqlx::test]
+    async fn execute_sql_allows_write_with_allow_write(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let result = execute_sql_query(
+            &pool,
+            "INSERT INTO im_accounts (user_id, nickname) VALUES ('99999', 'Eve')",
+            true,
+        )
+        .await;
+
+        assert!(result.is_ok());
+
+        let select = execute_sql_query(
+            &pool,
+            "SELECT user_id, nickname FROM im_accounts WHERE user_id = '99999'",
+            false,
+        )
+        .await;
+
+        assert!(select.is_ok());
+        let select = select.unwrap();
+        assert_eq!(select.rows.len(), 1);
+        assert_eq!(select.columns, vec!["user_id", "nickname"]);
     }
 
     #[sqlx::test]
