@@ -63,7 +63,7 @@ pub fn open_developer_tools(
     }
 
     let webview_url = tauri::WebviewUrl::App("index.html#/developer-tools".into());
-    let _ = tauri::WebviewWindowBuilder::new(&app, label, webview_url)
+    let devtools_window = tauri::WebviewWindowBuilder::new(&app, label, webview_url)
         .title("开发者工具")
         .inner_size(1200.0, 800.0)
         .min_inner_size(800.0, 600.0)
@@ -74,6 +74,13 @@ pub fn open_developer_tools(
         })?;
 
     core.set_devtools_window_open(true);
+
+    let core_for_window_event = core.inner().clone();
+    devtools_window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            core_for_window_event.set_devtools_window_open(false);
+        }
+    });
 
     let mut devtools_rx = core.subscribe_devtools_events();
     let app_handle = app.clone();
