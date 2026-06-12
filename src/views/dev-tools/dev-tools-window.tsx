@@ -42,7 +42,11 @@ export default function DevToolsWindow() {
             <TabsContent value="logs" className="flex-1 overflow-hidden">
               <LogsPanel />
             </TabsContent>
-            <TabsContent value="events" className="flex-1 overflow-hidden">
+            <TabsContent
+              value="events"
+              className="flex-1 overflow-hidden"
+              forceMount
+            >
               <EventsPanel />
             </TabsContent>
             <TabsContent value="schema" className="flex-1 overflow-hidden">

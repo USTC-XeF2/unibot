@@ -129,7 +129,7 @@ export function LogsPanel() {
         </Select>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-xl border bg-card/60 p-3">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-card/60 p-3">
         {logsQuery.isPending ? (
           <p className="text-muted-foreground text-sm">读取中...</p>
         ) : logsQuery.isError ? (
