@@ -35,5 +35,6 @@ export type TableRowPreview = {
 };
 
 export type DevToolsEventPayload = {
+  recipient_user_id: string;
   event: InternalEventPayload;
 };

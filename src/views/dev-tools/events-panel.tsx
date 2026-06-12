@@ -139,6 +139,9 @@ export function EventsPanel() {
                   <span className="rounded border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
                     {new Date(item.receivedAt).toLocaleTimeString()}
                   </span>
+                  <span className="rounded border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
+                    {item.payload.recipient_user_id}
+                  </span>
                   <span
                     className={`rounded border px-1.5 py-0.5 font-medium ${kindBadgeClass(item.payload.event.kind)}`}
                   >
