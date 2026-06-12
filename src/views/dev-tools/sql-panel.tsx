@@ -14,12 +14,16 @@ export function SqlPanel() {
   const execute = useExecuteSqlMutation();
 
   const handleExecute = async () => {
+    execute.reset();
+
     const trimmed = query.trim();
     if (!trimmed) {
       toast.error("SQL 为空");
       return;
     }
 
+    // Backend is the authoritative source for write detection. This call is
+    // only used to decide whether to show the confirmation dialog.
     const isWrite = await checkWriteQuery(trimmed);
 
     if (isWrite && !allowWrite) {
@@ -118,14 +122,12 @@ export function SqlPanel() {
                 </thead>
                 <tbody className="divide-y">
                   {result.rows.map((row, ridx) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: row data may contain duplicates; index disambiguates
-                    <tr key={`row-${ridx}-${row.map(String).join("|")}`}>
+                    // biome-ignore lint/suspicious/noArrayIndexKey: SQL rows are read-only and may contain duplicate values
+                    <tr key={`row-${ridx}`}>
                       {row.map((cell, cidx) => {
+                        const colName = result.columns[cidx];
                         return (
-                          <td // biome-ignore lint/suspicious/noArrayIndexKey: cell data may contain duplicates; index disambiguates
-                            key={`cell-${ridx}-${cidx}`}
-                            className="px-3 py-2"
-                          >
+                          <td key={colName} className="px-3 py-2">
                             {cell === null ? "NULL" : String(cell)}
                           </td>
                         );
