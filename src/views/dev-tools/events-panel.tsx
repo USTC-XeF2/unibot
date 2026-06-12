@@ -71,11 +71,14 @@ function KindCombobox({
         ref={anchorRef}
         className="scrollbar-none h-8 flex-nowrap overflow-x-auto overflow-y-hidden whitespace-nowrap"
       >
-        {value.map((selected) => (
-          <ComboboxChip key={selected} className="shrink-0">
-            {selected}
-          </ComboboxChip>
-        ))}
+        {value.map((selected) => {
+          const option = KIND_OPTIONS.find((o) => o.value === selected);
+          return (
+            <ComboboxChip key={selected} className="shrink-0">
+              {option?.label ?? selected}
+            </ComboboxChip>
+          );
+        })}
         <ComboboxChipsInput
           placeholder={value.length === 0 ? "kind" : ""}
           className="min-w-0 shrink-0"
