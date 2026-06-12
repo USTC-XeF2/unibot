@@ -35,10 +35,12 @@ async function listenWithRetry<T>(
       return await listen<T>(event, handler, options);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (
-        message.includes("Tauri internals not available") &&
-        i < maxRetries - 1
-      ) {
+      const name = error instanceof Error ? error.name : "";
+      const isReadinessError =
+        message.includes("Tauri internals not available") ||
+        message.includes("__TAURI_INTERNALS__") ||
+        name.includes("TauriError");
+      if (isReadinessError && i < maxRetries - 1) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }

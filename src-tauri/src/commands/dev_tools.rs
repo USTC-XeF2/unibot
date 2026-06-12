@@ -48,6 +48,7 @@ pub fn open_developer_tools(
     let label = "developer-tools";
 
     if let Some(existing) = app.get_webview_window(label) {
+        core.set_devtools_window_open(true);
         existing.show().map_err(|e| {
             AppError::internal(format!("failed to show developer tools window: {e}")).to_string()
         })?;
@@ -72,15 +73,19 @@ pub fn open_developer_tools(
             AppError::internal(format!("failed to create developer tools window: {e}")).to_string()
         })?;
 
+    core.set_devtools_window_open(true);
+
     let mut devtools_rx = core.subscribe_devtools_events();
     let app_handle = app.clone();
     let label_owned = label.to_string();
+    let core_for_task = core.inner().clone();
 
     tauri::async_runtime::spawn(async move {
         loop {
             match devtools_rx.recv().await {
                 Ok(devtools_event) => {
                     if app_handle.get_webview_window(&label_owned).is_none() {
+                        core_for_task.set_devtools_window_open(false);
                         break;
                     }
                     if let Err(e) =
@@ -90,7 +95,10 @@ pub fn open_developer_tools(
                     }
                 }
                 Err(RecvError::Lagged(_)) => continue,
-                Err(RecvError::Closed) => break,
+                Err(RecvError::Closed) => {
+                    core_for_task.set_devtools_window_open(false);
+                    break;
+                }
             }
         }
     });

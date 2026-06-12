@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use tauri::{Emitter, Manager};
@@ -55,6 +56,7 @@ impl UserContext {
 pub struct CoreContainer {
     users: Arc<RwLock<HashMap<String, UserContext>>>,
     devtools_tx: broadcast::Sender<DevToolsEvent>,
+    devtools_window_open: Arc<AtomicBool>,
 }
 
 impl Default for CoreContainer {
@@ -69,6 +71,7 @@ impl CoreContainer {
         Self {
             users: Arc::new(RwLock::new(HashMap::new())),
             devtools_tx,
+            devtools_window_open: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -114,7 +117,18 @@ impl CoreContainer {
         self.devtools_tx.subscribe()
     }
 
+    pub fn set_devtools_window_open(&self, open: bool) {
+        self.devtools_window_open.store(open, Ordering::Relaxed);
+    }
+
+    pub fn is_devtools_window_open(&self) -> bool {
+        self.devtools_window_open.load(Ordering::Relaxed)
+    }
+
     pub fn send_devtools_event(&self, event: DevToolsEvent) {
+        if !self.is_devtools_window_open() {
+            return;
+        }
         let _ = self.devtools_tx.send(event);
     }
 
