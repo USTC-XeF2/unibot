@@ -1,4 +1,4 @@
-import { Database, FileText, Trash2 } from "lucide-react";
+import { Bug, Database, FileText, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+  useOpenDeveloperToolsMutation,
   useSetLogLevelMutation,
   useSetLogRetentionMutation,
   useTriggerLogCleanupMutation,
@@ -45,6 +46,7 @@ function SettingsView() {
   const setLogLevel = useSetLogLevelMutation();
   const setRetention = useSetLogRetentionMutation();
   const triggerCleanup = useTriggerLogCleanupMutation();
+  const openDevTools = useOpenDeveloperToolsMutation();
 
   const [pendingDebug, setPendingDebug] = useState<boolean | null>(null);
   const [pendingRetention, setPendingRetention] = useState<number | null>(null);
@@ -61,7 +63,7 @@ function SettingsView() {
       {
         onSuccess: () => {
           invalidateLogSettingsQuery();
-          toast.success(checked ? "已开启 DEBUG 模式" : "已关闭 DEBUG 模式");
+          toast.success(checked ? "已开启开发者模式" : "已关闭开发者模式");
         },
         onError: (err) => {
           toast.error(`切换失败: ${err}`);
@@ -69,6 +71,12 @@ function SettingsView() {
         },
       },
     );
+  };
+
+  const handleOpenDevTools = () => {
+    openDevTools.mutate(undefined, {
+      onError: (err) => toast.error(`打开失败: ${err}`),
+    });
   };
 
   const handleRetentionChange = (value: string) => {
@@ -198,9 +206,9 @@ function SettingsView() {
             <>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-medium text-sm">DEBUG 模式</p>
+                  <p className="font-medium text-sm">开发者模式</p>
                   <p className="text-muted-foreground text-xs">
-                    开启后将记录 DEBUG 级别日志（大量调试信息）
+                    开启后将记录 DEBUG 级别日志，并允许打开开发者工具
                   </p>
                 </div>
                 <Switch
@@ -209,6 +217,20 @@ function SettingsView() {
                   disabled={setLogLevel.isPending}
                 />
               </div>
+
+              {isDebugEnabled && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleOpenDevTools}
+                  disabled={openDevTools.isPending}
+                >
+                  <Bug className="size-3.5" />
+                  打开开发者工具
+                </Button>
+              )}
 
               <Field>
                 <FieldLabel>日志保留天数</FieldLabel>

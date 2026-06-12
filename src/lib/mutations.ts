@@ -688,3 +688,9 @@ export function useRenameBotMutation() {
     },
   });
 }
+
+export function useOpenDeveloperToolsMutation() {
+  return useMutation({
+    mutationFn: () => invoke<boolean>("open_developer_tools"),
+  });
+}
