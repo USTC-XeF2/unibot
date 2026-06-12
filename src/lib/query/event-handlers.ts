@@ -1,8 +1,8 @@
 import {
-  invalidateMessageHistoryQueries,
-  invalidateMessageHistoryQuery,
-  invalidatePokeHistoryQueries,
-  invalidatePokeHistoryQuery,
+  refetchMessageHistoryQueries,
+  refetchMessageHistoryQuery,
+  refetchPokeHistoryQueries,
+  refetchPokeHistoryQuery,
   sourceFromInternalEvent,
 } from "@/lib/query/chat";
 import { invalidateFriendsQuery } from "@/lib/query/friends";
@@ -26,14 +26,14 @@ export function handleQueryInvalidation(
 ) {
   const source = sourceFromInternalEvent(payload, userId);
   if (source) {
-    invalidateMessageHistoryQuery(userId, source);
-    invalidatePokeHistoryQuery(userId, source);
+    refetchMessageHistoryQuery(userId, source);
+    refetchPokeHistoryQuery(userId, source);
     if (source.scene === "group") {
       invalidateGroupEventHistoryQuery(userId, source.group_id);
     }
   } else {
-    invalidateMessageHistoryQueries(userId);
-    invalidatePokeHistoryQueries(userId);
+    refetchMessageHistoryQueries(userId);
+    refetchPokeHistoryQueries(userId);
   }
 
   if (

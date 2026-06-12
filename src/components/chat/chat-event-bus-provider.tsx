@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { type Event, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   createContext,
   type ReactNode,
@@ -20,41 +20,32 @@ const ChatEventBusContext = createContext<ChatEventBusContextValue | null>(
   null,
 );
 
-// Tauri internals may not be ready immediately when a chat window webview
-// finishes loading. Poll briefly before registering the listener to avoid
-// a runtime "Tauri internals not available" error.
-function waitForTauriInternals(timeoutMs = 5000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") {
-      reject(new Error("window is not available"));
-      return;
-    }
-
-    if (
-      (window as unknown as { __TAURI_INTERNALS__?: unknown })
-        .__TAURI_INTERNALS__
-    ) {
-      resolve();
-      return;
-    }
-
-    const startTime = Date.now();
-    const interval = window.setInterval(() => {
+// Tauri's event listener may be called before `window.__TAURI_INTERNALS__`
+// is injected in a freshly opened webview. Retry on the specific "Tauri
+// internals not available" error instead of polling the private global.
+async function listenWithRetry<T>(
+  event: string,
+  handler: (event: Event<T>) => void,
+  options: { target?: string },
+  maxRetries = 30,
+  delayMs = 50,
+): Promise<UnlistenFn> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await listen<T>(event, handler, options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       if (
-        (window as unknown as { __TAURI_INTERNALS__?: unknown })
-          .__TAURI_INTERNALS__
+        message.includes("Tauri internals not available") &&
+        i < maxRetries - 1
       ) {
-        window.clearInterval(interval);
-        resolve();
-        return;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
       }
-
-      if (Date.now() - startTime > timeoutMs) {
-        window.clearInterval(interval);
-        reject(new Error("Tauri internals not available within timeout"));
-      }
-    }, 50);
-  });
+      throw error;
+    }
+  }
+  throw new Error(`failed to register listener for ${event} after retries`);
 }
 
 export function useChatEventBusContext(): ChatEventBusContextValue {
@@ -93,32 +84,23 @@ export function ChatEventBusProvider({
 
     const windowLabel = `chat-${userId}`;
 
-    waitForTauriInternals(1000)
-      .then(() => {
-        if (cancelled) {
+    listenWithRetry<InternalEventPayload>(
+      "chat:event",
+      (event) => {
+        const payload = event.payload;
+        if (!payload) {
           return;
         }
-        return listen<InternalEventPayload>(
-          "chat:event",
-          (event) => {
-            const payload = event.payload;
-            if (!payload) {
-              return;
-            }
-            handleQueryInvalidation(userId, payload);
-            for (const subscriber of subscribersRef.current) {
-              subscriber(payload);
-            }
-          },
-          {
-            target: windowLabel,
-          },
-        );
-      })
+        handleQueryInvalidation(userId, payload);
+        for (const subscriber of subscribersRef.current) {
+          subscriber(payload);
+        }
+      },
+      {
+        target: windowLabel,
+      },
+    )
       .then((fn) => {
-        if (!fn) {
-          return;
-        }
         if (cancelled) {
           fn();
           return;
