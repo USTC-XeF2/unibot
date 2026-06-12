@@ -72,14 +72,7 @@ export function sourceFromInternalEvent(
   currentUserId: string,
 ): MessageSource | null {
   if (payload.kind === "message") {
-    if (payload.group_id) {
-      return { scene: "group", group_id: payload.group_id };
-    }
-
-    if (payload.sender !== currentUserId) {
-      return { scene: "private", peer_user_id: payload.sender };
-    }
-    return null;
+    return payload.source;
   }
 
   if (payload.kind === "message_recalled") {
