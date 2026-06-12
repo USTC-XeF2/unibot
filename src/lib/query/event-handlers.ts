@@ -26,6 +26,10 @@ export function handleQueryInvalidation(
   payload: InternalEventPayload,
 ) {
   const source = sourceFromInternalEvent(payload, userId);
+  // eslint-disable-next-line no-console
+  console.log("[event-bus] payload", JSON.stringify(payload));
+  // eslint-disable-next-line no-console
+  console.log("[event-bus] resolved source", source);
   toast.info(
     `[event-bus] invalidating ${payload.kind} for ${userId} source=${source ? `${source.scene}:${source.scene === "group" ? source.group_id : source.peer_user_id}` : "null"}`,
   );
