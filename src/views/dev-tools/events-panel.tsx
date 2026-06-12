@@ -22,7 +22,24 @@ type EventItem = {
 
 const KIND_OPTIONS = [
   { value: "message", label: "message" },
+  { value: "message_recalled", label: "message_recalled" },
+  { value: "message_reaction", label: "message_reaction" },
   { value: "poke", label: "poke" },
+  { value: "friend_request_created", label: "friend_request_created" },
+  { value: "friend_request_handled", label: "friend_request_handled" },
+  { value: "group_request_created", label: "group_request_created" },
+  { value: "group_request_handled", label: "group_request_handled" },
+  { value: "group_member_muted", label: "group_member_muted" },
+  { value: "group_member_joined", label: "group_member_joined" },
+  { value: "group_member_title_updated", label: "group_member_title_updated" },
+  { value: "group_whole_mute_updated", label: "group_whole_mute_updated" },
+  {
+    value: "group_announcement_upserted",
+    label: "group_announcement_upserted",
+  },
+  { value: "group_folder_upserted", label: "group_folder_upserted" },
+  { value: "group_file_upserted", label: "group_file_upserted" },
+  { value: "group_essence_updated", label: "group_essence_updated" },
   { value: "notice", label: "notice" },
 ] as const;
 
