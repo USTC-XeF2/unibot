@@ -1,6 +1,8 @@
+pub mod dev_tools;
 pub mod entities;
 pub mod internal;
 
+pub use dev_tools::DevToolsEvent;
 pub use entities::{
     AccountStatus, BotProfile, ConversationState, DbId, DebugSession, FriendRequestEntity,
     GroupAlbumEntity, GroupAnnouncementEntity, GroupCategoryEntity, GroupEssenceMessageEntity,

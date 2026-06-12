@@ -32,9 +32,12 @@ export type GroupEvent = {
 export type InternalEventPayload =
   | {
       kind: "message";
-      sender: string;
-      group_id: string | null;
+      message_id: string;
+      message_seq: number;
+      sender_user_id: string;
+      source: MessageSource;
       content: MessageSegment[];
+      origin_bot_id: string | null;
       time: number;
     }
   | {

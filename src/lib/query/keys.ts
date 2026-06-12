@@ -63,6 +63,11 @@ export const queryKeys = {
     list: (filters: PacketFilters) => ["packets", "list", filters] as const,
     detail: (id: string) => ["packets", "detail", id] as const,
   },
+  devTools: {
+    schema: () => ["dev-tools", "schema"] as const,
+    previewRows: (table: string, limit: number) =>
+      ["dev-tools", "preview-rows", table, limit] as const,
+  },
   chat: {
     historyByUser: (userId: string) => ["chat", "history", userId] as const,
     historyPrefix: (userId: string, source: MessageSource) => {

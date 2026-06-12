@@ -72,14 +72,7 @@ export function sourceFromInternalEvent(
   currentUserId: string,
 ): MessageSource | null {
   if (payload.kind === "message") {
-    if (payload.group_id) {
-      return { scene: "group", group_id: payload.group_id };
-    }
-
-    if (payload.sender !== currentUserId) {
-      return { scene: "private", peer_user_id: payload.sender };
-    }
-    return null;
+    return payload.source;
   }
 
   if (payload.kind === "message_recalled") {
@@ -140,36 +133,33 @@ export function sourceFromInternalEvent(
   return null;
 }
 
-export function invalidateMessageHistoryQueries(userId: string) {
-  return queryClient.invalidateQueries({
+export function refetchMessageHistoryQueries(userId: string) {
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.historyByUser(userId),
-    refetchType: "active",
+    type: "active",
   });
 }
 
-export function invalidateMessageHistoryQuery(
+export function refetchMessageHistoryQuery(
   userId: string,
   source: MessageSource,
 ) {
-  return queryClient.invalidateQueries({
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.historyPrefix(userId, source),
-    refetchType: "active",
+    type: "active",
   });
 }
 
-export function invalidatePokeHistoryQueries(userId: string) {
-  return queryClient.invalidateQueries({
+export function refetchPokeHistoryQueries(userId: string) {
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.pokeByUser(userId),
-    refetchType: "active",
+    type: "active",
   });
 }
 
-export function invalidatePokeHistoryQuery(
-  userId: string,
-  source: MessageSource,
-) {
-  return queryClient.invalidateQueries({
+export function refetchPokeHistoryQuery(userId: string, source: MessageSource) {
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.pokePrefix(userId, source),
-    refetchType: "active",
+    type: "active",
   });
 }

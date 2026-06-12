@@ -13,7 +13,7 @@ use tauri::Manager;
 use commands::{
     bot,
     chat::{conversation, group, message, request, user},
-    log, main, packet,
+    dev_tools, log, main, packet,
 };
 use core::CoreContainer;
 use persistence::{
@@ -234,6 +234,10 @@ pub fn run() {
                                 context.clear_chat_window_label();
                             }
                         }
+
+                        if let Some(devtools_window) = app_handle.get_webview_window("developer-tools") {
+                            let _ = devtools_window.close();
+                        }
                     }
                 });
             }
@@ -320,6 +324,9 @@ pub fn run() {
             group::set_group_category,
             packet::list_protocol_packets,
             packet::read_protocol_packet,
+            dev_tools::open_developer_tools,
+            dev_tools::get_db_schema,
+            dev_tools::preview_table_rows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

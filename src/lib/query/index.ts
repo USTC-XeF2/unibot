@@ -2,6 +2,8 @@ export * from "@/lib/query/bots";
 export * from "@/lib/query/chat";
 export * from "@/lib/query/common";
 export * from "@/lib/query/db";
+export * from "@/lib/query/dev-tools";
+export * from "@/lib/query/event-handlers";
 export * from "@/lib/query/friends";
 export * from "@/lib/query/groups";
 export * from "@/lib/query/keys";

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use tauri::{Emitter, Manager};
@@ -6,9 +7,10 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::error::{AppError, AppResult};
-use crate::models::{InternalEvent, UserProfile};
+use crate::models::{DevToolsEvent, InternalEvent, UserProfile};
 
 pub const DEFAULT_EVENT_BUS_CAPACITY: usize = 256;
+pub const DEFAULT_DEV_TOOLS_CAPACITY: usize = 1024;
 
 #[derive(Clone, Debug)]
 pub struct UserContext {
@@ -53,6 +55,8 @@ impl UserContext {
 #[derive(Clone)]
 pub struct CoreContainer {
     users: Arc<RwLock<HashMap<String, UserContext>>>,
+    devtools_tx: broadcast::Sender<DevToolsEvent>,
+    devtools_window_open: Arc<AtomicBool>,
 }
 
 impl Default for CoreContainer {
@@ -63,8 +67,11 @@ impl Default for CoreContainer {
 
 impl CoreContainer {
     pub fn new() -> Self {
+        let (devtools_tx, _) = broadcast::channel(DEFAULT_DEV_TOOLS_CAPACITY);
         Self {
             users: Arc::new(RwLock::new(HashMap::new())),
+            devtools_tx,
+            devtools_window_open: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -104,6 +111,25 @@ impl CoreContainer {
             .values()
             .cloned()
             .collect()
+    }
+
+    pub fn subscribe_devtools_events(&self) -> broadcast::Receiver<DevToolsEvent> {
+        self.devtools_tx.subscribe()
+    }
+
+    pub fn set_devtools_window_open(&self, open: bool) {
+        self.devtools_window_open.store(open, Ordering::Relaxed);
+    }
+
+    pub fn is_devtools_window_open(&self) -> bool {
+        self.devtools_window_open.load(Ordering::Relaxed)
+    }
+
+    pub fn send_devtools_event(&self, event: DevToolsEvent) {
+        if !self.is_devtools_window_open() {
+            return;
+        }
+        let _ = self.devtools_tx.send(event);
     }
 
     pub fn require_user_context(&self, user_id: &str) -> AppResult<UserContext> {
@@ -181,11 +207,33 @@ impl CoreContainer {
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
-                        if let Some(window) =
-                            app_handle_for_events.get_webview_window(&event_window_label)
+                        if app_handle_for_events
+                            .get_webview_window(&event_window_label)
+                            .is_some()
                         {
-                            let _ = window.emit("chat:event", &event);
+                            tracing::info!(
+                                target: "core",
+                                "emitting chat:event to {}",
+                                event_window_label
+                            );
+                            if let Err(e) = app_handle_for_events.emit_to(
+                                &event_window_label,
+                                "chat:event",
+                                &event,
+                            ) {
+                                tracing::error!(
+                                    target: "core",
+                                    "emit_to failed for {}: {}",
+                                    event_window_label,
+                                    e
+                                );
+                            }
                         } else {
+                            tracing::info!(
+                                target: "core",
+                                "window {} gone, stopping event loop",
+                                event_window_label
+                            );
                             break;
                         }
                     }

@@ -12,9 +12,9 @@ import {
   invalidateGroupPhotosQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
-  invalidateMessageHistoryQuery,
-  invalidatePokeHistoryQuery,
   invalidateUsersQuery,
+  refetchMessageHistoryQuery,
+  refetchPokeHistoryQuery,
 } from "@/lib/query";
 import type { BotProfile, DebugSession } from "@/types/bot";
 import type { MessageSegment, MessageSource } from "@/types/chat";
@@ -223,7 +223,7 @@ export function useSendMessageMutation() {
       }),
     onSuccess: async (_, variables) => {
       await Promise.all([
-        invalidateMessageHistoryQuery(variables.userId, variables.source),
+        refetchMessageHistoryQuery(variables.userId, variables.source),
         invalidateBotStatsQuery(),
       ]);
     },
@@ -246,7 +246,7 @@ export function useRecallMessageMutation() {
         messageId,
       }),
     onSuccess: (_, variables) =>
-      invalidateMessageHistoryQuery(variables.userId, variables.source),
+      refetchMessageHistoryQuery(variables.userId, variables.source),
   });
 }
 
@@ -267,7 +267,7 @@ export function usePokeUserMutation() {
         targetUserId,
       }),
     onSuccess: (_, variables) =>
-      invalidatePokeHistoryQuery(variables.userId, variables.source),
+      refetchPokeHistoryQuery(variables.userId, variables.source),
   });
 }
 
@@ -686,5 +686,11 @@ export function useRenameBotMutation() {
     onSuccess: async () => {
       await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
     },
+  });
+}
+
+export function useOpenDeveloperToolsMutation() {
+  return useMutation({
+    mutationFn: () => invoke<boolean>("open_developer_tools"),
   });
 }

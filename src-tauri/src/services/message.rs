@@ -127,18 +127,35 @@ impl MessageService {
             })
             .await?;
 
-        let event = InternalEvent::Message {
-            message_id: saved.id.clone(),
-            message_seq: saved.message_seq,
-            sender_user_id: user_id.clone(),
-            source: source.clone(),
-            content: content.clone(),
-            origin_bot_id: bot_id.clone(),
-            time: now,
-        };
         let recipients =
             recipients_for_source(core, &self.group_repo, &source, &user_id, Some(&user_id)).await;
-        emit_to_users(core, recipients, event);
+
+        for recipient_id in recipients {
+            let event_source = match &source {
+                MessageSource::Private { .. } => {
+                    if recipient_id == user_id {
+                        source.clone()
+                    } else {
+                        MessageSource::Private {
+                            peer_user_id: user_id.clone(),
+                        }
+                    }
+                }
+                _ => source.clone(),
+            };
+
+            let event = InternalEvent::Message {
+                message_id: saved.id.clone(),
+                message_seq: saved.message_seq,
+                sender_user_id: user_id.clone(),
+                source: event_source,
+                content: content.clone(),
+                origin_bot_id: bot_id.clone(),
+                time: now,
+            };
+
+            emit_to_users(core, [recipient_id], event);
+        }
 
         tracing::info!(
             target: "message_service",

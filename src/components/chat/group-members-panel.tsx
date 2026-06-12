@@ -38,14 +38,14 @@ type GroupMembersPanelProps = {
 function RoleBadge({ role }: { role: GroupRole }) {
   if (role === "owner") {
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 font-medium text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
         <Crown className="size-2.5" /> 群主
       </span>
     );
   }
   if (role === "admin") {
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 px-1.5 py-0.5 font-medium text-[10px] text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
         <ShieldCheck className="size-2.5" /> 管理
       </span>
     );
@@ -212,7 +212,7 @@ export default function GroupMembersPanel({
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1">
-                    <span className="truncate text-sm font-medium">
+                    <span className="truncate font-medium text-sm">
                       {displayName}
                     </span>
                     <RoleBadge role={member.role} />
@@ -233,7 +233,7 @@ export default function GroupMembersPanel({
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        className="size-7 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                        className="size-7 opacity-0 hover:opacity-100 group-hover:opacity-100"
                         onPointerDown={(e) => e.stopPropagation()}
                       >
                         <Shield className="size-3.5 text-muted-foreground" />
@@ -245,13 +245,13 @@ export default function GroupMembersPanel({
                           <DropdownMenuItem
                             onSelect={() => handleMute(member.user_id)}
                           >
-                            <Clock className="size-3.5 mr-1.5" /> 禁言
+                            <Clock className="mr-1.5 size-3.5" /> 禁言
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
                             onSelect={() => handleKick(member.user_id)}
                           >
-                            <UserX className="size-3.5 mr-1.5" /> 踢出
+                            <UserX className="mr-1.5 size-3.5" /> 踢出
                           </DropdownMenuItem>
                         </>
                       )}
@@ -264,7 +264,7 @@ export default function GroupMembersPanel({
                             )
                           }
                         >
-                          <ShieldCheck className="size-3.5 mr-1.5" />
+                          <ShieldCheck className="mr-1.5 size-3.5" />
                           {member.role === "admin" ? "取消管理" : "设为管理"}
                         </DropdownMenuItem>
                       )}
@@ -272,7 +272,7 @@ export default function GroupMembersPanel({
                         <DropdownMenuItem
                           onSelect={() => handleSetTitle(member.user_id)}
                         >
-                          <Crown className="size-3.5 mr-1.5" /> 设置头衔
+                          <Crown className="mr-1.5 size-3.5" /> 设置头衔
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
