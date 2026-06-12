@@ -149,35 +149,37 @@ export function SchemaPanel() {
 
   return (
     <div className="flex h-full min-h-0 gap-4">
-      <div className="h-full w-56 overflow-auto rounded-xl border bg-card">
-        {schemaQuery.isPending ? (
-          <p className="p-3 text-muted-foreground text-sm">读取中...</p>
-        ) : schemaQuery.isError ? (
-          <p className="p-3 text-destructive text-sm">读取失败</p>
-        ) : schemaQuery.data?.tables.length === 0 ? (
-          <p className="p-3 text-muted-foreground text-sm">无表</p>
-        ) : (
-          <ul className="divide-y">
-            {schemaQuery.data?.tables.map((table) => (
-              <li key={table.name}>
-                <button
-                  type="button"
-                  className={`block w-full cursor-pointer px-3 py-2 text-left text-sm ${
-                    selectedTable === table.name
-                      ? "bg-muted font-medium"
-                      : "hover:bg-muted/50"
-                  }`}
-                  onClick={() => setSelectedTable(table.name)}
-                >
-                  {table.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="flex h-full w-56 flex-col overflow-hidden rounded-xl border bg-card">
+        <div className="flex-1 overflow-auto">
+          {schemaQuery.isPending ? (
+            <p className="p-3 text-muted-foreground text-sm">读取中...</p>
+          ) : schemaQuery.isError ? (
+            <p className="p-3 text-destructive text-sm">读取失败</p>
+          ) : schemaQuery.data?.tables.length === 0 ? (
+            <p className="p-3 text-muted-foreground text-sm">无表</p>
+          ) : (
+            <ul className="divide-y">
+              {schemaQuery.data?.tables.map((table) => (
+                <li key={table.name}>
+                  <button
+                    type="button"
+                    className={`block w-full cursor-pointer px-3 py-2 text-left text-sm ${
+                      selectedTable === table.name
+                        ? "bg-muted font-medium"
+                        : "hover:bg-muted/50"
+                    }`}
+                    onClick={() => setSelectedTable(table.name)}
+                  >
+                    {table.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-xl border bg-card/60 p-4">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-card/60 p-4">
         {selected ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
