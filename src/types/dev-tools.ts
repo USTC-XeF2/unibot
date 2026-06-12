@@ -33,9 +33,3 @@ export type DevToolsEventPayload = {
   recipient_user_id: string;
   event: InternalEventPayload;
 };
-
-export type SqlQueryResult = {
-  columns: string[];
-  rows: (string | number | boolean | null)[][];
-  rows_affected?: number;
-};

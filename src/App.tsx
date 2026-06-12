@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import MainLayout from "@/layouts/MainLayout";
 import { queryClient } from "@/lib/query-client";
 import ChatWindowView from "@/views/chat/chat-window";
+import DevToolsWindow from "@/views/dev-tools/dev-tools-window";
 import AboutView from "@/views/main/about";
 import DashboardView from "@/views/main/dashboard";
 import LogsView from "@/views/main/logs";
@@ -32,6 +33,10 @@ function App() {
     {
       path: "/chat/:userId",
       element: <ChatWindowView />,
+    },
+    {
+      path: "/developer-tools",
+      element: <DevToolsWindow />,
     },
   ]);
 
