@@ -13,7 +13,7 @@ use tauri::Manager;
 use commands::{
     bot,
     chat::{conversation, group, message, request, user},
-    log, main, packet,
+    dev_tools, log, main, packet,
 };
 use core::CoreContainer;
 use persistence::{
@@ -320,6 +320,8 @@ pub fn run() {
             group::set_group_category,
             packet::list_protocol_packets,
             packet::read_protocol_packet,
+            dev_tools::open_developer_tools,
+            dev_tools::get_db_schema,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

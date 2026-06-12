@@ -5,7 +5,7 @@ use tokio::sync::broadcast::error::RecvError;
 
 use super::IntoCommandResult;
 use crate::core::CoreContainer;
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbColumn {
@@ -44,30 +44,33 @@ pub struct DbSchema {
 pub fn open_developer_tools(
     app: tauri::AppHandle,
     core: tauri::State<CoreContainer>,
-) -> AppResult<bool> {
+) -> Result<bool, String> {
     let label = "developer-tools";
 
     if let Some(existing) = app.get_webview_window(label) {
         existing.show().map_err(|e| {
-            AppError::internal(format!("failed to show developer tools window: {e}"))
+            AppError::internal(format!("failed to show developer tools window: {e}")).to_string()
         })?;
         existing.unminimize().map_err(|e| {
             AppError::internal(format!("failed to unminimize developer tools window: {e}"))
+                .to_string()
         })?;
         existing.set_focus().map_err(|e| {
-            AppError::internal(format!("failed to focus developer tools window: {e}"))
+            AppError::internal(format!("failed to focus developer tools window: {e}")).to_string()
         })?;
         return Ok(false);
     }
 
-    let webview_url = tauri::WebviewUrl::App(format!("index.html#/developer-tools").into());
+    let webview_url = tauri::WebviewUrl::App("index.html#/developer-tools".into());
     let _ = tauri::WebviewWindowBuilder::new(&app, label, webview_url)
         .title("开发者工具")
         .inner_size(1200.0, 800.0)
         .min_inner_size(800.0, 600.0)
         .center()
         .build()
-        .map_err(|e| AppError::internal(format!("failed to create developer tools window: {e}")))?;
+        .map_err(|e| {
+            AppError::internal(format!("failed to create developer tools window: {e}")).to_string()
+        })?;
 
     let mut devtools_rx = core.subscribe_devtools_events();
     let app_handle = app.clone();
