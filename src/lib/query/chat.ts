@@ -72,15 +72,6 @@ export function sourceFromInternalEvent(
   currentUserId: string,
 ): MessageSource | null {
   if (payload.kind === "message") {
-    if (
-      payload.source.scene === "private" &&
-      payload.source.peer_user_id === currentUserId
-    ) {
-      return {
-        scene: "private",
-        peer_user_id: payload.sender_user_id,
-      };
-    }
     return payload.source;
   }
 
