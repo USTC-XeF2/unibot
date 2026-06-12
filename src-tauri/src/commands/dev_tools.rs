@@ -194,6 +194,12 @@ pub async fn preview_table_rows(
             return Err(AppError::validation(format!("invalid table name: {table}")));
         }
 
+        if limit <= 0 || limit > 1000 {
+            return Err(AppError::validation(format!(
+                "limit must be between 1 and 1000, got {limit}"
+            )));
+        }
+
         let sql = format!("SELECT * FROM \"{}\" LIMIT {}", table, limit);
         let rows = sqlx::query(&sql)
             .fetch_all(&pool)

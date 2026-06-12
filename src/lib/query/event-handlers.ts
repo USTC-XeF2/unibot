@@ -1,4 +1,3 @@
-import { toast } from "sonner";
 import {
   invalidateMessageHistoryQueries,
   invalidateMessageHistoryQuery,
@@ -26,9 +25,6 @@ export function handleQueryInvalidation(
   payload: InternalEventPayload,
 ) {
   const source = sourceFromInternalEvent(payload, userId);
-  toast.info(
-    `[event-bus] invalidating ${payload.kind} for ${userId} source=${JSON.stringify(source)} payload.source=${JSON.stringify(payload.kind === "message" ? payload.source : null)}`,
-  );
   if (source) {
     invalidateMessageHistoryQuery(userId, source);
     invalidatePokeHistoryQuery(userId, source);

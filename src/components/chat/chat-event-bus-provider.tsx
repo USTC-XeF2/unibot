@@ -7,7 +7,6 @@ import {
   useEffect,
   useRef,
 } from "react";
-import { toast } from "sonner";
 import { handleQueryInvalidation } from "@/lib/query";
 import type { InternalEventPayload } from "@/types/event";
 
@@ -21,6 +20,9 @@ const ChatEventBusContext = createContext<ChatEventBusContextValue | null>(
   null,
 );
 
+// Tauri internals may not be ready immediately when a chat window webview
+// finishes loading. Poll briefly before registering the listener to avoid
+// a runtime "Tauri internals not available" error.
 function waitForTauriInternals(timeoutMs = 5000): Promise<void> {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined") {
@@ -90,21 +92,16 @@ export function ChatEventBusProvider({
     let unlisten: (() => void) | null = null;
 
     const windowLabel = `chat-${userId}`;
-    toast.info(`[event-bus] waiting for Tauri (${windowLabel})`);
 
     waitForTauriInternals(1000)
       .then(() => {
         if (cancelled) {
           return;
         }
-        toast.info(`[event-bus] listener registering for ${windowLabel}`);
         return listen<InternalEventPayload>(
           "chat:event",
           (event) => {
             const payload = event.payload;
-            toast.success(
-              `[event-bus] ${windowLabel} received ${payload?.kind ?? "unknown"}`,
-            );
             if (!payload) {
               return;
             }
@@ -122,7 +119,6 @@ export function ChatEventBusProvider({
         if (!fn) {
           return;
         }
-        toast.success(`[event-bus] listener registered for ${windowLabel}`);
         if (cancelled) {
           fn();
           return;
@@ -130,7 +126,7 @@ export function ChatEventBusProvider({
         unlisten = fn;
       })
       .catch((error) => {
-        toast.error(`[event-bus] failed for ${windowLabel}: ${error}`);
+        console.error(`[event-bus] failed for ${windowLabel}:`, error);
       });
 
     return () => {

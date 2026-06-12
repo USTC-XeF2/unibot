@@ -48,6 +48,9 @@ export function EventsPanel() {
 
       if (pausedRef.current) {
         backlogRef.current.push(item);
+        if (backlogRef.current.length > 1000) {
+          backlogRef.current.shift();
+        }
       } else {
         setEvents((prev) => [...prev, item].slice(-1000));
       }
