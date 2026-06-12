@@ -141,9 +141,9 @@ export function sourceFromInternalEvent(
 }
 
 export function invalidateMessageHistoryQueries(userId: string) {
-  return queryClient.invalidateQueries({
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.historyByUser(userId),
-    refetchType: "active",
+    type: "active",
   });
 }
 
@@ -151,16 +151,16 @@ export function invalidateMessageHistoryQuery(
   userId: string,
   source: MessageSource,
 ) {
-  return queryClient.invalidateQueries({
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.historyPrefix(userId, source),
-    refetchType: "active",
+    type: "active",
   });
 }
 
 export function invalidatePokeHistoryQueries(userId: string) {
-  return queryClient.invalidateQueries({
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.pokeByUser(userId),
-    refetchType: "active",
+    type: "active",
   });
 }
 
@@ -168,8 +168,8 @@ export function invalidatePokeHistoryQuery(
   userId: string,
   source: MessageSource,
 ) {
-  return queryClient.invalidateQueries({
+  return queryClient.refetchQueries({
     queryKey: queryKeys.chat.pokePrefix(userId, source),
-    refetchType: "active",
+    type: "active",
   });
 }
