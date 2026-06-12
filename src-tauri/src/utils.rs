@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
-use crate::models::{InternalEvent, MessageSource};
+use crate::models::{DevToolsEvent, InternalEvent, MessageSource};
 use crate::persistence::GroupRepo;
 
 pub fn now_ts() -> u64 {
@@ -25,7 +25,12 @@ where
     for user_id in user_ids {
         if let Ok(ctx) = core.require_user_context(user_id.as_ref()) {
             let _ = ctx.event_tx.send(event.clone());
-        };
+        }
+
+        core.send_devtools_event(DevToolsEvent {
+            recipient_user_id: user_id.as_ref().to_string(),
+            event: event.clone(),
+        });
     }
 }
 

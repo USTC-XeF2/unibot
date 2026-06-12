@@ -114,6 +114,10 @@ impl CoreContainer {
         self.devtools_tx.subscribe()
     }
 
+    pub fn send_devtools_event(&self, event: DevToolsEvent) {
+        let _ = self.devtools_tx.send(event);
+    }
+
     pub fn require_user_context(&self, user_id: &str) -> AppResult<UserContext> {
         self.user_context(user_id)
             .ok_or_else(|| AppError::not_found(format!("user {} is not registered", user_id)))
