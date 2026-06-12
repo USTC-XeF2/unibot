@@ -65,6 +65,8 @@ export const queryKeys = {
   },
   devTools: {
     schema: () => ["dev-tools", "schema"] as const,
+    previewRows: (table: string, limit: number) =>
+      ["dev-tools", "preview-rows", table, limit] as const,
   },
   chat: {
     historyByUser: (userId: string) => ["chat", "history", userId] as const,

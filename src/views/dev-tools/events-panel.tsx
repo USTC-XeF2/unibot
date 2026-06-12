@@ -17,30 +17,39 @@ export function EventsPanel() {
   const [kindFilter, setKindFilter] = useState("");
   const nextIdRef = useRef(0);
   const backlogRef = useRef<EventItem[]>([]);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
+    let cancelled = false;
 
     listen<DevToolsEventPayload>("devtools:event", (e) => {
+      if (cancelled) return;
       const item: EventItem = {
         id: nextIdRef.current++,
         receivedAt: Date.now(),
         payload: e.payload,
       };
 
-      if (paused) {
+      if (pausedRef.current) {
         backlogRef.current.push(item);
       } else {
         setEvents((prev) => [...prev, item].slice(-1000));
       }
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
 
     return () => {
+      cancelled = true;
       if (unlisten) unlisten();
     };
-  }, [paused]);
+  }, []);
 
   useEffect(() => {
     if (!paused && backlogRef.current.length > 0) {

@@ -322,6 +322,7 @@ pub fn run() {
             packet::read_protocol_packet,
             dev_tools::open_developer_tools,
             dev_tools::get_db_schema,
+            dev_tools::preview_table_rows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

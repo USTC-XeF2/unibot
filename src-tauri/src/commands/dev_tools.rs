@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
+use sqlx::{Column, Row};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast::error::RecvError;
 
@@ -170,6 +170,75 @@ pub async fn get_db_schema(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<D
         }
 
         Ok(DbSchema { tables: result })
+    }
+    .await;
+    result.into_command_result()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableRowPreview {
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<serde_json::Value>>,
+}
+
+#[tauri::command]
+pub async fn preview_table_rows(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    table: String,
+    limit: i64,
+) -> Result<TableRowPreview, String> {
+    let pool = pool.inner().clone();
+    let result: crate::error::AppResult<TableRowPreview> = async {
+        // Basic allow-list validation: only permit simple identifiers
+        if !table.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            return Err(AppError::validation(format!("invalid table name: {table}")));
+        }
+
+        let sql = format!("SELECT * FROM \"{}\" LIMIT {}", table, limit);
+        let rows = sqlx::query(&sql)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| AppError::storage(format!("failed to preview table {table}: {e}")))?;
+
+        if rows.is_empty() {
+            return Ok(TableRowPreview {
+                columns: vec![],
+                rows: vec![],
+            });
+        }
+
+        let columns: Vec<String> = rows[0]
+            .columns()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
+
+        let mut result_rows = Vec::new();
+        for row in rows {
+            let mut values = Vec::new();
+            for (idx, _) in columns.iter().enumerate() {
+                let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
+                    serde_json::Value::Number(v.into())
+                } else if let Ok(v) = row.try_get::<f64, _>(idx) {
+                    serde_json::Value::Number(
+                        serde_json::Number::from_f64(v).unwrap_or_else(|| 0.into()),
+                    )
+                } else if let Ok(v) = row.try_get::<String, _>(idx) {
+                    serde_json::Value::String(v)
+                } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
+                    serde_json::Value::String(format!("<BLOB: {} bytes>", v.len()))
+                } else {
+                    serde_json::Value::Null
+                };
+                values.push(value);
+            }
+            result_rows.push(values);
+        }
+
+        Ok(TableRowPreview {
+            columns,
+            rows: result_rows,
+        })
     }
     .await;
     result.into_command_result()

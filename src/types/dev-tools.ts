@@ -29,6 +29,11 @@ export type DbSchema = {
   tables: DbTable[];
 };
 
+export type TableRowPreview = {
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+};
+
 export type DevToolsEventPayload = {
   recipient_user_id: string;
   event: InternalEventPayload;
