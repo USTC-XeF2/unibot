@@ -20,6 +20,40 @@ const ChatEventBusContext = createContext<ChatEventBusContextValue | null>(
   null,
 );
 
+function waitForTauriInternals(timeoutMs = 5000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined") {
+      reject(new Error("window is not available"));
+      return;
+    }
+
+    if (
+      (window as unknown as { __TAURI_INTERNALS__?: unknown })
+        .__TAURI_INTERNALS__
+    ) {
+      resolve();
+      return;
+    }
+
+    const startTime = Date.now();
+    const interval = window.setInterval(() => {
+      if (
+        (window as unknown as { __TAURI_INTERNALS__?: unknown })
+          .__TAURI_INTERNALS__
+      ) {
+        window.clearInterval(interval);
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startTime > timeoutMs) {
+        window.clearInterval(interval);
+        reject(new Error("Tauri internals not available within timeout"));
+      }
+    }, 50);
+  });
+}
+
 export function useChatEventBusContext(): ChatEventBusContextValue {
   const value = useContext(ChatEventBusContext);
   if (!value) {
@@ -55,30 +89,47 @@ export function ChatEventBusProvider({
     let unlisten: (() => void) | null = null;
 
     const windowLabel = `chat-${userId}`;
-    console.log("[ChatEventBusProvider] registering listener for", windowLabel);
-    listen<InternalEventPayload>(
-      "chat:event",
-      (event) => {
-        const payload = event.payload;
-        console.log(
-          "[ChatEventBusProvider] received event:",
-          payload?.kind,
-          "for user",
-          userId,
-        );
-        if (!payload) {
+    console.log(
+      "[ChatEventBusProvider] waiting for Tauri internals for",
+      windowLabel,
+    );
+
+    waitForTauriInternals()
+      .then(() => {
+        if (cancelled) {
           return;
         }
-        handleQueryInvalidation(userId, payload);
-        for (const subscriber of subscribersRef.current) {
-          subscriber(payload);
-        }
-      },
-      {
-        target: { kind: "WebviewWindow", label: windowLabel },
-      },
-    )
+        console.log(
+          "[ChatEventBusProvider] Tauri ready, registering listener for",
+          windowLabel,
+        );
+        return listen<InternalEventPayload>(
+          "chat:event",
+          (event) => {
+            const payload = event.payload;
+            console.log(
+              "[ChatEventBusProvider] received event:",
+              payload?.kind,
+              "for user",
+              userId,
+            );
+            if (!payload) {
+              return;
+            }
+            handleQueryInvalidation(userId, payload);
+            for (const subscriber of subscribersRef.current) {
+              subscriber(payload);
+            }
+          },
+          {
+            target: { kind: "WebviewWindow", label: windowLabel },
+          },
+        );
+      })
       .then((fn) => {
+        if (!fn) {
+          return;
+        }
         console.log(
           "[ChatEventBusProvider] listener registered for",
           windowLabel,
