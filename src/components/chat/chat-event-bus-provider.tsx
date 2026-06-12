@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
 } from "react";
+import { toast } from "sonner";
 import { handleQueryInvalidation } from "@/lib/query";
 import type { InternalEventPayload } from "@/types/event";
 
@@ -89,29 +90,19 @@ export function ChatEventBusProvider({
     let unlisten: (() => void) | null = null;
 
     const windowLabel = `chat-${userId}`;
-    console.log(
-      "[ChatEventBusProvider] waiting for Tauri internals for",
-      windowLabel,
-    );
 
     waitForTauriInternals()
       .then(() => {
         if (cancelled) {
           return;
         }
-        console.log(
-          "[ChatEventBusProvider] Tauri ready, registering listener for",
-          windowLabel,
-        );
+        toast.info(`[event-bus] listener registering for ${windowLabel}`);
         return listen<InternalEventPayload>(
           "chat:event",
           (event) => {
             const payload = event.payload;
-            console.log(
-              "[ChatEventBusProvider] received event:",
-              payload?.kind,
-              "for user",
-              userId,
+            toast.info(
+              `[event-bus] ${windowLabel} received ${payload?.kind ?? "unknown"}`,
             );
             if (!payload) {
               return;
@@ -130,10 +121,7 @@ export function ChatEventBusProvider({
         if (!fn) {
           return;
         }
-        console.log(
-          "[ChatEventBusProvider] listener registered for",
-          windowLabel,
-        );
+        toast.success(`[event-bus] listener registered for ${windowLabel}`);
         if (cancelled) {
           fn();
           return;
@@ -141,10 +129,7 @@ export function ChatEventBusProvider({
         unlisten = fn;
       })
       .catch((error) => {
-        console.error(
-          "[ChatEventBusProvider] failed to listen chat:event",
-          error,
-        );
+        toast.error(`[event-bus] failed for ${windowLabel}: ${error}`);
       });
 
     return () => {
