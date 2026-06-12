@@ -38,20 +38,29 @@ export default function DevToolsWindow() {
               <TabsTrigger value="sql">SQL</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="logs" className="flex-1 overflow-hidden">
+            <TabsContent
+              value="logs"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
               <LogsPanel />
             </TabsContent>
             <TabsContent
               value="events"
-              className="flex-1 overflow-hidden"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
               forceMount
             >
               <EventsPanel />
             </TabsContent>
-            <TabsContent value="schema" className="flex-1 overflow-hidden">
+            <TabsContent
+              value="schema"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
               <SchemaPanel />
             </TabsContent>
-            <TabsContent value="sql" className="flex-1 overflow-hidden">
+            <TabsContent
+              value="sql"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
               <SqlPanel />
             </TabsContent>
           </Tabs>

@@ -154,7 +154,7 @@ export function EventsPanel() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <div className="shrink-0 flex items-center gap-3 rounded-xl border bg-card/60 p-3">
         <div className="w-40">
           <KindCombobox value={kinds} onValueChange={setKinds} />

@@ -56,7 +56,7 @@ export function SqlPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <div className="shrink-0 rounded-xl border bg-card/60 p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
