@@ -44,6 +44,10 @@ export function useExecuteSqlMutation() {
   });
 }
 
+export async function checkWriteQuery(query: string): Promise<boolean> {
+  return invoke<boolean>("is_write_query", { query });
+}
+
 export function useTableRowPreviewQuery(table: string | null, limit = 50) {
   return useQuery({
     queryKey: queryKeys.devTools.previewRows(table ?? "", limit),

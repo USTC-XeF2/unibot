@@ -4,26 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { confirmDialog } from "@/lib/modal";
-import { useExecuteSqlMutation } from "@/lib/query";
+import { checkWriteQuery, useExecuteSqlMutation } from "@/lib/query";
 import type { SqlQueryResult } from "@/types/dev-tools";
-
-const WRITE_KEYWORDS = [
-  "INSERT",
-  "UPDATE",
-  "DELETE",
-  "REPLACE",
-  "DROP",
-  "CREATE",
-  "ALTER",
-  "TRUNCATE",
-];
-
-function isWriteQuery(query: string): boolean {
-  const upper = query.toUpperCase();
-  return WRITE_KEYWORDS.some(
-    (kw) => upper.includes(kw) && upper.indexOf(`${kw} `) === upper.indexOf(kw),
-  );
-}
 
 export function SqlPanel() {
   const [query, setQuery] = useState("SELECT * FROM im_accounts LIMIT 10");
@@ -38,7 +20,9 @@ export function SqlPanel() {
       return;
     }
 
-    const isWrite = isWriteQuery(trimmed);
+    // Backend is the authoritative source for write detection. This call is
+    // only used to decide whether to show the confirmation dialog.
+    const isWrite = await checkWriteQuery(trimmed);
 
     if (isWrite && !allowWrite) {
       toast.error("写操作需在上方开启“允许写操作”");
@@ -80,7 +64,7 @@ export function SqlPanel() {
           </label>
         </div>
         <Button onClick={handleExecute} disabled={execute.isPending} size="sm">
-          执行
+          {execute.isPending ? "执行中..." : "执行"}
         </Button>
       </div>
 
@@ -90,6 +74,12 @@ export function SqlPanel() {
         className="min-h-30 font-mono text-sm"
         placeholder="输入 SQL..."
       />
+
+      {execute.isError && (
+        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          执行失败: {execute.error?.message || "未知错误"}
+        </div>
+      )}
 
       {result && (
         <div className="flex-1 overflow-auto rounded-xl border bg-card/60 p-3">

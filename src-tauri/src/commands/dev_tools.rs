@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{Column, Row};
+use sqlx::{Column, Row, TypeInfo, ValueRef};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast::error::RecvError;
 
@@ -48,6 +48,43 @@ fn is_write_query(query: &str) -> bool {
     })
 }
 
+/// Convert a single SQLite row value to a JSON value.
+///
+/// Shared between the SQL executor and table row preview so that type handling
+/// and placeholder formatting stay consistent. We inspect the actual SQLite
+/// storage type to avoid converting a REAL into an integer 0, and decode into
+/// `Option<T>` so that NULL values are preserved.
+fn row_value_to_json(row: &sqlx::sqlite::SqliteRow, idx: usize) -> serde_json::Value {
+    let raw = row.try_get_raw(idx).expect("column index should be valid");
+    match raw.type_info().name() {
+        "INTEGER" => row
+            .try_get::<Option<i64>, _>(idx)
+            .ok()
+            .flatten()
+            .map(|v| serde_json::Value::Number(v.into()))
+            .unwrap_or(serde_json::Value::Null),
+        "REAL" => row
+            .try_get::<Option<f64>, _>(idx)
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::Number::from_f64(v).map(serde_json::Value::Number))
+            .unwrap_or(serde_json::Value::Null),
+        "TEXT" => row
+            .try_get::<Option<String>, _>(idx)
+            .ok()
+            .flatten()
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+        "BLOB" => row
+            .try_get::<Option<Vec<u8>>, _>(idx)
+            .ok()
+            .flatten()
+            .map(|v| serde_json::Value::String(format!("<BLOB: {} bytes>", v.len())))
+            .unwrap_or(serde_json::Value::Null),
+        _ => serde_json::Value::Null,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqlQueryResult {
     pub columns: Vec<String>,
@@ -93,14 +130,34 @@ async fn execute_sql_query(
     query: &str,
     allow_write: bool,
 ) -> crate::error::AppResult<SqlQueryResult> {
-    if !allow_write && is_write_query(query) {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::validation("query is empty"));
+    }
+
+    // Reject multi-statement inputs so that prefix-based write detection cannot
+    // be bypassed (e.g. "SELECT 1; DROP TABLE users;").
+    if trimmed.contains(';') {
+        return Err(AppError::validation("multiple statements are not allowed"));
+    }
+
+    let is_write = is_write_query(query);
+    if is_write && !allow_write {
         return Err(AppError::validation(
             "write queries require allow_write=true",
         ));
     }
 
-    if query.trim().is_empty() {
-        return Err(AppError::validation("query is empty"));
+    if is_write {
+        let result = sqlx::query(query)
+            .execute(pool)
+            .await
+            .map_err(|e| AppError::storage(format!("failed to execute sql: {e}")))?;
+        return Ok(SqlQueryResult {
+            columns: vec![],
+            rows: vec![],
+            rows_affected: Some(result.rows_affected()),
+        });
     }
 
     let rows = sqlx::query(query)
@@ -126,21 +183,7 @@ async fn execute_sql_query(
     for row in rows {
         let mut values = Vec::new();
         for (idx, _) in columns.iter().enumerate() {
-            let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
-                serde_json::Value::Number(v.into())
-            } else if let Ok(v) = row.try_get::<f64, _>(idx) {
-                serde_json::Number::from_f64(v)
-                    .map_or(serde_json::Value::Null, serde_json::Value::Number)
-            } else if let Ok(v) = row.try_get::<String, _>(idx) {
-                serde_json::Value::String(v)
-            } else if let Ok(v) = row.try_get::<bool, _>(idx) {
-                serde_json::Value::Bool(v)
-            } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
-                serde_json::Value::String(format!("<BLOB {} bytes>", v.len()))
-            } else {
-                serde_json::Value::Null
-            };
-            values.push(value);
+            values.push(row_value_to_json(&row, idx));
         }
         result_rows.push(values);
     }
@@ -161,6 +204,11 @@ pub async fn execute_sql(
     execute_sql_query(pool.inner(), &query, allow_write)
         .await
         .into_command_result()
+}
+
+#[tauri::command]
+pub fn is_write_query_command(query: String) -> bool {
+    is_write_query(&query)
 }
 
 #[tauri::command]
@@ -400,20 +448,7 @@ async fn fetch_table_rows(
     for row in rows {
         let mut values = Vec::new();
         for (idx, _) in columns.iter().enumerate() {
-            let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
-                serde_json::Value::Number(v.into())
-            } else if let Ok(v) = row.try_get::<f64, _>(idx) {
-                serde_json::Value::Number(
-                    serde_json::Number::from_f64(v).unwrap_or_else(|| 0.into()),
-                )
-            } else if let Ok(v) = row.try_get::<String, _>(idx) {
-                serde_json::Value::String(v)
-            } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
-                serde_json::Value::String(format!("<BLOB: {} bytes>", v.len()))
-            } else {
-                serde_json::Value::Null
-            };
-            values.push(value);
+            values.push(row_value_to_json(&row, idx));
         }
         result_rows.push(values);
     }
@@ -601,6 +636,116 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("invalid table name")
+        );
+    }
+
+    #[sqlx::test]
+    async fn execute_sql_rejects_empty_query(pool: sqlx::SqlitePool) {
+        let result = execute_sql_query(&pool, "   ", false).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("query is empty"));
+    }
+
+    #[sqlx::test]
+    async fn execute_sql_rejects_multiple_statements(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let result = execute_sql_query(&pool, "SELECT 1; DROP TABLE im_accounts;", false).await;
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("multiple statements are not allowed")
+        );
+    }
+
+    #[test]
+    fn write_detection_ignores_leading_comments() {
+        assert!(!is_write_query("-- DELETE FROM im_accounts\nSELECT 1"));
+        assert!(!is_write_query("/* DELETE */ SELECT 1"));
+        assert!(is_write_query("/* prefix */ DELETE FROM im_accounts"));
+        assert!(is_write_query(
+            "-- comment\nUPDATE im_accounts SET nickname = 'x'"
+        ));
+    }
+
+    #[sqlx::test]
+    async fn execute_sql_returns_rows_affected_for_write(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let result = execute_sql_query(
+            &pool,
+            "INSERT INTO im_accounts (user_id, nickname) VALUES ('77777', 'Bob')",
+            true,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().rows_affected, Some(1));
+    }
+
+    #[sqlx::test]
+    async fn execute_sql_reads_return_rows_and_types(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        execute_sql_query(
+            &pool,
+            "CREATE TABLE test_types (id INTEGER, ratio REAL, name TEXT, data BLOB)",
+            true,
+        )
+        .await
+        .expect("create temp table should succeed");
+
+        execute_sql_query(
+            &pool,
+            "INSERT INTO test_types VALUES (42, 3.14, 'hello', X'010203')",
+            true,
+        )
+        .await
+        .expect("insert temp row should succeed");
+
+        execute_sql_query(
+            &pool,
+            "INSERT INTO test_types (id, name) VALUES (2, NULL)",
+            true,
+        )
+        .await
+        .expect("insert null row should succeed");
+
+        let result = execute_sql_query(
+            &pool,
+            "SELECT id, ratio, name, data FROM test_types ORDER BY id",
+            false,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result.columns, vec!["id", "ratio", "name", "data"]);
+        assert_eq!(result.rows.len(), 2);
+
+        assert_eq!(result.rows[0][0], serde_json::Value::Number(2.into()));
+        assert_eq!(result.rows[0][1], serde_json::Value::Null);
+        assert_eq!(result.rows[0][2], serde_json::Value::Null);
+        assert_eq!(result.rows[0][3], serde_json::Value::Null);
+
+        assert_eq!(result.rows[1][0], serde_json::Value::Number(42.into()));
+        assert_eq!(
+            result.rows[1][1],
+            serde_json::Value::Number(serde_json::Number::from_f64(3.14).unwrap())
+        );
+        assert_eq!(result.rows[1][2], serde_json::Value::String("hello".into()));
+        assert_eq!(
+            result.rows[1][3],
+            serde_json::Value::String("<BLOB: 3 bytes>".into())
         );
     }
 }

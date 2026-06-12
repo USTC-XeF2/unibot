@@ -328,6 +328,7 @@ pub fn run() {
             dev_tools::get_db_schema,
             dev_tools::preview_table_rows,
             dev_tools::execute_sql,
+            dev_tools::is_write_query_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
