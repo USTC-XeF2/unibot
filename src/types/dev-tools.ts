@@ -34,6 +34,12 @@ export type TableRowPreview = {
   rows: (string | number | boolean | null)[][];
 };
 
+export type SqlQueryResult = {
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  rows_affected?: number;
+};
+
 export type DevToolsEventPayload = {
   recipient_user_id: string;
   event: InternalEventPayload;

@@ -2,7 +2,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
-import type { DbSchema, TableRowPreview } from "@/types/dev-tools";
+import type {
+  DbSchema,
+  SqlQueryResult,
+  TableRowPreview,
+} from "@/types/dev-tools";
 
 export function useDbSchemaQuery() {
   return useQuery({
@@ -21,6 +25,22 @@ export function invalidateDevToolsSchemaQuery() {
 export function useOpenDeveloperToolsMutation() {
   return useMutation({
     mutationFn: () => invoke<boolean>("open_developer_tools"),
+  });
+}
+
+export function useExecuteSqlMutation() {
+  return useMutation({
+    mutationFn: ({
+      query,
+      allowWrite,
+    }: {
+      query: string;
+      allowWrite: boolean;
+    }) =>
+      invoke<SqlQueryResult>("execute_sql", {
+        query,
+        allowWrite,
+      }),
   });
 }
 

@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventsPanel } from "@/views/dev-tools/events-panel";
 import { LogsPanel } from "@/views/dev-tools/logs-panel";
 import { SchemaPanel } from "@/views/dev-tools/schema-panel";
+import { SqlPanel } from "@/views/dev-tools/sql-panel";
 
 export default function DevToolsWindow() {
   const [activeTab, setActiveTab] = useState("logs");
@@ -34,9 +35,7 @@ export default function DevToolsWindow() {
               <TabsTrigger value="logs">日志</TabsTrigger>
               <TabsTrigger value="events">事件流</TabsTrigger>
               <TabsTrigger value="schema">数据库</TabsTrigger>
-              <TabsTrigger value="sql" disabled>
-                SQL（PR2）
-              </TabsTrigger>
+              <TabsTrigger value="sql">SQL</TabsTrigger>
             </TabsList>
 
             <TabsContent value="logs" className="flex-1 overflow-hidden">
@@ -51,6 +50,9 @@ export default function DevToolsWindow() {
             </TabsContent>
             <TabsContent value="schema" className="flex-1 overflow-hidden">
               <SchemaPanel />
+            </TabsContent>
+            <TabsContent value="sql" className="flex-1 overflow-hidden">
+              <SqlPanel />
             </TabsContent>
           </Tabs>
         </CardContent>
