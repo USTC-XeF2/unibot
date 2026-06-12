@@ -148,8 +148,8 @@ export function SchemaPanel() {
   );
 
   return (
-    <div className="flex h-full gap-4">
-      <div className="w-56 overflow-auto rounded-xl border bg-card">
+    <div className="flex h-full min-h-0 gap-4">
+      <div className="h-full w-56 overflow-auto rounded-xl border bg-card">
         {schemaQuery.isPending ? (
           <p className="p-3 text-muted-foreground text-sm">读取中...</p>
         ) : schemaQuery.isError ? (
