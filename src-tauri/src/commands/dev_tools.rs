@@ -100,22 +100,25 @@ pub fn open_developer_tools(
 
 #[tauri::command]
 pub async fn get_db_schema(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<DbSchema, String> {
-    let pool = pool.inner().clone();
-    let result: crate::error::AppResult<DbSchema> = async {
-        let tables: Vec<(String, Option<String>)> = sqlx::query_as(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-        )
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| AppError::storage(format!("failed to list tables: {e}")))?;
+    fetch_db_schema(pool.inner()).await.into_command_result()
+}
 
-        let mut result = Vec::new();
-        for (name, sql) in tables {
-            let columns: Vec<DbColumn> = sqlx::query(
-                "SELECT cid, name, type, notnull, dflt_value, pk FROM pragma_table_info(?)",
-            )
-            .bind(&name)
-            .fetch_all(&pool)
+async fn fetch_db_schema(pool: &sqlx::SqlitePool) -> crate::error::AppResult<DbSchema> {
+    let tables: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::storage(format!("failed to list tables: {e}")))?;
+
+    let mut result = Vec::new();
+    for (name, sql) in tables {
+        if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            continue;
+        }
+
+        let columns: Vec<DbColumn> = sqlx::query(&format!("PRAGMA table_info('{}')", name))
+            .fetch_all(pool)
             .await
             .map_err(|e| AppError::storage(format!("failed to get table info for {name}: {e}")))?
             .into_iter()
@@ -129,50 +132,46 @@ pub async fn get_db_schema(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<D
             })
             .collect();
 
-            let index_list: Vec<(i64, String, bool, String, bool)> = sqlx::query_as(
-                "SELECT seq, name, \"unique\", origin, partial FROM pragma_index_list(?)",
-            )
-            .bind(&name)
-            .fetch_all(&pool)
-            .await
-            .map_err(|e| AppError::storage(format!("failed to list indexes for {name}: {e}")))?;
+        let index_list: Vec<(i64, String, bool, String, bool)> =
+            sqlx::query_as(&format!("PRAGMA index_list('{}')", name))
+                .fetch_all(pool)
+                .await
+                .map_err(|e| {
+                    AppError::storage(format!("failed to list indexes for {name}: {e}"))
+                })?;
 
-            let mut indexes = Vec::new();
-            for (seq, idx_name, unique, origin, partial) in index_list {
-                let index_columns: Vec<String> =
-                    sqlx::query_as("SELECT name FROM pragma_index_info(?)")
-                        .bind(&idx_name)
-                        .fetch_all(&pool)
-                        .await
-                        .map_err(|e| {
-                            AppError::storage(format!("failed to get index info for {idx_name}: {e}"))
-                        })?
-                        .into_iter()
-                        .map(|(name,): (String,)| name)
-                        .collect();
+        let mut indexes = Vec::new();
+        for (seq, idx_name, unique, origin, partial) in index_list {
+            let index_columns: Vec<String> =
+                sqlx::query(&format!("PRAGMA index_info('{}')", idx_name))
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|e| {
+                        AppError::storage(format!("failed to get index info for {idx_name}: {e}"))
+                    })?
+                    .into_iter()
+                    .map(|row: sqlx::sqlite::SqliteRow| row.get::<String, _>("name"))
+                    .collect();
 
-                indexes.push(DbIndex {
-                    seq,
-                    name: idx_name,
-                    unique,
-                    origin,
-                    partial,
-                    columns: index_columns,
-                });
-            }
-
-            result.push(DbTable {
-                name,
-                sql,
-                columns,
-                indexes,
+            indexes.push(DbIndex {
+                seq,
+                name: idx_name,
+                unique,
+                origin,
+                partial,
+                columns: index_columns,
             });
         }
 
-        Ok(DbSchema { tables: result })
+        result.push(DbTable {
+            name,
+            sql,
+            columns,
+            indexes,
+        });
     }
-    .await;
-    result.into_command_result()
+
+    Ok(DbSchema { tables: result })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,65 +186,170 @@ pub async fn preview_table_rows(
     table: String,
     limit: i64,
 ) -> Result<TableRowPreview, String> {
-    let pool = pool.inner().clone();
-    let result: crate::error::AppResult<TableRowPreview> = async {
-        // Basic allow-list validation: only permit simple identifiers
-        if !table.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            return Err(AppError::validation(format!("invalid table name: {table}")));
-        }
+    fetch_table_rows(pool.inner(), &table, limit)
+        .await
+        .into_command_result()
+}
 
-        if limit <= 0 || limit > 1000 {
-            return Err(AppError::validation(format!(
-                "limit must be between 1 and 1000, got {limit}"
-            )));
-        }
-
-        let sql = format!("SELECT * FROM \"{}\" LIMIT {}", table, limit);
-        let rows = sqlx::query(&sql)
-            .fetch_all(&pool)
-            .await
-            .map_err(|e| AppError::storage(format!("failed to preview table {table}: {e}")))?;
-
-        if rows.is_empty() {
-            return Ok(TableRowPreview {
-                columns: vec![],
-                rows: vec![],
-            });
-        }
-
-        let columns: Vec<String> = rows[0]
-            .columns()
-            .iter()
-            .map(|c| c.name().to_string())
-            .collect();
-
-        let mut result_rows = Vec::new();
-        for row in rows {
-            let mut values = Vec::new();
-            for (idx, _) in columns.iter().enumerate() {
-                let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
-                    serde_json::Value::Number(v.into())
-                } else if let Ok(v) = row.try_get::<f64, _>(idx) {
-                    serde_json::Value::Number(
-                        serde_json::Number::from_f64(v).unwrap_or_else(|| 0.into()),
-                    )
-                } else if let Ok(v) = row.try_get::<String, _>(idx) {
-                    serde_json::Value::String(v)
-                } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
-                    serde_json::Value::String(format!("<BLOB: {} bytes>", v.len()))
-                } else {
-                    serde_json::Value::Null
-                };
-                values.push(value);
-            }
-            result_rows.push(values);
-        }
-
-        Ok(TableRowPreview {
-            columns,
-            rows: result_rows,
-        })
+async fn fetch_table_rows(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    limit: i64,
+) -> crate::error::AppResult<TableRowPreview> {
+    if !table.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(AppError::validation(format!("invalid table name: {table}")));
     }
-    .await;
-    result.into_command_result()
+
+    if limit <= 0 || limit > 1000 {
+        return Err(AppError::validation(format!(
+            "limit must be between 1 and 1000, got {limit}"
+        )));
+    }
+
+    let sql = format!("SELECT * FROM \"{}\" LIMIT {}", table, limit);
+    let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| AppError::storage(format!("failed to preview table {table}: {e}")))?;
+
+    if rows.is_empty() {
+        return Ok(TableRowPreview {
+            columns: vec![],
+            rows: vec![],
+        });
+    }
+
+    let columns: Vec<String> = rows[0]
+        .columns()
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
+
+    let mut result_rows = Vec::new();
+    for row in rows {
+        let mut values = Vec::new();
+        for (idx, _) in columns.iter().enumerate() {
+            let value: serde_json::Value = if let Ok(v) = row.try_get::<i64, _>(idx) {
+                serde_json::Value::Number(v.into())
+            } else if let Ok(v) = row.try_get::<f64, _>(idx) {
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(v).unwrap_or_else(|| 0.into()),
+                )
+            } else if let Ok(v) = row.try_get::<String, _>(idx) {
+                serde_json::Value::String(v)
+            } else if let Ok(v) = row.try_get::<Vec<u8>, _>(idx) {
+                serde_json::Value::String(format!("<BLOB: {} bytes>", v.len()))
+            } else {
+                serde_json::Value::Null
+            };
+            values.push(value);
+        }
+        result_rows.push(values);
+    }
+
+    Ok(TableRowPreview {
+        columns,
+        rows: result_rows,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fetch_db_schema, fetch_table_rows};
+    use crate::models::UserProfile;
+    use crate::persistence::{UserRepo, migrator};
+
+    fn make_profile(user_id: &str, nickname: &str) -> UserProfile {
+        UserProfile {
+            user_id: user_id.to_string(),
+            nickname: nickname.to_string(),
+            avatar: "".to_string(),
+            signature: "".to_string(),
+            account_status: Default::default(),
+        }
+    }
+
+    #[sqlx::test]
+    async fn get_db_schema_returns_migrated_tables(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let schema = fetch_db_schema(&pool).await.unwrap();
+        assert!(!schema.tables.is_empty());
+
+        let im_accounts_table = schema.tables.iter().find(|t| t.name == "im_accounts");
+        assert!(im_accounts_table.is_some());
+
+        let im_accounts_table = im_accounts_table.unwrap();
+        assert!(
+            im_accounts_table
+                .columns
+                .iter()
+                .any(|c| c.name == "user_id")
+        );
+        assert!(!im_accounts_table.indexes.is_empty());
+    }
+
+    #[sqlx::test]
+    async fn preview_table_rows_returns_data(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let repo = UserRepo::new(pool.clone());
+        repo.upsert_user(&make_profile("10001", "Alice"))
+            .await
+            .unwrap();
+
+        let preview = fetch_table_rows(&pool, "im_accounts", 10).await.unwrap();
+        assert_eq!(preview.rows.len(), 1);
+        assert!(
+            preview
+                .columns
+                .iter()
+                .any(|c| c == "user_id" || c == "nickname")
+        );
+    }
+
+    #[sqlx::test]
+    async fn preview_table_rows_rejects_invalid_limit(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let result = fetch_table_rows(&pool, "im_accounts", 0).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("limit must be between 1 and 1000")
+        );
+
+        let result = fetch_table_rows(&pool, "im_accounts", 1001).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("limit must be between 1 and 1000")
+        );
+    }
+
+    #[sqlx::test]
+    async fn preview_table_rows_rejects_invalid_table_name(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+
+        let result = fetch_table_rows(&pool, "im_accounts; DROP TABLE im_accounts;", 10).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid table name")
+        );
+    }
 }

@@ -234,6 +234,10 @@ pub fn run() {
                                 context.clear_chat_window_label();
                             }
                         }
+
+                        if let Some(devtools_window) = app_handle.get_webview_window("developer-tools") {
+                            let _ = devtools_window.close();
+                        }
                     }
                 });
             }
