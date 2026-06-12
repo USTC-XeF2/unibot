@@ -90,8 +90,9 @@ export function ChatEventBusProvider({
     let unlisten: (() => void) | null = null;
 
     const windowLabel = `chat-${userId}`;
+    toast.info(`[event-bus] waiting for Tauri (${windowLabel})`);
 
-    waitForTauriInternals()
+    waitForTauriInternals(1000)
       .then(() => {
         if (cancelled) {
           return;
@@ -101,7 +102,7 @@ export function ChatEventBusProvider({
           "chat:event",
           (event) => {
             const payload = event.payload;
-            toast.info(
+            toast.success(
               `[event-bus] ${windowLabel} received ${payload?.kind ?? "unknown"}`,
             );
             if (!payload) {
