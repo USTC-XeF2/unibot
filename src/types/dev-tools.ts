@@ -38,6 +38,7 @@ export type SqlQueryResult = {
   columns: string[];
   rows: (string | number | boolean | null)[][];
   rows_affected?: number;
+  truncated: boolean;
 };
 
 export type DevToolsEventPayload = {

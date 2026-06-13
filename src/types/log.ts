@@ -1,5 +1,6 @@
 export interface SystemLogEntry {
   ts: number;
+  seq: number;
   level: "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR";
   target: string;
   msg: string;

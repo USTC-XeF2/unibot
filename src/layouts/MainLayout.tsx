@@ -31,6 +31,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { COMMANDS } from "@/lib/commands";
 import { useUsersQuery } from "@/lib/query";
 
 const footerNavItems = [
@@ -75,7 +76,7 @@ function MainLayout() {
 
   const handleOpenUserChatWindow = async (userId: string) => {
     try {
-      await invoke<{ created: boolean }>("open_user_chat_window", {
+      await invoke<{ created: boolean }>(COMMANDS.openUserChatWindow, {
         userId,
       });
     } catch (error) {

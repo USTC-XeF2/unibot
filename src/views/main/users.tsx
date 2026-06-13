@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { COMMANDS } from "@/lib/commands";
 import { confirmDialog } from "@/lib/modal";
 import { invalidateUsersQuery, useUsersQuery } from "@/lib/query";
 
@@ -26,7 +27,7 @@ function UserManagementView() {
 
   const handleOpenUserChatWindow = async (userId: string) => {
     try {
-      await invoke<{ created: boolean }>("open_user_chat_window", {
+      await invoke<{ created: boolean }>(COMMANDS.openUserChatWindow, {
         userId,
       });
     } catch (err) {
@@ -46,7 +47,7 @@ function UserManagementView() {
 
     setDeletingUserId(userId);
     try {
-      await invoke("delete_user", { userId });
+      await invoke(COMMANDS.deleteUser, { userId });
       await invalidateUsersQuery();
     } catch (err) {
       window.alert(err as string);

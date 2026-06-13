@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noArrayIndexKey: schema preview rows/columns may contain duplicates, so positional keys are intentional
 import { useState } from "react";
 import { useDbSchemaQuery, useTableRowPreviewQuery } from "@/lib/query";
 import type { DbTable } from "@/types/dev-tools";
@@ -19,8 +20,8 @@ function TableDetail({ table }: { table: DbTable }) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {table.columns.map((col) => (
-                <tr key={col.name}>
+              {table.columns.map((col, idx) => (
+                <tr key={idx}>
                   <td className="px-3 py-2">{col.name}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {col.type_name}
@@ -100,9 +101,9 @@ function RowPreview({ tableName }: { tableName: string }) {
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>
-              {data.columns.map((col) => (
+              {data.columns.map((col, idx) => (
                 <th
-                  key={col}
+                  key={idx}
                   className="whitespace-nowrap px-3 py-2 text-left font-medium"
                 >
                   {col}
@@ -111,27 +112,21 @@ function RowPreview({ tableName }: { tableName: string }) {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {data.rows.map((row) => {
-              const rowKey = row.map((c) => String(c)).join("|");
-              return (
-                <tr key={rowKey}>
-                  {row.map((cell, j) => (
-                    <td
-                      key={data.columns[j]}
-                      className="whitespace-nowrap px-3 py-2"
-                    >
-                      {cell === null
-                        ? "NULL"
-                        : typeof cell === "boolean"
-                          ? cell
-                            ? "true"
-                            : "false"
-                          : String(cell)}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
+            {data.rows.map((row, ridx) => (
+              <tr key={ridx}>
+                {row.map((cell, j) => (
+                  <td key={j} className="whitespace-nowrap px-3 py-2">
+                    {cell === null
+                      ? "NULL"
+                      : typeof cell === "boolean"
+                        ? cell
+                          ? "true"
+                          : "false"
+                        : String(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

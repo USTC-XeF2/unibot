@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 import type { BotProfile, StatsResult } from "@/types/bot";
@@ -24,7 +25,7 @@ export function useBotStatsQuery() {
 export function useBotConfigQuery(botId: string) {
   return useQuery({
     queryKey: queryKeys.bots.config(botId),
-    queryFn: () => invoke<string>("get_bot_config", { botId }),
+    queryFn: () => invoke<string>(COMMANDS.getBotConfig, { botId }),
     enabled: botId.length > 0,
     retry: false,
   });

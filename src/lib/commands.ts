@@ -7,7 +7,7 @@
  *
  * 把命令名集中到这里有两个作用：
  * 1. 前端多处调用同一命令时只有一处真相，拼写不再各自维护。
- * 2. 后端有一个 Rust 测试（commands_match_frontend）读取本文件的字符串值，
+ * 2. 后端有一个 Rust 测试（frontend_commands_are_all_registered）读取本文件的字符串值，
  *    断言每个都在 `lib.rs` 的 `generate_handler!` 注册表里，于是前后端漂移
  *    会在 `cargo test` 失败，而不是运行时。
  *

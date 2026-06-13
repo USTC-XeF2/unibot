@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { COMMANDS } from "@/lib/commands";
 import { invalidateUsersQuery, useUsersQuery } from "@/lib/query";
 import { resolveUserDisplayName } from "@/lib/utils";
 import type { UserProfile } from "@/types/user";
@@ -93,7 +94,7 @@ function UserSettingsView() {
 
     setSubmitError(null);
 
-    await invoke<UserProfile>("update_user_profile", {
+    await invoke<UserProfile>(COMMANDS.updateUserProfile, {
       userId: parsedUserId,
       nickname,
       avatar,

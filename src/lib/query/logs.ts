@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { queryClient } from "@/lib/query-client";
 import type { LogSettings, SystemLogEntry } from "@/types/log";
 import { queryKeys } from "./keys";
@@ -10,9 +11,10 @@ export function useSystemLogsQuery(
   return useQuery({
     queryKey: queryKeys.logs.system(params),
     queryFn: () =>
-      invoke<SystemLogEntry[]>("list_system_logs", {
+      invoke<SystemLogEntry[]>(COMMANDS.listSystemLogs, {
         since: params.since ?? null,
         before: params.before ?? null,
+        before_seq: null,
         limit: params.limit ?? 100,
       }),
     retry: false,
@@ -44,11 +46,12 @@ export function useSystemLogsInfiniteQuery(params: {
       keyword: trimmedKeyword,
       levels,
     }),
-    initialPageParam: null as number | null,
+    initialPageParam: null as { ts: number; seq: number } | null,
     queryFn: ({ pageParam }) =>
-      invoke<SystemLogEntry[]>("list_system_logs", {
+      invoke<SystemLogEntry[]>(COMMANDS.listSystemLogs, {
         since: null,
-        before: pageParam,
+        before: pageParam?.ts ?? null,
+        before_seq: pageParam?.seq ?? null,
         limit: pageSize,
         keyword: trimmedKeyword || null,
         levels,
@@ -56,7 +59,7 @@ export function useSystemLogsInfiniteQuery(params: {
     getNextPageParam: (lastPage) => {
       if (lastPage.length < pageSize) return undefined;
       const oldest = lastPage[lastPage.length - 1];
-      return oldest?.ts ?? undefined;
+      return oldest ? { ts: oldest.ts, seq: oldest.seq } : undefined;
     },
     retry: false,
     refetchOnWindowFocus: false,

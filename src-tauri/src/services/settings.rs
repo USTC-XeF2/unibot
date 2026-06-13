@@ -1,4 +1,4 @@
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::persistence::SettingsRepo;
 
 #[derive(Clone)]
@@ -31,6 +31,17 @@ impl SettingsService {
     }
 
     pub async fn set_log_retention_days(&self, days: i64) -> AppResult<()> {
+        const MAX_DAYS: i64 = 36_500; // ~100 years
+
+        if days < 0 {
+            return Err(AppError::validation("retention_days cannot be negative"));
+        }
+        if days > MAX_DAYS {
+            return Err(AppError::validation(format!(
+                "retention_days cannot exceed {MAX_DAYS}"
+            )));
+        }
+
         self.repo
             .set_i64(
                 "log.retention_days",
@@ -56,5 +67,54 @@ impl SettingsService {
             )
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SettingsService;
+    use crate::persistence::{SettingsRepo, migrator};
+
+    #[sqlx::test]
+    async fn set_log_retention_days_rejects_negative(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+        let service = SettingsService::new(SettingsRepo::new(pool));
+        let result = service.set_log_retention_days(-1).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("retention_days cannot be negative")
+        );
+    }
+
+    #[sqlx::test]
+    async fn set_log_retention_days_rejects_extreme_values(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+        let service = SettingsService::new(SettingsRepo::new(pool));
+        let result = service.set_log_retention_days(100_000).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("retention_days cannot exceed")
+        );
+    }
+
+    #[sqlx::test]
+    async fn set_log_retention_days_accepts_zero_and_typical_values(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool)
+            .await
+            .expect("migrations should succeed");
+        let service = SettingsService::new(SettingsRepo::new(pool));
+        assert!(service.set_log_retention_days(0).await.is_ok());
+        assert!(service.set_log_retention_days(7).await.is_ok());
+        assert!(service.set_log_retention_days(36500).await.is_ok());
     }
 }

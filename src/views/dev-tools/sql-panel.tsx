@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noArrayIndexKey: SQL result columns/rows may be duplicated, so positional keys are intentional
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -107,14 +108,20 @@ export function SqlPanel() {
               </p>
             )}
 
+            {result.truncated && (
+              <p className="mb-2 text-amber-600 text-sm">
+                结果已截断至前 1000 行。
+              </p>
+            )}
+
             {result.rows.length === 0 ? (
               <p className="text-muted-foreground text-sm">无返回数据</p>
             ) : (
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted">
                   <tr>
-                    {result.columns.map((col) => (
-                      <th key={col} className="px-3 py-2 text-left font-medium">
+                    {result.columns.map((col, idx) => (
+                      <th key={idx} className="px-3 py-2 text-left font-medium">
                         {col}
                       </th>
                     ))}
@@ -122,16 +129,12 @@ export function SqlPanel() {
                 </thead>
                 <tbody className="divide-y">
                   {result.rows.map((row, ridx) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: SQL rows are read-only and may contain duplicate values
-                    <tr key={`row-${ridx}`}>
-                      {row.map((cell, cidx) => {
-                        const colName = result.columns[cidx];
-                        return (
-                          <td key={colName} className="px-3 py-2">
-                            {cell === null ? "NULL" : String(cell)}
-                          </td>
-                        );
-                      })}
+                    <tr key={ridx}>
+                      {row.map((cell, cidx) => (
+                        <td key={cidx} className="px-3 py-2">
+                          {cell === null ? "NULL" : String(cell)}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>

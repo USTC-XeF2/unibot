@@ -337,39 +337,27 @@ pub fn run() {
 #[cfg(test)]
 mod command_contract_tests {
     use std::collections::HashSet;
+    use std::path::Path;
 
-    /// Command names registered with Tauri, parsed out of the
-    /// `generate_handler!` block in this file (`module::name,` entries).
+    use regex::Regex;
+
+    /// Command names registered with Tauri, extracted from the
+    /// `generate_handler![...]` block in this file.
     fn backend_registered_commands() -> HashSet<String> {
         let src = include_str!("lib.rs");
-        let start = src
-            .find("generate_handler![")
+        let block_re = Regex::new(r#"(?s)generate_handler!\[(.*?)\]\)"#)
+            .expect("backend block regex should compile");
+        let block = block_re
+            .captures(src)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str())
             .expect("generate_handler! block should exist");
-        // The block ends at the first `])` after it.
-        let rest = &src[start..];
-        let end = rest
-            .find("])")
-            .expect("generate_handler! block should close");
-        let block = &rest[..end];
 
-        block
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim().trim_end_matches(',');
-                // Skip the opening `generate_handler![` line and any blanks.
-                let entry = line.rsplit("::").next()?;
-                let entry = entry.trim();
-                if entry.is_empty()
-                    || entry.contains('!')
-                    || entry.contains('[')
-                    || !entry
-                        .chars()
-                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-                {
-                    return None;
-                }
-                Some(entry.to_string())
-            })
+        let entry_re =
+            Regex::new(r#"::\s*([a-z_][a-z0-9_]*)\s*(?:,|$)"#).expect("entry regex should compile");
+        entry_re
+            .captures_iter(block)
+            .map(|c| c[1].to_string())
             .collect()
     }
 
@@ -377,18 +365,54 @@ mod command_contract_tests {
     /// truth `src/lib/commands.ts` (the `key: "value",` right-hand sides).
     fn frontend_referenced_commands() -> HashSet<String> {
         let src = include_str!("../../src/lib/commands.ts");
+        let re = Regex::new(r#"^\s*\w+:\s*"([a-z_][a-z0-9_]*)"\s*,?\s*$"#)
+            .expect("frontend constant regex should compile");
         src.lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                // Match `someKey: "command_name",`
-                let (_, after_colon) = line.split_once(": \"")?;
-                let value = after_colon.split('"').next()?;
-                if value.is_empty() {
-                    return None;
-                }
-                Some(value.to_string())
-            })
+            .filter_map(|line| re.captures(line).map(|c| c[1].to_string()))
             .collect()
+    }
+
+    /// Finds any remaining raw `invoke("command_name", ...)` calls in the
+    /// frontend source. After the migration to `COMMANDS.*`, this should be
+    /// empty; the test guards against new raw strings being introduced.
+    fn frontend_raw_invoke_commands() -> HashSet<String> {
+        let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src");
+        if !src_dir.exists() {
+            return HashSet::new();
+        }
+
+        let invoke_re = Regex::new(r#"invoke(?:<[^>]*>)?\("([a-z_][a-z0-9_]*)"\s*,"#)
+            .expect("invoke regex should compile");
+
+        fn walk(dir: &Path, re: &Regex, found: &mut HashSet<String>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, re, found);
+                    continue;
+                }
+                let is_ts = path
+                    .extension()
+                    .map(|e| e == "ts" || e == "tsx")
+                    .unwrap_or(false);
+                if !is_ts {
+                    continue;
+                }
+                let Ok(content) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                for cap in re.captures_iter(&content) {
+                    found.insert(cap[1].to_string());
+                }
+            }
+        }
+
+        let mut found = HashSet::new();
+        walk(&src_dir, &invoke_re, &mut found);
+        found
     }
 
     /// Guards against the stringly-typed command-name drift that once broke the
@@ -412,6 +436,20 @@ mod command_contract_tests {
         assert!(
             missing.is_empty(),
             "frontend references commands not registered on the backend: {missing:?}"
+        );
+    }
+
+    /// Guards against raw `invoke("...")` strings drifting away from the
+    /// centralized `COMMANDS` constants.
+    #[test]
+    fn frontend_raw_invoke_strings_are_registered() {
+        let frontend = frontend_referenced_commands();
+        let raw = frontend_raw_invoke_commands();
+
+        let missing: Vec<&String> = raw.difference(&frontend).collect();
+        assert!(
+            missing.is_empty(),
+            "raw invoke strings not present in COMMANDS: {missing:?}"
         );
     }
 }

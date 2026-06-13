@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 import type { ChatMessage, ChatPoke, MessageSource } from "@/types/chat";
@@ -33,7 +34,7 @@ export function messageHistoryQueryOptions(
   return queryOptions({
     queryKey: queryKeys.chat.history(userId, source, limit),
     queryFn: () =>
-      invoke<ChatMessage[]>("list_message_history", {
+      invoke<ChatMessage[]>(COMMANDS.listMessageHistory, {
         userId,
         source,
         limit,
@@ -58,7 +59,7 @@ export function usePokeHistoryQuery(
   return useQuery({
     queryKey: queryKeys.chat.poke(userId, source, limit),
     queryFn: () =>
-      invoke<ChatPoke[]>("list_poke_history", {
+      invoke<ChatPoke[]>(COMMANDS.listPokeHistory, {
         userId,
         source,
         limit,

@@ -4,6 +4,7 @@ use tauri::Manager;
 #[derive(serde::Serialize)]
 pub struct SystemLogEntry {
     pub ts: u64,
+    pub seq: u64,
     pub level: String,
     pub target: String,
     pub msg: String,
@@ -27,6 +28,7 @@ pub async fn list_system_logs(
     app: tauri::AppHandle,
     since: Option<u64>,
     before: Option<u64>,
+    before_seq: Option<u64>,
     limit: Option<usize>,
     keyword: Option<String>,
     levels: Option<Vec<String>>,
@@ -40,21 +42,30 @@ pub async fn list_system_logs(
     let limit = limit.unwrap_or(100).min(1000);
     let levels = levels.unwrap_or_default();
 
-    let values =
-        logging::read_system_logs(&log_dir, since, before, limit, keyword.as_deref(), &levels)
-            .await
-            .map_err(|e| e.to_string())?;
+    let values = logging::read_system_logs(
+        &log_dir,
+        since,
+        before,
+        before_seq,
+        limit,
+        keyword.as_deref(),
+        &levels,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     let entries: Vec<SystemLogEntry> = values
         .into_iter()
         .filter_map(|v| {
             let ts = v.get("ts")?.as_u64()?;
+            let seq = v.get("seq")?.as_u64()?;
             let level = v.get("level")?.as_str()?.to_string();
             let target = v.get("target")?.as_str()?.to_string();
             let msg = v.get("msg")?.as_str()?.to_string();
             let fields = v.get("fields").cloned();
             Some(SystemLogEntry {
                 ts,
+                seq,
                 level,
                 target,
                 msg,

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
@@ -26,7 +27,7 @@ export function useUserGroupsQuery(userId: string) {
   return useQuery({
     queryKey: queryKeys.groups.byUser(userId),
     enabled: isValidUserId(userId),
-    queryFn: () => invoke<GroupProfile[]>("list_user_groups", { userId }),
+    queryFn: () => invoke<GroupProfile[]>(COMMANDS.listUserGroups, { userId }),
     retry: false,
   });
 }
@@ -39,7 +40,10 @@ export function useGroupMembersQuery(
   return useQuery({
     queryKey: queryKeys.groups.members(userId, groupId),
     queryFn: () =>
-      invoke<GroupMemberProfile[]>("list_group_members", { userId, groupId }),
+      invoke<GroupMemberProfile[]>(COMMANDS.listGroupMembers, {
+        userId,
+        groupId,
+      }),
     retry: false,
     enabled: enabled && isValidUserId(userId) && groupId.length > 0,
   });
@@ -54,7 +58,7 @@ export function useGroupEventHistoryQuery(
   return useQuery({
     queryKey: queryKeys.groups.eventHistory(userId, groupId, limit),
     queryFn: () =>
-      invoke<GroupEvent[]>("list_group_event_history", {
+      invoke<GroupEvent[]>(COMMANDS.listGroupEventHistory, {
         userId,
         groupId,
         limit,
@@ -91,7 +95,7 @@ export function useConversationStatesQuery(userId: string) {
     queryKey: queryKeys.conversation.states(userId),
     enabled: isValidUserId(userId),
     queryFn: () =>
-      invoke<ConversationState[]>("list_conversation_states", { userId }),
+      invoke<ConversationState[]>(COMMANDS.listConversationStates, { userId }),
     retry: false,
   });
 }
@@ -108,7 +112,8 @@ export function useGroupCategoriesQuery(userId: string) {
   return useQuery({
     queryKey: queryKeys.groups.categories(userId),
     enabled: isValidUserId(userId),
-    queryFn: () => invoke<GroupCategory[]>("list_group_categories", { userId }),
+    queryFn: () =>
+      invoke<GroupCategory[]>(COMMANDS.listGroupCategories, { userId }),
     retry: false,
   });
 }
@@ -130,7 +135,7 @@ export function useGroupFilesQuery(
     queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
     enabled: isValidUserId(userId) && groupId.length > 0,
     queryFn: () =>
-      invoke<GroupFile[]>("list_group_files", {
+      invoke<GroupFile[]>(COMMANDS.listGroupFiles, {
         userId,
         groupId,
         parentFolderId: parentFolderId || null,
@@ -156,7 +161,7 @@ export function useGroupAlbumsQuery(userId: string, groupId: string) {
     queryKey: queryKeys.groups.albums(userId, groupId),
     enabled: isValidUserId(userId) && groupId.length > 0,
     queryFn: () =>
-      invoke<GroupAlbum[]>("list_group_albums", {
+      invoke<GroupAlbum[]>(COMMANDS.listGroupAlbums, {
         userId,
         groupId,
       }),
@@ -181,7 +186,7 @@ export function useGroupPhotosQuery(
     queryKey: queryKeys.groups.photos(userId, albumId),
     enabled: isValidUserId(userId) && groupId.length > 0 && albumId.length > 0,
     queryFn: () =>
-      invoke<GroupPhoto[]>("list_group_photos", {
+      invoke<GroupPhoto[]>(COMMANDS.listGroupPhotos, {
         userId,
         groupId,
         albumId,
