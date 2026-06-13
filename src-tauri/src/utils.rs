@@ -82,3 +82,24 @@ pub async fn recipients_for_source(
     recipients.retain(|user_id| core.user_context(user_id).is_some());
     recipients
 }
+
+pub fn emit_group_content_to_windows(
+    app: &tauri::AppHandle,
+    user_id: &str,
+    group_id: &str,
+    event: &InternalEvent,
+) {
+    for label in [
+        format!("group-files-{user_id}-{group_id}"),
+        format!("group-albums-{user_id}-{group_id}"),
+    ] {
+        if let Err(e) = app.emit_to(&label, "chat:event", event) {
+            tracing::debug!(
+                target: "utils",
+                "emit_group_content_to_windows skipped {} (window likely closed): {}",
+                label,
+                e
+            );
+        }
+    }
+}
