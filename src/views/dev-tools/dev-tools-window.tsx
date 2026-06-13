@@ -25,11 +25,11 @@ export default function DevToolsWindow() {
       </header>
 
       <Card className="flex flex-1 flex-col overflow-hidden">
-        <CardContent className="flex flex-1 flex-col p-4">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-4">
           <Tabs
             value={activeTab}
             onValueChange={setActiveTab}
-            className="flex flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col"
           >
             <TabsList className="mb-4 self-start">
               <TabsTrigger value="logs">日志</TabsTrigger>
