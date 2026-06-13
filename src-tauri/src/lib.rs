@@ -315,6 +315,8 @@ pub fn run() {
             group::delete_group_photo,
             group::set_group_essence_message,
             group::list_group_essence_messages,
+            group::open_group_files_window,
+            group::open_group_albums_window,
             conversation::set_conversation_pinned,
             conversation::set_conversation_muted,
             conversation::list_conversation_states,
