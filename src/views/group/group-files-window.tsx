@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router";
 import { ChatEventBusProvider } from "@/components/chat/chat-event-bus-provider";
+import GroupFileBrowser from "@/components/group/group-file-browser";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function GroupFilesWindow() {
@@ -15,10 +16,7 @@ export default function GroupFilesWindow() {
   return (
     <ChatEventBusProvider userId={userId} windowLabel={windowLabel}>
       <main className="flex h-screen w-screen flex-col bg-background">
-        <div className="flex-1 p-4">
-          <h1 className="font-semibold text-lg">群文件 · {groupId}</h1>
-          <p className="text-muted-foreground text-sm">TODO: file browser</p>
-        </div>
+        <GroupFileBrowser userId={userId} groupId={groupId} />
         <Toaster position="top-center" />
       </main>
     </ChatEventBusProvider>
