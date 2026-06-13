@@ -172,9 +172,14 @@ pub async fn read_system_logs(
     paths.sort();
 
     let mut entries = Vec::new();
-    let mut seq: u64 = 0;
+    let mut base_seq: u64 = 0;
 
     for path in paths {
+        let metadata = tokio::fs::metadata(&path)
+            .await
+            .map_err(|e| AppError::storage(format!("failed to read log file metadata: {e}")))?;
+        let file_size = metadata.len();
+
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -188,87 +193,95 @@ pub async fn read_system_logs(
         let file = tokio::fs::File::open(&path)
             .await
             .map_err(|e| AppError::storage(format!("failed to open log file: {e}")))?;
-        let reader = tokio::io::BufReader::new(file);
-        let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
+        let mut reader = tokio::io::BufReader::new(file);
+        let mut line = String::new();
+        let mut line_offset: u64 = 0;
 
         loop {
-            match lines.next_line().await {
-                Ok(Some(line)) => {
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                        continue;
-                    };
-
-                    if value.get("ts").is_none() {
-                        if let Some(date) = file_date {
-                            let ts = date
-                                .and_hms_opt(0, 0, 0)
-                                .unwrap_or_default()
-                                .and_utc()
-                                .timestamp_millis();
-                            value["ts"] = ts.into();
-                        }
-                    }
-
-                    let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
-                    let entry_seq = seq;
-                    value["seq"] = entry_seq.into();
-                    seq += 1;
-
-                    if let Some(since_ts) = since_i64 {
-                        if entry_ts < since_ts {
-                            continue;
-                        }
-                    }
-
-                    if let Some(before_ts) = before_i64 {
-                        if entry_ts > before_ts {
-                            continue;
-                        }
-                        if entry_ts == before_ts {
-                            if let Some(before_seq_val) = before_seq {
-                                if entry_seq >= before_seq_val {
-                                    continue;
-                                }
-                            } else {
-                                continue;
-                            }
-                        }
-                    }
-
-                    if !level_set.is_empty() {
-                        let level_matches = value
-                            .get("level")
-                            .and_then(|v| v.as_str())
-                            .map(|l| level_set.contains(&l.to_lowercase()))
-                            .unwrap_or(false);
-                        if !level_matches {
-                            continue;
-                        }
-                    }
-
-                    if let Some(needle) = &keyword_lower {
-                        if !value.to_string().to_lowercase().contains(needle) {
-                            continue;
-                        }
-                    }
-
-                    entries.push(value);
-                }
-                Ok(None) => break,
-                Err(e) => {
+            line.clear();
+            let bytes_read = tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut line)
+                .await
+                .map_err(|e| {
                     tracing::warn!(
                         target: "log_reader",
                         path = %path.display(),
                         error = %e,
                         "failed to read log line; stopping file"
                     );
-                    break;
+                    AppError::storage(format!("failed to read log line: {e}"))
+                })?;
+
+            if bytes_read == 0 {
+                break;
+            }
+
+            let line_start = base_seq + line_offset;
+            line_offset += bytes_read as u64;
+
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+
+            if value.get("ts").is_none() {
+                if let Some(date) = file_date {
+                    let ts = date
+                        .and_hms_opt(0, 0, 0)
+                        .unwrap_or_default()
+                        .and_utc()
+                        .timestamp_millis();
+                    value["ts"] = ts.into();
                 }
             }
+
+            let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
+            value["seq"] = line_start.into();
+
+            if let Some(since_ts) = since_i64 {
+                if entry_ts < since_ts {
+                    continue;
+                }
+            }
+
+            if let Some(before_ts) = before_i64 {
+                if entry_ts > before_ts {
+                    continue;
+                }
+                if entry_ts == before_ts {
+                    if let Some(before_seq_val) = before_seq {
+                        if line_start >= before_seq_val {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            }
+
+            if !level_set.is_empty() {
+                let level_matches = value
+                    .get("level")
+                    .and_then(|v| v.as_str())
+                    .map(|l| level_set.contains(&l.to_lowercase()))
+                    .unwrap_or(false);
+                if !level_matches {
+                    continue;
+                }
+            }
+
+            if let Some(needle) = &keyword_lower {
+                if !value.to_string().to_lowercase().contains(needle) {
+                    continue;
+                }
+            }
+
+            entries.push(value);
         }
+
+        base_seq += file_size;
     }
 
     entries.sort_by(|a, b| {
@@ -399,8 +412,9 @@ mod tests {
             .iter()
             .map(|e| e.get("seq").unwrap().as_u64().unwrap())
             .collect();
-        // Sorted newest-first, so the last-read line (largest seq) comes first.
-        assert_eq!(seqs, vec![2, 1, 0]);
+        // seq is now a stable byte offset, globally monotonic across files.
+        // Newest-first order means seq values decrease through the result array.
+        assert!(seqs.windows(2).all(|w| w[0] > w[1]));
     }
 
     #[test]
@@ -437,12 +451,27 @@ mod tests {
         ));
         assert_eq!(page2.len(), 2);
 
-        let seqs: Vec<u64> = page2
+        let page2_seqs: Vec<u64> = page2
             .iter()
             .map(|e| e.get("seq").unwrap().as_u64().unwrap())
             .collect();
-        // page1 had seq 4,3; page2 should continue with seq 2,1.
-        assert_eq!(seqs, vec![2, 1]);
+        // Byte-offset seqs are stable; page2 entries are strictly older than the cursor.
+        assert!(page2_seqs.iter().all(|s| *s < before_seq));
+        assert!(page2_seqs.windows(2).all(|w| w[0] > w[1]));
+
+        // Load the final page and confirm it contains the remaining entry.
+        let oldest2 = page2.last().unwrap();
+        let page3 = run(read_system_logs(
+            &dir,
+            None,
+            Some(before),
+            Some(oldest2.get("seq").unwrap().as_u64().unwrap()),
+            2,
+            None,
+            EMPTY_LEVELS,
+        ));
+        assert_eq!(page3.len(), 1);
+        assert!(page3[0].get("seq").unwrap().as_u64().unwrap() < page2_seqs[1]);
     }
 
     #[test]
