@@ -333,3 +333,85 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod command_contract_tests {
+    use std::collections::HashSet;
+
+    /// Command names registered with Tauri, parsed out of the
+    /// `generate_handler!` block in this file (`module::name,` entries).
+    fn backend_registered_commands() -> HashSet<String> {
+        let src = include_str!("lib.rs");
+        let start = src
+            .find("generate_handler![")
+            .expect("generate_handler! block should exist");
+        // The block ends at the first `])` after it.
+        let rest = &src[start..];
+        let end = rest
+            .find("])")
+            .expect("generate_handler! block should close");
+        let block = &rest[..end];
+
+        block
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim().trim_end_matches(',');
+                // Skip the opening `generate_handler![` line and any blanks.
+                let entry = line.rsplit("::").next()?;
+                let entry = entry.trim();
+                if entry.is_empty()
+                    || entry.contains('!')
+                    || entry.contains('[')
+                    || !entry
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                {
+                    return None;
+                }
+                Some(entry.to_string())
+            })
+            .collect()
+    }
+
+    /// Command-name string values declared in the frontend single source of
+    /// truth `src/lib/commands.ts` (the `key: "value",` right-hand sides).
+    fn frontend_referenced_commands() -> HashSet<String> {
+        let src = include_str!("../../src/lib/commands.ts");
+        src.lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                // Match `someKey: "command_name",`
+                let (_, after_colon) = line.split_once(": \"")?;
+                let value = after_colon.split('"').next()?;
+                if value.is_empty() {
+                    return None;
+                }
+                Some(value.to_string())
+            })
+            .collect()
+    }
+
+    /// Guards against the stringly-typed command-name drift that once broke the
+    /// SQL panel (`is_write_query` vs `is_write_query_command`): every command
+    /// the frontend references must be registered on the backend.
+    #[test]
+    fn frontend_commands_are_all_registered() {
+        let backend = backend_registered_commands();
+        let frontend = frontend_referenced_commands();
+
+        assert!(
+            !backend.is_empty(),
+            "failed to parse backend command registry"
+        );
+        assert!(
+            !frontend.is_empty(),
+            "failed to parse frontend command constants"
+        );
+
+        let missing: Vec<&String> = frontend.difference(&backend).collect();
+        assert!(
+            missing.is_empty(),
+            "frontend references commands not registered on the backend: {missing:?}"
+        );
+    }
+}
