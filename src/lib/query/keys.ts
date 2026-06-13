@@ -51,6 +51,11 @@ export const queryKeys = {
   logs: {
     system: (params: { before?: number; limit?: number }) =>
       ["logs", "system", params] as const,
+    systemInfinite: (params: {
+      limit?: number;
+      keyword?: string;
+      levels?: string[];
+    }) => ["logs", "system", "infinite", params] as const,
     settings: () => ["logs", "settings"] as const,
   },
   bots: {

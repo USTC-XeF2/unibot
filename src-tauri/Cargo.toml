@@ -42,6 +42,7 @@ anyhow = "1"
 parking_lot = "0.12"
 
 [dev-dependencies]
+regex = "1"
 reqwest = { version = "0.12", features = ["json"] }
 
 [profile.release]

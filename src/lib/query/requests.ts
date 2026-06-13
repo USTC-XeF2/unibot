@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
@@ -11,7 +12,7 @@ export function useFriendRequestsQuery(userId: string, enabled = true) {
     enabled: enabled && isValidUserId(userId),
     retry: false,
     queryFn: () =>
-      invoke<FriendRequestEntity[]>("list_friend_requests", {
+      invoke<FriendRequestEntity[]>(COMMANDS.listFriendRequests, {
         userId,
       }),
   });
@@ -23,7 +24,7 @@ export function useGroupRequestsQuery(userId: string, enabled = true) {
     enabled: enabled && isValidUserId(userId),
     retry: false,
     queryFn: () =>
-      invoke<GroupRequestEntity[]>("list_group_requests", {
+      invoke<GroupRequestEntity[]>(COMMANDS.listGroupRequests, {
         userId,
       }),
   });

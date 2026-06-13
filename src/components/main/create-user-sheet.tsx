@@ -11,6 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { COMMANDS } from "@/lib/commands";
 import { invalidateUsersQuery } from "@/lib/query";
 import type { UserProfile } from "@/types/user";
 
@@ -51,7 +52,7 @@ export function CreateUserSheet({ open, onOpenChange }: CreateUserSheetProps) {
     setSubmitError(null);
 
     try {
-      await invoke<UserProfile>("register_user", {
+      await invoke<UserProfile>(COMMANDS.registerUser, {
         userId: trimmedUserId,
         nickname: formNickname.trim(),
         avatar: formAvatar.trim(),

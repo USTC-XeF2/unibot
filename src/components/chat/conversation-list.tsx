@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { COMMANDS } from "@/lib/commands";
 import { segmentsToNodes } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
@@ -213,10 +214,13 @@ function ConversationList({
   const resolveMyGroupRole = async (
     groupId: string,
   ): Promise<GroupRole | null> => {
-    const members = await invoke<GroupMemberProfile[]>("list_group_members", {
-      userId: currentUserId,
-      groupId,
-    });
+    const members = await invoke<GroupMemberProfile[]>(
+      COMMANDS.listGroupMembers,
+      {
+        userId: currentUserId,
+        groupId,
+      },
+    );
     return (
       members.find((member) => member.user_id === currentUserId)?.role ?? null
     );

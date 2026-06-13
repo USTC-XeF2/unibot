@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import {
   invalidateBotStatsQuery,
   invalidateBotsQuery,
@@ -31,7 +32,7 @@ export function useDeleteFriendMutation() {
       userId: string;
       friendUserId: string;
     }) =>
-      invoke("delete_friend", {
+      invoke(COMMANDS.deleteFriend, {
         userId,
         friendUserId,
       }),
@@ -56,7 +57,7 @@ export function useSetGroupWholeMuteMutation() {
       groupId: string;
       durationSeconds: number;
     }) =>
-      invoke("set_group_whole_mute", {
+      invoke(COMMANDS.setGroupWholeMute, {
         userId,
         groupId,
         durationSeconds,
@@ -75,7 +76,7 @@ export function useRenameGroupMutation() {
       groupId: string;
       groupName: string;
     }) =>
-      invoke("rename_group", {
+      invoke(COMMANDS.renameGroup, {
         userId,
         groupId,
         groupName,
@@ -87,7 +88,7 @@ export function useRenameGroupMutation() {
 export function useDissolveGroupMutation() {
   return useMutation({
     mutationFn: ({ userId, groupId }: { userId: string; groupId: string }) =>
-      invoke("dissolve_group", {
+      invoke(COMMANDS.dissolveGroup, {
         userId,
         groupId,
       }),
@@ -98,7 +99,7 @@ export function useDissolveGroupMutation() {
 export function useLeaveGroupMutation() {
   return useMutation({
     mutationFn: ({ userId, groupId }: { userId: string; groupId: string }) =>
-      invoke("leave_group", {
+      invoke(COMMANDS.leaveGroup, {
         userId,
         groupId,
       }),
@@ -117,7 +118,7 @@ export function useCreateFriendRequestMutation() {
       targetUserId: string;
       comment?: string;
     }) =>
-      invoke("create_friend_request", {
+      invoke(COMMANDS.createFriendRequest, {
         userId,
         targetUserId,
         comment: comment ?? "",
@@ -140,7 +141,7 @@ export function useCreateGroupMutation() {
       groupName: string;
       initialMemberUserIds: string[];
     }) =>
-      invoke("upsert_group", {
+      invoke(COMMANDS.upsertGroup, {
         userId,
         groupId,
         groupName,
@@ -162,7 +163,7 @@ export function useHandleFriendRequestMutation() {
       requestId: string;
       state: RequestActionState;
     }) =>
-      invoke("handle_friend_request", {
+      invoke(COMMANDS.handleFriendRequest, {
         userId,
         requestId,
         state,
@@ -188,7 +189,7 @@ export function useHandleGroupRequestMutation() {
       requestId: string;
       state: RequestActionState;
     }) =>
-      invoke("handle_group_request", {
+      invoke(COMMANDS.handleGroupRequest, {
         userId,
         requestId,
         state,
@@ -215,7 +216,7 @@ export function useSendMessageMutation() {
       content: MessageSegment[];
       quotedMessageId: string | null;
     }) =>
-      invoke("send_message", {
+      invoke(COMMANDS.sendMessage, {
         userId,
         source,
         content,
@@ -241,7 +242,7 @@ export function useRecallMessageMutation() {
       messageId: string;
       source: MessageSource;
     }) =>
-      invoke("recall_message", {
+      invoke(COMMANDS.recallMessage, {
         userId,
         messageId,
       }),
@@ -261,7 +262,7 @@ export function usePokeUserMutation() {
       source: MessageSource;
       targetUserId: string;
     }) =>
-      invoke("poke_user", {
+      invoke(COMMANDS.pokeUser, {
         userId,
         source,
         targetUserId,
@@ -284,7 +285,7 @@ export function useMuteGroupMemberMutation() {
       targetUserId: string;
       durationSeconds: number;
     }) =>
-      invoke("mute_group_member", {
+      invoke(COMMANDS.muteGroupMember, {
         userId,
         groupId,
         targetUserId,
@@ -304,7 +305,7 @@ export function useKickGroupMemberMutation() {
       groupId: string;
       targetUserId: string;
     }) =>
-      invoke("kick_group_member", {
+      invoke(COMMANDS.kickGroupMember, {
         userId,
         groupId,
         targetUserId,
@@ -325,7 +326,7 @@ export function useSetGroupMemberRoleMutation() {
       targetUserId: string;
       isAdmin: boolean;
     }) =>
-      invoke("set_group_member_role", {
+      invoke(COMMANDS.setGroupMemberRole, {
         userId,
         groupId,
         targetUserId,
@@ -347,7 +348,7 @@ export function useSetGroupMemberTitleMutation() {
       targetUserId: string;
       title: string;
     }) =>
-      invoke("set_group_member_title", {
+      invoke(COMMANDS.setGroupMemberTitle, {
         userId,
         groupId,
         targetUserId,
@@ -365,7 +366,7 @@ export function useCreateBotMutation() {
       boundUserId: string;
       displayName: string;
     }) =>
-      invoke<BotProfile>("create_bot", {
+      invoke<BotProfile>(COMMANDS.createBot, {
         boundUserId,
         displayName,
       }),
@@ -378,7 +379,7 @@ export function useCreateBotMutation() {
 export function useDeleteBotMutation() {
   return useMutation({
     mutationFn: ({ botId }: { botId: string }) =>
-      invoke("delete_bot", { botId }),
+      invoke(COMMANDS.deleteBot, { botId }),
     onSuccess: async () => {
       await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
     },
@@ -388,7 +389,7 @@ export function useDeleteBotMutation() {
 export function useStartBotMutation() {
   return useMutation({
     mutationFn: ({ botId }: { botId: string }) =>
-      invoke<DebugSession>("start_bot", { botId }),
+      invoke<DebugSession>(COMMANDS.startBot, { botId }),
     onSuccess: async () => {
       await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
     },
@@ -397,7 +398,8 @@ export function useStartBotMutation() {
 
 export function useStopBotMutation() {
   return useMutation({
-    mutationFn: ({ botId }: { botId: string }) => invoke("stop_bot", { botId }),
+    mutationFn: ({ botId }: { botId: string }) =>
+      invoke(COMMANDS.stopBot, { botId }),
     onSuccess: async () => {
       await Promise.all([invalidateBotsQuery(), invalidateBotStatsQuery()]);
     },
@@ -407,20 +409,21 @@ export function useStopBotMutation() {
 export function useSetLogLevelMutation() {
   return useMutation({
     mutationFn: ({ level }: { level: string }) =>
-      invoke("set_log_level", { level }),
+      invoke(COMMANDS.setLogLevel, { level }),
   });
 }
 
 export function useSetLogRetentionMutation() {
   return useMutation({
     mutationFn: ({ days }: { days: number }) =>
-      invoke("set_log_retention_days", { days }),
+      invoke(COMMANDS.setLogRetentionDays, { days }),
   });
 }
 
 export function useTriggerLogCleanupMutation() {
   return useMutation({
-    mutationFn: () => invoke<{ deleted_files: number }>("trigger_log_cleanup"),
+    mutationFn: () =>
+      invoke<{ deleted_files: number }>(COMMANDS.triggerLogCleanup),
   });
 }
 
@@ -439,7 +442,7 @@ export function useSetConversationPinnedMutation() {
       groupId: string | null;
       isPinned: boolean;
     }) =>
-      invoke("set_conversation_pinned", {
+      invoke(COMMANDS.setConversationPinned, {
         userId,
         scene,
         peerUserId,
@@ -466,7 +469,7 @@ export function useSetConversationMutedMutation() {
       groupId: string | null;
       isMuted: boolean;
     }) =>
-      invoke("set_conversation_muted", {
+      invoke(COMMANDS.setConversationMuted, {
         userId,
         scene,
         peerUserId,
@@ -481,7 +484,7 @@ export function useSetConversationMutedMutation() {
 export function useCreateGroupCategoryMutation() {
   return useMutation({
     mutationFn: ({ userId, name }: { userId: string; name: string }) =>
-      invoke("create_group_category", { userId, name }),
+      invoke(COMMANDS.createGroupCategory, { userId, name }),
     onSuccess: (_, variables) =>
       invalidateGroupCategoriesQuery(variables.userId),
   });
@@ -495,7 +498,7 @@ export function useDeleteGroupCategoryMutation() {
     }: {
       userId: string;
       categoryId: string;
-    }) => invoke("delete_group_category", { userId, categoryId }),
+    }) => invoke(COMMANDS.deleteGroupCategory, { userId, categoryId }),
     onSuccess: (_, variables) =>
       invalidateGroupCategoriesQuery(variables.userId),
   });
@@ -511,7 +514,7 @@ export function useSetGroupCategoryMutation() {
       userId: string;
       groupId: string;
       categoryId: string | null;
-    }) => invoke("set_group_category", { userId, groupId, categoryId }),
+    }) => invoke(COMMANDS.setGroupCategory, { userId, groupId, categoryId }),
     onSuccess: (_, variables) =>
       Promise.all([
         invalidateGroupCategoriesQuery(variables.userId),
@@ -535,7 +538,7 @@ export function useUploadGroupFileMutation() {
       fileName: string;
       sourcePath: string;
     }) =>
-      invoke("upload_group_file", {
+      invoke(COMMANDS.uploadGroupFile, {
         userId,
         groupId,
         parentFolderId: parentFolderId ?? null,
@@ -562,7 +565,7 @@ export function useDownloadGroupFileMutation() {
       groupId: string;
       fileId: string;
     }) =>
-      invoke<string>("download_group_file", {
+      invoke<string>(COMMANDS.downloadGroupFile, {
         userId,
         groupId,
         fileId,
@@ -578,7 +581,7 @@ export function useDeleteGroupFileMutation() {
       fileId: string;
       parentFolderId: string;
     }) =>
-      invoke("delete_group_file", {
+      invoke(COMMANDS.deleteGroupFile, {
         userId: params.userId,
         groupId: params.groupId,
         fileId: params.fileId,
@@ -602,7 +605,7 @@ export function useCreateGroupAlbumMutation() {
       userId: string;
       groupId: string;
       name: string;
-    }) => invoke("create_group_album", { userId, groupId, name }),
+    }) => invoke(COMMANDS.createGroupAlbum, { userId, groupId, name }),
     onSuccess: (_, variables) =>
       invalidateGroupAlbumsQuery(variables.userId, variables.groupId),
   });
@@ -615,7 +618,7 @@ export function useDeleteGroupAlbumMutation() {
       groupId: string;
       albumId: string;
     }) =>
-      invoke("delete_group_album", {
+      invoke(COMMANDS.deleteGroupAlbum, {
         userId: params.userId,
         groupId: params.groupId,
         albumId: params.albumId,
@@ -640,7 +643,7 @@ export function useUploadGroupPhotoMutation() {
       sourcePath: string;
       description?: string;
     }) =>
-      invoke("upload_group_photo", {
+      invoke(COMMANDS.uploadGroupPhoto, {
         userId,
         groupId,
         albumId,
@@ -660,7 +663,7 @@ export function useDeleteGroupPhotoMutation() {
       albumId: string;
       photoId: string;
     }) =>
-      invoke("delete_group_photo", {
+      invoke(COMMANDS.deleteGroupPhoto, {
         userId: params.userId,
         groupId: params.groupId,
         photoId: params.photoId,
@@ -679,7 +682,7 @@ export function useRenameBotMutation() {
       botId: string;
       displayName: string;
     }) =>
-      invoke<BotProfile>("rename_bot", {
+      invoke<BotProfile>(COMMANDS.renameBot, {
         botId,
         displayName,
       }),
@@ -691,6 +694,6 @@ export function useRenameBotMutation() {
 
 export function useOpenDeveloperToolsMutation() {
   return useMutation({
-    mutationFn: () => invoke<boolean>("open_developer_tools"),
+    mutationFn: () => invoke<boolean>(COMMANDS.openDeveloperTools),
   });
 }

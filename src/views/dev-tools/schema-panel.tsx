@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noArrayIndexKey: schema preview rows/columns may contain duplicates, so positional keys are intentional
 import { useState } from "react";
 import { useDbSchemaQuery, useTableRowPreviewQuery } from "@/lib/query";
 import type { DbTable } from "@/types/dev-tools";
@@ -19,8 +20,8 @@ function TableDetail({ table }: { table: DbTable }) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {table.columns.map((col) => (
-                <tr key={col.name}>
+              {table.columns.map((col, idx) => (
+                <tr key={idx}>
                   <td className="px-3 py-2">{col.name}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {col.type_name}
@@ -100,9 +101,9 @@ function RowPreview({ tableName }: { tableName: string }) {
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>
-              {data.columns.map((col) => (
+              {data.columns.map((col, idx) => (
                 <th
-                  key={col}
+                  key={idx}
                   className="whitespace-nowrap px-3 py-2 text-left font-medium"
                 >
                   {col}
@@ -111,27 +112,21 @@ function RowPreview({ tableName }: { tableName: string }) {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {data.rows.map((row) => {
-              const rowKey = row.map((c) => String(c)).join("|");
-              return (
-                <tr key={rowKey}>
-                  {row.map((cell, j) => (
-                    <td
-                      key={data.columns[j]}
-                      className="whitespace-nowrap px-3 py-2"
-                    >
-                      {cell === null
-                        ? "NULL"
-                        : typeof cell === "boolean"
-                          ? cell
-                            ? "true"
-                            : "false"
-                          : String(cell)}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
+            {data.rows.map((row, ridx) => (
+              <tr key={ridx}>
+                {row.map((cell, j) => (
+                  <td key={j} className="whitespace-nowrap px-3 py-2">
+                    {cell === null
+                      ? "NULL"
+                      : typeof cell === "boolean"
+                        ? cell
+                          ? "true"
+                          : "false"
+                        : String(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -148,36 +143,38 @@ export function SchemaPanel() {
   );
 
   return (
-    <div className="flex h-full gap-4">
-      <div className="w-56 overflow-auto rounded-xl border bg-card">
-        {schemaQuery.isPending ? (
-          <p className="p-3 text-muted-foreground text-sm">读取中...</p>
-        ) : schemaQuery.isError ? (
-          <p className="p-3 text-destructive text-sm">读取失败</p>
-        ) : schemaQuery.data?.tables.length === 0 ? (
-          <p className="p-3 text-muted-foreground text-sm">无表</p>
-        ) : (
-          <ul className="divide-y">
-            {schemaQuery.data?.tables.map((table) => (
-              <li key={table.name}>
-                <button
-                  type="button"
-                  className={`block w-full cursor-pointer px-3 py-2 text-left text-sm ${
-                    selectedTable === table.name
-                      ? "bg-muted font-medium"
-                      : "hover:bg-muted/50"
-                  }`}
-                  onClick={() => setSelectedTable(table.name)}
-                >
-                  {table.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+    <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
+      <div className="flex min-h-0 w-56 flex-col overflow-hidden rounded-xl border bg-card">
+        <div className="min-h-0 flex-1 overflow-auto">
+          {schemaQuery.isPending ? (
+            <p className="p-3 text-muted-foreground text-sm">读取中...</p>
+          ) : schemaQuery.isError ? (
+            <p className="p-3 text-destructive text-sm">读取失败</p>
+          ) : schemaQuery.data?.tables.length === 0 ? (
+            <p className="p-3 text-muted-foreground text-sm">无表</p>
+          ) : (
+            <ul className="divide-y">
+              {schemaQuery.data?.tables.map((table) => (
+                <li key={table.name}>
+                  <button
+                    type="button"
+                    className={`block w-full cursor-pointer px-3 py-2 text-left text-sm ${
+                      selectedTable === table.name
+                        ? "bg-muted font-medium"
+                        : "hover:bg-muted/50"
+                    }`}
+                    onClick={() => setSelectedTable(table.name)}
+                  >
+                    {table.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-xl border bg-card/60 p-4">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-card/60 p-4">
         {selected ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between">

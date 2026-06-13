@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { queryKeys } from "@/lib/query/keys";
 import type { PacketFilters, ProtocolPacket } from "@/types/packet";
 
@@ -7,7 +8,7 @@ export function useProtocolPackets(filters: PacketFilters = {}) {
   return useQuery({
     queryKey: queryKeys.packets.list(filters),
     queryFn: async () => {
-      return invoke<ProtocolPacket[]>("list_protocol_packets", {
+      return invoke<ProtocolPacket[]>(COMMANDS.listProtocolPackets, {
         botId: filters.bot_id ?? null,
         direction: filters.direction ?? null,
         actionName: filters.action_name ?? null,
@@ -24,7 +25,7 @@ export function useProtocolPacketDetail(packetId: string) {
   return useQuery({
     queryKey: queryKeys.packets.detail(packetId),
     queryFn: async () => {
-      return invoke<string>("read_protocol_packet", { packetId });
+      return invoke<string>(COMMANDS.readProtocolPacket, { packetId });
     },
     enabled: !!packetId,
     retry: false,

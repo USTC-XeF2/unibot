@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventsPanel } from "@/views/dev-tools/events-panel";
 import { LogsPanel } from "@/views/dev-tools/logs-panel";
 import { SchemaPanel } from "@/views/dev-tools/schema-panel";
+import { SqlPanel } from "@/views/dev-tools/sql-panel";
 
 export default function DevToolsWindow() {
   const [activeTab, setActiveTab] = useState("logs");
@@ -24,33 +25,43 @@ export default function DevToolsWindow() {
       </header>
 
       <Card className="flex flex-1 flex-col overflow-hidden">
-        <CardContent className="flex flex-1 flex-col p-4">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-4">
           <Tabs
             value={activeTab}
             onValueChange={setActiveTab}
-            className="flex flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col"
           >
             <TabsList className="mb-4 self-start">
               <TabsTrigger value="logs">日志</TabsTrigger>
               <TabsTrigger value="events">事件流</TabsTrigger>
               <TabsTrigger value="schema">数据库</TabsTrigger>
-              <TabsTrigger value="sql" disabled>
-                SQL（PR2）
-              </TabsTrigger>
+              <TabsTrigger value="sql">SQL</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="logs" className="flex-1 overflow-hidden">
+            <TabsContent
+              value="logs"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
               <LogsPanel />
             </TabsContent>
             <TabsContent
               value="events"
-              className="flex-1 overflow-hidden"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
               forceMount
             >
               <EventsPanel />
             </TabsContent>
-            <TabsContent value="schema" className="flex-1 overflow-hidden">
+            <TabsContent
+              value="schema"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
               <SchemaPanel />
+            </TabsContent>
+            <TabsContent
+              value="sql"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <SqlPanel />
             </TabsContent>
           </Tabs>
         </CardContent>

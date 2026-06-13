@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { COMMANDS } from "@/lib/commands";
 import { isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
@@ -7,7 +8,7 @@ import { queryClient } from "@/lib/query-client";
 export function useFriendsQuery(userId: string) {
   return useQuery({
     queryKey: queryKeys.friends.byUser(userId),
-    queryFn: () => invoke<string[]>("list_friends", { userId }),
+    queryFn: () => invoke<string[]>(COMMANDS.listFriends, { userId }),
     retry: false,
     enabled: isValidUserId(userId),
   });

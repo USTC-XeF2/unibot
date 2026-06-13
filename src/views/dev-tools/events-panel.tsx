@@ -2,8 +2,16 @@ import { listen } from "@tauri-apps/api/event";
 import { Play, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxItem,
+  ComboboxList,
+  useComboboxAnchor,
+} from "@/components/ui/combobox";
 import type { DevToolsEventPayload } from "@/types/dev-tools";
 
 type EventItem = {
@@ -11,6 +19,29 @@ type EventItem = {
   receivedAt: number;
   payload: DevToolsEventPayload;
 };
+
+const KIND_OPTIONS = [
+  { value: "message", label: "message" },
+  { value: "message_recalled", label: "message_recalled" },
+  { value: "message_reaction", label: "message_reaction" },
+  { value: "poke", label: "poke" },
+  { value: "friend_request_created", label: "friend_request_created" },
+  { value: "friend_request_handled", label: "friend_request_handled" },
+  { value: "group_request_created", label: "group_request_created" },
+  { value: "group_request_handled", label: "group_request_handled" },
+  { value: "group_member_muted", label: "group_member_muted" },
+  { value: "group_member_joined", label: "group_member_joined" },
+  { value: "group_member_title_updated", label: "group_member_title_updated" },
+  { value: "group_whole_mute_updated", label: "group_whole_mute_updated" },
+  {
+    value: "group_announcement_upserted",
+    label: "group_announcement_upserted",
+  },
+  { value: "group_folder_upserted", label: "group_folder_upserted" },
+  { value: "group_file_upserted", label: "group_file_upserted" },
+  { value: "group_essence_updated", label: "group_essence_updated" },
+  { value: "notice", label: "notice" },
+] as const;
 
 function kindBadgeClass(kind: string): string {
   if (kind === "message") return "border-sky-500/30 bg-sky-500/10 text-sky-600";
@@ -25,10 +56,52 @@ function kindBadgeClass(kind: string): string {
   return "border-border bg-muted/40 text-muted-foreground";
 }
 
+function KindCombobox({
+  value,
+  onValueChange,
+}: {
+  value: string[];
+  onValueChange: (value: string[]) => void;
+}) {
+  const anchorRef = useComboboxAnchor();
+
+  return (
+    <Combobox multiple value={value} onValueChange={onValueChange}>
+      <ComboboxChips
+        ref={anchorRef}
+        className="scrollbar-none h-8 flex-nowrap overflow-x-auto overflow-y-hidden whitespace-nowrap"
+      >
+        {value.map((selected) => {
+          const option = KIND_OPTIONS.find((o) => o.value === selected);
+          return (
+            <ComboboxChip key={selected} className="shrink-0">
+              {option?.label ?? selected}
+            </ComboboxChip>
+          );
+        })}
+        <ComboboxChipsInput
+          placeholder={value.length === 0 ? "kind" : ""}
+          className="min-w-0 shrink-0"
+        />
+      </ComboboxChips>
+
+      <ComboboxContent anchor={anchorRef}>
+        <ComboboxList>
+          {KIND_OPTIONS.map((option) => (
+            <ComboboxItem key={option.value} value={option.value}>
+              {option.label}
+            </ComboboxItem>
+          ))}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
+}
+
 export function EventsPanel() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [paused, setPaused] = useState(false);
-  const [kindFilter, setKindFilter] = useState("");
+  const [kinds, setKinds] = useState<string[]>([]);
   const nextIdRef = useRef(0);
   const backlogRef = useRef<EventItem[]>([]);
   const pausedRef = useRef(paused);
@@ -77,53 +150,53 @@ export function EventsPanel() {
   }, [paused]);
 
   const filtered = events.filter(
-    (item) =>
-      !kindFilter ||
-      item.payload.event.kind.toLowerCase().includes(kindFilter.toLowerCase()),
+    (item) => kinds.length === 0 || kinds.includes(item.payload.event.kind),
   );
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <Input
-          placeholder="按 kind 过滤..."
-          value={kindFilter}
-          onChange={(e) => setKindFilter(e.target.value)}
-          className="w-56"
-        />
-        <div className="flex items-center gap-2">
-          <Switch checked={paused} onCheckedChange={setPaused} id="pause" />
-          <label htmlFor="pause" className="text-sm">
-            {paused ? "已暂停" : "暂停"}
-          </label>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="flex shrink-0 items-center gap-3 rounded-xl border bg-card/60 p-3">
+        <div className="w-40">
+          <KindCombobox value={kinds} onValueChange={setKinds} />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            setEvents([]);
-            backlogRef.current = [];
-          }}
-        >
-          <Trash2 className="size-3.5" />
-          清空
-        </Button>
 
-        {paused && backlogRef.current.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant={paused ? "default" : "outline"}
+            size="sm"
+            onClick={() => setPaused((p) => !p)}
+          >
+            {paused ? "继续" : "暂停"}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => setPaused(false)}
+            onClick={() => {
+              setEvents([]);
+              backlogRef.current = [];
+            }}
           >
-            <Play className="size-3.5" />
-            继续 ({backlogRef.current.length})
+            <Trash2 className="size-3.5" />
+            清空
           </Button>
-        )}
+
+          {paused && backlogRef.current.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setPaused(false)}
+            >
+              <Play className="size-3.5" />
+              继续 ({backlogRef.current.length})
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-xl border bg-card/60 p-3">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-card/60 p-3">
         {filtered.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             {events.length === 0 ? "暂无事件" : "无匹配事件"}
