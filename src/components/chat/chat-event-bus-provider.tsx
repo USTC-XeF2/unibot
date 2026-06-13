@@ -62,9 +62,11 @@ export function useChatEventBusContext(): ChatEventBusContextValue {
 
 export function ChatEventBusProvider({
   userId,
+  windowLabel,
   children,
 }: {
   userId: string;
+  windowLabel?: string;
   children: ReactNode;
 }) {
   const subscribersRef = useRef<Set<ChatEventSubscriber>>(new Set());
@@ -81,10 +83,10 @@ export function ChatEventBusProvider({
       return;
     }
 
+    const label = windowLabel || `chat-${userId}`;
+
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-
-    const windowLabel = `chat-${userId}`;
 
     listenWithRetry<InternalEventPayload>(
       "chat:event",
@@ -99,7 +101,7 @@ export function ChatEventBusProvider({
         }
       },
       {
-        target: windowLabel,
+        target: label,
       },
     )
       .then((fn) => {
@@ -110,7 +112,7 @@ export function ChatEventBusProvider({
         unlisten = fn;
       })
       .catch((error) => {
-        console.error(`[event-bus] failed for ${windowLabel}:`, error);
+        console.error(`[event-bus] failed for ${label}:`, error);
       });
 
     return () => {
@@ -120,7 +122,7 @@ export function ChatEventBusProvider({
         unlisten = null;
       }
     };
-  }, [userId]);
+  }, [userId, windowLabel]);
 
   return (
     <ChatEventBusContext.Provider value={{ subscribe }}>

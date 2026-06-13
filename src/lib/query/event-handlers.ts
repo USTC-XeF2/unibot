@@ -7,7 +7,13 @@ import {
 } from "@/lib/query/chat";
 import { invalidateFriendsQuery } from "@/lib/query/friends";
 import {
+  invalidateGroupAlbumsQuery,
+  invalidateGroupAnnouncementsQuery,
+  invalidateGroupEssenceMessagesQuery,
   invalidateGroupEventHistoryQuery,
+  invalidateGroupFilesQuery,
+  invalidateGroupFoldersQuery,
+  invalidateGroupPhotosQuery,
   invalidateGroupsQuery,
 } from "@/lib/query/groups";
 import {
@@ -67,5 +73,38 @@ export function handleQueryInvalidation(
     payload.target_user_id === userId
   ) {
     invalidateGroupsQuery();
+  }
+
+  // Group content events
+  if (
+    payload.kind === "group_folder_upserted" ||
+    payload.kind === "group_file_upserted" ||
+    payload.kind === "group_file_deleted"
+  ) {
+    invalidateGroupFilesQuery(userId, payload.group_id);
+    invalidateGroupFoldersQuery(userId, payload.group_id);
+  }
+
+  if (
+    payload.kind === "group_album_created" ||
+    payload.kind === "group_album_deleted"
+  ) {
+    invalidateGroupAlbumsQuery(userId, payload.group_id);
+  }
+
+  if (
+    payload.kind === "group_photo_uploaded" ||
+    payload.kind === "group_photo_deleted"
+  ) {
+    invalidateGroupPhotosQuery(userId, payload.album_id);
+    invalidateGroupAlbumsQuery(userId, payload.group_id);
+  }
+
+  if (payload.kind === "group_announcement_upserted") {
+    invalidateGroupAnnouncementsQuery(userId, payload.group_id);
+  }
+
+  if (payload.kind === "group_essence_updated") {
+    invalidateGroupEssenceMessagesQuery(userId, payload.group_id);
   }
 }

@@ -7,6 +7,8 @@ import MainLayout from "@/layouts/MainLayout";
 import { queryClient } from "@/lib/query-client";
 import ChatWindowView from "@/views/chat/chat-window";
 import DevToolsWindow from "@/views/dev-tools/dev-tools-window";
+import GroupAlbumsWindow from "@/views/group/group-albums-window";
+import GroupFilesWindow from "@/views/group/group-files-window";
 import AboutView from "@/views/main/about";
 import DashboardView from "@/views/main/dashboard";
 import LogsView from "@/views/main/logs";
@@ -37,6 +39,14 @@ function App() {
     {
       path: "/developer-tools",
       element: <DevToolsWindow />,
+    },
+    {
+      path: "/group-files",
+      element: <GroupFilesWindow />,
+    },
+    {
+      path: "/group-albums",
+      element: <GroupAlbumsWindow />,
     },
   ]);
 

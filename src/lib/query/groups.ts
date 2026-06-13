@@ -8,8 +8,11 @@ import type { GroupEvent } from "@/types/event";
 import type {
   ConversationState,
   GroupAlbum,
+  GroupAnnouncement,
   GroupCategory,
+  GroupEssenceMessage,
   GroupFile,
+  GroupFolder,
   GroupMemberProfile,
   GroupPhoto,
   GroupProfile,
@@ -198,5 +201,74 @@ export function useGroupPhotosQuery(
 export function invalidateGroupPhotosQuery(userId: string, albumId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.photos(userId, albumId),
+  });
+}
+
+// === Group Folders ===
+
+export function useGroupFoldersQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.folders(userId, groupId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupFolder[]>(COMMANDS.listGroupFolders, {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupFoldersQuery(userId: string, groupId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.folders(userId, groupId),
+  });
+}
+
+// === Group Announcements ===
+
+export function useGroupAnnouncementsQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.announcements(userId, groupId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupAnnouncement[]>(COMMANDS.listGroupAnnouncements, {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupAnnouncementsQuery(
+  userId: string,
+  groupId: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.announcements(userId, groupId),
+  });
+}
+
+// === Group Essence Messages ===
+
+export function useGroupEssenceMessagesQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.essence(userId, groupId),
+    enabled: isValidUserId(userId) && groupId.length > 0,
+    queryFn: () =>
+      invoke<GroupEssenceMessage[]>(COMMANDS.listGroupEssenceMessages, {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupEssenceMessagesQuery(
+  userId: string,
+  groupId: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.essence(userId, groupId),
   });
 }

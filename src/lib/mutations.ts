@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { COMMANDS } from "@/lib/commands";
 import {
   invalidateBotStatsQuery,
@@ -8,8 +9,11 @@ import {
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
   invalidateGroupAlbumsQuery,
+  invalidateGroupAnnouncementsQuery,
   invalidateGroupCategoriesQuery,
+  invalidateGroupEssenceMessagesQuery,
   invalidateGroupFilesQuery,
+  invalidateGroupFoldersQuery,
   invalidateGroupPhotosQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
@@ -19,6 +23,11 @@ import {
 } from "@/lib/query";
 import type { BotProfile, DebugSession } from "@/types/bot";
 import type { MessageSegment, MessageSource } from "@/types/chat";
+import type {
+  GroupAnnouncement,
+  GroupEssenceMessage,
+  GroupFolder,
+} from "@/types/group";
 import type { RequestState } from "@/types/request";
 
 type RequestActionState = Extract<RequestState, "accepted" | "rejected">;
@@ -670,6 +679,94 @@ export function useDeleteGroupPhotoMutation() {
       }),
     onSuccess: (_, params) =>
       invalidateGroupPhotosQuery(params.userId, params.albumId),
+  });
+}
+
+// === Group Folders ===
+
+export function useUpsertGroupFolderMutation() {
+  return useMutation({
+    mutationFn: (input: {
+      userId: string;
+      groupId: string;
+      folderId?: string;
+      parentFolderId?: string;
+      folderName: string;
+    }) =>
+      invoke<GroupFolder>(COMMANDS.upsertGroupFolder, {
+        input: {
+          folder_id: input.folderId ?? "",
+          group_id: input.groupId,
+          parent_folder_id: input.parentFolderId ?? null,
+          folder_name: input.folderName,
+          creator_user_id: input.userId,
+          created_at: 0,
+          updated_at: 0,
+          file_count: 0,
+        },
+      }),
+    onSuccess: (_, variables) => {
+      invalidateGroupFoldersQuery(variables.userId, variables.groupId);
+    },
+    onError: (error) => {
+      toast.error(`创建文件夹失败：${error}`);
+    },
+  });
+}
+
+// === Group Announcements ===
+
+export function useUpsertGroupAnnouncementMutation() {
+  return useMutation({
+    mutationFn: (input: {
+      userId: string;
+      groupId: string;
+      announcementId?: string;
+      content: string;
+      imageUrl?: string;
+    }) =>
+      invoke<GroupAnnouncement>(COMMANDS.upsertGroupAnnouncement, {
+        input: {
+          announcement_id: input.announcementId ?? "",
+          group_id: input.groupId,
+          sender_user_id: input.userId,
+          content: input.content,
+          image_url: input.imageUrl ?? null,
+          created_at: 0,
+          updated_at: 0,
+        },
+      }),
+    onSuccess: (_, variables) => {
+      invalidateGroupAnnouncementsQuery(variables.userId, variables.groupId);
+    },
+    onError: (error) => {
+      toast.error(`发布公告失败：${error}`);
+    },
+  });
+}
+
+// === Group Essence ===
+
+export function useSetGroupEssenceMessageMutation() {
+  return useMutation({
+    mutationFn: (input: {
+      userId: string;
+      groupId: string;
+      messageId: string;
+      isSet: boolean;
+    }) =>
+      invoke<GroupEssenceMessage>(COMMANDS.setGroupEssenceMessage, {
+        userId: input.userId,
+        groupId: input.groupId,
+        messageId: input.messageId,
+        isSet: input.isSet,
+      }),
+    onSuccess: (_, variables) => {
+      invalidateGroupEssenceMessagesQuery(variables.userId, variables.groupId);
+    },
+    onError: (error) => {
+      toast.error(`设置精华失败：${error}`);
+    },
   });
 }
 

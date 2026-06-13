@@ -90,6 +90,20 @@ export const COMMANDS = {
   downloadGroupFile: "download_group_file",
   deleteGroupFile: "delete_group_file",
 
+  // group content: folder
+  listGroupFolders: "list_group_folders",
+  upsertGroupFolder: "upsert_group_folder",
+
+  // group content: announcement / essence
+  listGroupAnnouncements: "list_group_announcements",
+  upsertGroupAnnouncement: "upsert_group_announcement",
+  listGroupEssenceMessages: "list_group_essence_messages",
+  setGroupEssenceMessage: "set_group_essence_message",
+
+  // group content: window
+  openGroupFilesWindow: "open_group_files_window",
+  openGroupAlbumsWindow: "open_group_albums_window",
+
   // conversation
   listConversationStates: "list_conversation_states",
   setConversationMuted: "set_conversation_muted",

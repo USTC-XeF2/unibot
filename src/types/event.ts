@@ -163,6 +163,40 @@ export type InternalEventPayload =
       time: number;
     }
   | {
+      kind: "group_file_deleted";
+      file_id: string;
+      group_id: string;
+      uploader_user_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_album_created";
+      album_id: string;
+      group_id: string;
+      name: string;
+      time: number;
+    }
+  | {
+      kind: "group_album_deleted";
+      album_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_photo_uploaded";
+      photo_id: string;
+      album_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_photo_deleted";
+      photo_id: string;
+      album_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
       kind: "notice";
       group_id: string;
       actor: string;
