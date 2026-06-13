@@ -82,6 +82,7 @@ pub async fn recipients_for_source(
     recipients.retain(|user_id| core.user_context(user_id).is_some());
     recipients
 }
+use tauri::Emitter;
 
 pub fn emit_group_content_to_windows(
     app: &tauri::AppHandle,

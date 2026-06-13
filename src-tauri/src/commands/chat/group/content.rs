@@ -11,13 +11,14 @@ use super::super::super::IntoCommandResult;
 
 #[tauri::command]
 pub async fn upsert_group_announcement(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     input: GroupAnnouncementEntity,
 ) -> Result<GroupAnnouncementEntity, String> {
     services
         .group
-        .upsert_announcement(&core, input)
+        .upsert_announcement(&app, &core, input)
         .await
         .into_command_result()
 }
@@ -37,13 +38,14 @@ pub async fn list_group_announcements(
 
 #[tauri::command]
 pub async fn upsert_group_folder(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     input: GroupFolderEntity,
 ) -> Result<GroupFolderEntity, String> {
     services
         .group
-        .upsert_group_folder(&core, input)
+        .upsert_group_folder(&app, &core, input)
         .await
         .into_command_result()
 }
@@ -63,13 +65,14 @@ pub async fn list_group_folders(
 
 #[tauri::command]
 pub async fn upsert_group_file(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     input: GroupFileEntity,
 ) -> Result<GroupFileEntity, String> {
     services
         .group
-        .upsert_group_file(&core, input)
+        .upsert_group_file(&app, &core, input)
         .await
         .into_command_result()
 }
@@ -90,6 +93,7 @@ pub async fn list_group_files(
 
 #[tauri::command]
 pub async fn set_group_essence_message(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
@@ -99,7 +103,7 @@ pub async fn set_group_essence_message(
 ) -> Result<GroupEssenceMessageEntity, String> {
     services
         .group
-        .set_group_essence_message(&core, user_id, group_id, message_id, is_set)
+        .set_group_essence_message(&app, &core, user_id, group_id, message_id, is_set)
         .await
         .into_command_result()
 }
@@ -123,6 +127,7 @@ pub async fn upload_group_file(
     services
         .group
         .upload_group_file(
+            &app,
             &core,
             user_id,
             group_id,
@@ -171,7 +176,7 @@ pub async fn delete_group_file(
 
     services
         .group
-        .delete_group_file(&core, user_id, group_id, file_id, app_data_dir)
+        .delete_group_file(&app, &core, user_id, group_id, file_id, app_data_dir)
         .await
         .into_command_result()
 }
@@ -191,6 +196,7 @@ pub async fn list_group_essence_messages(
 
 #[tauri::command]
 pub async fn create_group_album(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
@@ -199,7 +205,7 @@ pub async fn create_group_album(
 ) -> Result<GroupAlbumEntity, String> {
     services
         .group
-        .create_group_album(&core, user_id, group_id, name)
+        .create_group_album(&app, &core, user_id, group_id, name)
         .await
         .into_command_result()
 }
@@ -233,7 +239,7 @@ pub async fn delete_group_album(
 
     services
         .group
-        .delete_group_album(&core, user_id, group_id, album_id, app_data_dir)
+        .delete_group_album(&app, &core, user_id, group_id, album_id, app_data_dir)
         .await
         .into_command_result()
 }
@@ -257,6 +263,7 @@ pub async fn upload_group_photo(
     services
         .group
         .upload_group_photo(
+            &app,
             &core,
             user_id,
             group_id,
@@ -299,7 +306,7 @@ pub async fn delete_group_photo(
 
     services
         .group
-        .delete_group_photo(&core, user_id, group_id, photo_id, app_data_dir)
+        .delete_group_photo(&app, &core, user_id, group_id, photo_id, app_data_dir)
         .await
         .into_command_result()
 }

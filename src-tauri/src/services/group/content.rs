@@ -8,7 +8,7 @@ use crate::models::{
     InternalEvent,
 };
 use crate::persistence::{GroupEventRecord, NewGroupEventRecord};
-use crate::utils::{emit_to_group_members, now_ts};
+use crate::utils::{emit_group_content_to_windows, emit_to_group_members, now_ts};
 
 use super::GroupService;
 use super::storage;
@@ -16,6 +16,7 @@ use super::storage;
 impl GroupService {
     pub async fn upsert_announcement(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         announcement: GroupAnnouncementEntity,
     ) -> AppResult<GroupAnnouncementEntity> {
@@ -32,18 +33,19 @@ impl GroupService {
 
         self.repo.upsert_announcement(&announcement).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
+        let event = InternalEvent::GroupAnnouncementUpserted {
+            announcement_id: announcement.announcement_id.clone(),
+            group_id: announcement.group_id.clone(),
+            sender_user_id: announcement.sender_user_id.clone(),
+            time: announcement.updated_at,
+        };
+        emit_to_group_members(core, &self.repo, &announcement.group_id, event.clone()).await?;
+        emit_group_content_to_windows(
+            app,
+            &announcement.sender_user_id,
             &announcement.group_id,
-            InternalEvent::GroupAnnouncementUpserted {
-                announcement_id: announcement.announcement_id.clone(),
-                group_id: announcement.group_id.clone(),
-                sender_user_id: announcement.sender_user_id.clone(),
-                time: announcement.updated_at,
-            },
-        )
-        .await?;
+            &event,
+        );
 
         Ok(announcement)
     }
@@ -62,6 +64,7 @@ impl GroupService {
 
     pub async fn upsert_group_folder(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         folder: GroupFolderEntity,
     ) -> AppResult<GroupFolderEntity> {
@@ -72,18 +75,14 @@ impl GroupService {
 
         self.repo.upsert_group_folder(&folder).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &folder.group_id,
-            InternalEvent::GroupFolderUpserted {
-                folder_id: folder.folder_id.clone(),
-                group_id: folder.group_id.clone(),
-                creator_user_id: folder.creator_user_id.clone(),
-                time: folder.updated_at,
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupFolderUpserted {
+            folder_id: folder.folder_id.clone(),
+            group_id: folder.group_id.clone(),
+            creator_user_id: folder.creator_user_id.clone(),
+            time: folder.updated_at,
+        };
+        emit_to_group_members(core, &self.repo, &folder.group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &folder.creator_user_id, &folder.group_id, &event);
 
         Ok(folder)
     }
@@ -102,6 +101,7 @@ impl GroupService {
 
     pub async fn upsert_group_file(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         file: GroupFileEntity,
     ) -> AppResult<GroupFileEntity> {
@@ -112,18 +112,14 @@ impl GroupService {
 
         self.repo.upsert_group_file(&file).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &file.group_id,
-            InternalEvent::GroupFileUpserted {
-                file_id: file.file_id.clone(),
-                group_id: file.group_id.clone(),
-                uploader_user_id: file.uploader_user_id.clone(),
-                time: file.uploaded_at,
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupFileUpserted {
+            file_id: file.file_id.clone(),
+            group_id: file.group_id.clone(),
+            uploader_user_id: file.uploader_user_id.clone(),
+            time: file.uploaded_at,
+        };
+        emit_to_group_members(core, &self.repo, &file.group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &file.uploader_user_id, &file.group_id, &event);
 
         Ok(file)
     }
@@ -143,6 +139,7 @@ impl GroupService {
 
     pub async fn set_group_essence_message(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -202,21 +199,17 @@ impl GroupService {
             .await?;
         }
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &group_id,
-            InternalEvent::GroupEssenceUpdated {
-                essence_id: essence.essence_id.clone(),
-                group_id: essence.group_id.clone(),
-                message_id: essence.message_id.clone(),
-                sender_user_id: essence.sender_user_id.clone(),
-                operator_user_id: essence.operator_user_id.clone(),
-                is_set: essence.is_set,
-                time: essence.created_at,
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupEssenceUpdated {
+            essence_id: essence.essence_id.clone(),
+            group_id: essence.group_id.clone(),
+            message_id: essence.message_id.clone(),
+            sender_user_id: essence.sender_user_id.clone(),
+            operator_user_id: essence.operator_user_id.clone(),
+            is_set: essence.is_set,
+            time: essence.created_at,
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &user_id, &group_id, &event);
 
         Ok(essence)
     }
@@ -255,6 +248,7 @@ impl GroupService {
 
     pub async fn upload_group_file(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -293,11 +287,12 @@ impl GroupService {
             file_path: Some(file_path),
         };
 
-        self.upsert_group_file(core, file).await
+        self.upsert_group_file(app, core, file).await
     }
 
     pub async fn delete_group_file(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -335,23 +330,20 @@ impl GroupService {
 
         self.repo.delete_group_file(&file_id).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &group_id,
-            InternalEvent::GroupFileDeleted {
-                file_id: file_id.clone(),
-                group_id: group_id.clone(),
-                time: now_ts(),
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupFileDeleted {
+            file_id: file_id.clone(),
+            group_id: group_id.clone(),
+            time: now_ts(),
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &user_id, &group_id, &event);
 
         Ok(())
     }
 
     pub async fn create_group_album(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -372,18 +364,14 @@ impl GroupService {
 
         self.repo.create_group_album(&album).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &album.group_id,
-            InternalEvent::GroupAlbumCreated {
-                album_id: album.album_id.clone(),
-                group_id: album.group_id.clone(),
-                name: album.name.clone(),
-                time: album.created_at,
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupAlbumCreated {
+            album_id: album.album_id.clone(),
+            group_id: album.group_id.clone(),
+            name: album.name.clone(),
+            time: album.created_at,
+        };
+        emit_to_group_members(core, &self.repo, &album.group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &user_id, &album.group_id, &event);
 
         Ok(album)
     }
@@ -402,6 +390,7 @@ impl GroupService {
 
     pub async fn delete_group_album(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -436,23 +425,20 @@ impl GroupService {
             }
         }
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &group_id,
-            InternalEvent::GroupAlbumDeleted {
-                album_id: album_id.clone(),
-                group_id: group_id.clone(),
-                time: now_ts(),
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupAlbumDeleted {
+            album_id: album_id.clone(),
+            group_id: group_id.clone(),
+            time: now_ts(),
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &user_id, &group_id, &event);
 
         Ok(())
     }
 
     pub async fn upload_group_photo(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -501,25 +487,21 @@ impl GroupService {
             url: file_path.clone(),
             file_path: Some(file_path),
             description,
-            uploader_user_id: user_id,
+            uploader_user_id: user_id.clone(),
             file_size: Some(metadata.len()),
             created_at: now_ts(),
         };
 
         self.repo.create_group_photo(&photo).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &group_id,
-            InternalEvent::GroupPhotoUploaded {
-                photo_id: photo.photo_id.clone(),
-                album_id: photo.album_id.clone(),
-                group_id: photo.group_id.clone(),
-                time: photo.created_at,
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupPhotoUploaded {
+            photo_id: photo.photo_id.clone(),
+            album_id: photo.album_id.clone(),
+            group_id: photo.group_id.clone(),
+            time: photo.created_at,
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &user_id, &group_id, &event);
 
         Ok(photo)
     }
@@ -539,6 +521,7 @@ impl GroupService {
 
     pub async fn delete_group_photo(
         &self,
+        app: &tauri::AppHandle,
         core: &CoreContainer,
         user_id: String,
         group_id: String,
@@ -576,18 +559,14 @@ impl GroupService {
 
         self.repo.delete_group_photo(&photo_id).await?;
 
-        emit_to_group_members(
-            core,
-            &self.repo,
-            &group_id,
-            InternalEvent::GroupPhotoDeleted {
-                photo_id: photo_id.clone(),
-                album_id: photo.album_id.clone(),
-                group_id: group_id.clone(),
-                time: now_ts(),
-            },
-        )
-        .await?;
+        let event = InternalEvent::GroupPhotoDeleted {
+            photo_id: photo_id.clone(),
+            album_id: photo.album_id.clone(),
+            group_id: group_id.clone(),
+            time: now_ts(),
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &user_id, &group_id, &event);
 
         Ok(())
     }
