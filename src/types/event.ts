@@ -166,7 +166,6 @@ export type InternalEventPayload =
       kind: "group_file_deleted";
       file_id: string;
       group_id: string;
-      uploader_user_id: string;
       time: number;
     }
   | {

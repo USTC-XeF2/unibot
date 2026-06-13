@@ -3,5 +3,5 @@
   "identifier": "group-content",
   "description": "Capability for group content windows",
   "windows": ["group-files-*", "group-albums-*"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

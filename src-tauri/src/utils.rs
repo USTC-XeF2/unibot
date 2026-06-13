@@ -84,7 +84,7 @@ pub async fn recipients_for_source(
 }
 use tauri::Emitter;
 
-pub fn emit_group_content_to_windows(
+fn emit_group_content_to_user_window(
     app: &tauri::AppHandle,
     user_id: &str,
     group_id: &str,
@@ -103,4 +103,21 @@ pub fn emit_group_content_to_windows(
             );
         }
     }
+}
+
+pub async fn emit_group_content_to_windows(
+    app: &tauri::AppHandle,
+    group_repo: &GroupRepo,
+    group_id: &str,
+    event: &InternalEvent,
+) -> AppResult<()> {
+    let members = group_repo.list_group_members(group_id).await.map_err(|e| {
+        AppError::storage(format!("failed to list group members for {group_id}: {e}"))
+    })?;
+
+    for member in members {
+        emit_group_content_to_user_window(app, &member.user_id, group_id, event);
+    }
+
+    Ok(())
 }

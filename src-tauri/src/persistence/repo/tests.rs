@@ -1,4 +1,6 @@
-use crate::models::{GroupMemberProfile, GroupProfile, GroupRequestType, GroupRole, RequestState};
+use crate::models::{
+    GroupAlbumEntity, GroupMemberProfile, GroupProfile, GroupRequestType, GroupRole, RequestState,
+};
 use crate::persistence::{
     BotRepo, GroupRepo, InteractionRepo, MessageRepo, NewFriendRequestRecord, NewGroupEventRecord,
     NewGroupRequestRecord, NewMessageReactionRecord, NewMessageRecord, NewPokeRecord, UserRepo,
@@ -277,6 +279,58 @@ async fn smoke_crud_messages(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> 
         .await?;
     assert!(recalled.is_some());
     assert!(recalled.unwrap().is_recalled);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn delete_group_album_is_scoped_to_group(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+    user_repo.upsert_user(&make_profile("10002", "Bob")).await?;
+
+    let repo = GroupRepo::new(pool);
+    repo.upsert_group(&make_group("20001", "Group A", "10001"))
+        .await?;
+    repo.upsert_group(&make_group("20002", "Group B", "10002"))
+        .await?;
+    repo.upsert_group_member(&make_member("20001", "10001", GroupRole::Owner))
+        .await?;
+    repo.upsert_group_member(&make_member("20002", "10002", GroupRole::Owner))
+        .await?;
+
+    repo.create_group_album(&GroupAlbumEntity {
+        album_id: "album-a".to_string(),
+        group_id: "20001".to_string(),
+        name: "Album A".to_string(),
+        cover_url: None,
+        photo_count: 0,
+        created_at: 100,
+        updated_at: 100,
+    })
+    .await?;
+    repo.create_group_album(&GroupAlbumEntity {
+        album_id: "album-b".to_string(),
+        group_id: "20002".to_string(),
+        name: "Album B".to_string(),
+        cover_url: None,
+        photo_count: 0,
+        created_at: 100,
+        updated_at: 100,
+    })
+    .await?;
+
+    let deleted = repo.delete_group_album("album-b", "20001").await?;
+    assert!(!deleted);
+    assert!(repo.get_group_album_by_id("album-b").await?.is_some());
+
+    let deleted = repo.delete_group_album("album-b", "20002").await?;
+    assert!(deleted);
+    assert!(repo.get_group_album_by_id("album-b").await?.is_none());
 
     Ok(())
 }

@@ -13,6 +13,31 @@ use crate::utils::{emit_group_content_to_windows, emit_to_group_members, now_ts}
 use super::GroupService;
 use super::storage;
 
+fn prepare_announcement_for_upsert(
+    mut announcement: GroupAnnouncementEntity,
+) -> GroupAnnouncementEntity {
+    if announcement.announcement_id.trim().is_empty() {
+        announcement.announcement_id = crate::utils::new_db_id();
+    }
+    announcement
+}
+
+fn prepare_folder_for_upsert(mut folder: GroupFolderEntity) -> GroupFolderEntity {
+    if folder.folder_id.trim().is_empty() {
+        folder.folder_id = crate::utils::new_db_id();
+    }
+    folder
+}
+
+fn ensure_album_belongs_to_group(album: &GroupAlbumEntity, group_id: &str) -> AppResult<()> {
+    if album.group_id != group_id {
+        return Err(AppError::validation(
+            "album does not belong to the target group",
+        ));
+    }
+    Ok(())
+}
+
 impl GroupService {
     pub async fn upsert_announcement(
         &self,
@@ -20,6 +45,8 @@ impl GroupService {
         core: &CoreContainer,
         announcement: GroupAnnouncementEntity,
     ) -> AppResult<GroupAnnouncementEntity> {
+        let announcement = prepare_announcement_for_upsert(announcement);
+
         core.require_user_context(&announcement.sender_user_id)?;
 
         let sender = self
@@ -40,12 +67,7 @@ impl GroupService {
             time: announcement.updated_at,
         };
         emit_to_group_members(core, &self.repo, &announcement.group_id, event.clone()).await?;
-        emit_group_content_to_windows(
-            app,
-            &announcement.sender_user_id,
-            &announcement.group_id,
-            &event,
-        );
+        emit_group_content_to_windows(app, &self.repo, &announcement.group_id, &event).await?;
 
         Ok(announcement)
     }
@@ -68,6 +90,8 @@ impl GroupService {
         core: &CoreContainer,
         folder: GroupFolderEntity,
     ) -> AppResult<GroupFolderEntity> {
+        let folder = prepare_folder_for_upsert(folder);
+
         core.require_user_context(&folder.creator_user_id)?;
 
         self.ensure_group_member(&folder.group_id, &folder.creator_user_id)
@@ -82,7 +106,7 @@ impl GroupService {
             time: folder.updated_at,
         };
         emit_to_group_members(core, &self.repo, &folder.group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &folder.creator_user_id, &folder.group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &folder.group_id, &event).await?;
 
         Ok(folder)
     }
@@ -119,7 +143,7 @@ impl GroupService {
             time: file.uploaded_at,
         };
         emit_to_group_members(core, &self.repo, &file.group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &file.uploader_user_id, &file.group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &file.group_id, &event).await?;
 
         Ok(file)
     }
@@ -209,7 +233,7 @@ impl GroupService {
             time: essence.created_at,
         };
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &user_id, &group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
         Ok(essence)
     }
@@ -336,7 +360,7 @@ impl GroupService {
             time: now_ts(),
         };
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &user_id, &group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
         Ok(())
     }
@@ -371,7 +395,7 @@ impl GroupService {
             time: album.created_at,
         };
         emit_to_group_members(core, &self.repo, &album.group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &user_id, &album.group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &album.group_id, &event).await?;
 
         Ok(album)
     }
@@ -404,11 +428,18 @@ impl GroupService {
             return Err(AppError::validation("only owner/admin can delete albums"));
         }
 
+        let album = self
+            .repo
+            .get_group_album_by_id(&album_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("album {} not found", album_id)))?;
+        ensure_album_belongs_to_group(&album, &group_id)?;
+
         let photos = self.repo.list_group_photos(&album_id, &group_id).await?;
 
         // Delete database records first (in a transaction) so the source of truth
         // is updated atomically. Disk cleanup is best-effort after that.
-        self.repo.delete_group_album(&album_id).await?;
+        self.repo.delete_group_album(&album_id, &group_id).await?;
 
         for photo in &photos {
             if let Some(ref file_path) = photo.file_path {
@@ -431,7 +462,7 @@ impl GroupService {
             time: now_ts(),
         };
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &user_id, &group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
         Ok(())
     }
@@ -501,7 +532,7 @@ impl GroupService {
             time: photo.created_at,
         };
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &user_id, &group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
         Ok(photo)
     }
@@ -566,7 +597,7 @@ impl GroupService {
             time: now_ts(),
         };
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &user_id, &group_id, &event);
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
         Ok(())
     }
@@ -623,5 +654,97 @@ impl TryFrom<GroupEventRecord> for GroupEventEntity {
             payload: serde_json::from_str(&row.payload)?,
             created_at: row.created_at,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn announcement(id: &str) -> GroupAnnouncementEntity {
+        GroupAnnouncementEntity {
+            announcement_id: id.to_string(),
+            group_id: "20001".to_string(),
+            sender_user_id: "10001".to_string(),
+            content: "hello".to_string(),
+            image_url: None,
+            created_at: 100,
+            updated_at: 100,
+        }
+    }
+
+    fn folder(id: &str) -> GroupFolderEntity {
+        GroupFolderEntity {
+            folder_id: id.to_string(),
+            group_id: "20001".to_string(),
+            parent_folder_id: None,
+            folder_name: "docs".to_string(),
+            creator_user_id: "10001".to_string(),
+            created_at: 100,
+            updated_at: 100,
+            file_count: 0,
+        }
+    }
+
+    #[test]
+    fn prepares_new_announcement_with_generated_id() {
+        let prepared = prepare_announcement_for_upsert(announcement(""));
+
+        assert!(!prepared.announcement_id.is_empty());
+        assert_eq!(prepared.group_id, "20001");
+        assert_eq!(prepared.sender_user_id, "10001");
+    }
+
+    #[test]
+    fn preserves_existing_announcement_id() {
+        let prepared = prepare_announcement_for_upsert(announcement("ann-1"));
+
+        assert_eq!(prepared.announcement_id, "ann-1");
+    }
+
+    #[test]
+    fn prepares_new_folder_with_generated_id() {
+        let prepared = prepare_folder_for_upsert(folder(""));
+
+        assert!(!prepared.folder_id.is_empty());
+        assert_eq!(prepared.group_id, "20001");
+        assert_eq!(prepared.creator_user_id, "10001");
+    }
+
+    #[test]
+    fn preserves_existing_folder_id() {
+        let prepared = prepare_folder_for_upsert(folder("folder-1"));
+
+        assert_eq!(prepared.folder_id, "folder-1");
+    }
+
+    #[test]
+    fn accepts_album_in_target_group() {
+        let album = GroupAlbumEntity {
+            album_id: "album-1".to_string(),
+            group_id: "20001".to_string(),
+            name: "album".to_string(),
+            cover_url: None,
+            photo_count: 0,
+            created_at: 100,
+            updated_at: 100,
+        };
+
+        assert!(ensure_album_belongs_to_group(&album, "20001").is_ok());
+    }
+
+    #[test]
+    fn rejects_album_from_other_group() {
+        let album = GroupAlbumEntity {
+            album_id: "album-1".to_string(),
+            group_id: "20002".to_string(),
+            name: "album".to_string(),
+            cover_url: None,
+            photo_count: 0,
+            created_at: 100,
+            updated_at: 100,
+        };
+
+        assert!(ensure_album_belongs_to_group(&album, "20001").is_err());
     }
 }
