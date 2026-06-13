@@ -8,7 +8,7 @@ import type { BotProfile, StatsResult } from "@/types/bot";
 export function useBotsQuery() {
   return useQuery({
     queryKey: queryKeys.bots.all(),
-    queryFn: () => invoke<BotProfile[]>("list_bots"),
+    queryFn: () => invoke<BotProfile[]>(COMMANDS.listBots),
     retry: false,
   });
 }
@@ -16,7 +16,7 @@ export function useBotsQuery() {
 export function useBotStatsQuery() {
   return useQuery({
     queryKey: queryKeys.bots.stats(),
-    queryFn: () => invoke<StatsResult>("get_stats"),
+    queryFn: () => invoke<StatsResult>(COMMANDS.getStats),
     refetchInterval: 5000,
     retry: false,
   });

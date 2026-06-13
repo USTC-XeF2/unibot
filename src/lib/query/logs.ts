@@ -69,7 +69,7 @@ export function useSystemLogsInfiniteQuery(params: {
 export function useLogSettingsQuery() {
   return useQuery({
     queryKey: queryKeys.logs.settings(),
-    queryFn: () => invoke<LogSettings>("get_log_settings"),
+    queryFn: () => invoke<LogSettings>(COMMANDS.getLogSettings),
     retry: false,
     refetchOnWindowFocus: false,
   });

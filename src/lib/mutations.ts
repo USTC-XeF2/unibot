@@ -422,7 +422,8 @@ export function useSetLogRetentionMutation() {
 
 export function useTriggerLogCleanupMutation() {
   return useMutation({
-    mutationFn: () => invoke<{ deleted_files: number }>("trigger_log_cleanup"),
+    mutationFn: () =>
+      invoke<{ deleted_files: number }>(COMMANDS.triggerLogCleanup),
   });
 }
 
@@ -693,6 +694,6 @@ export function useRenameBotMutation() {
 
 export function useOpenDeveloperToolsMutation() {
   return useMutation({
-    mutationFn: () => invoke<boolean>("open_developer_tools"),
+    mutationFn: () => invoke<boolean>(COMMANDS.openDeveloperTools),
   });
 }

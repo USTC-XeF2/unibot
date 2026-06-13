@@ -381,7 +381,7 @@ mod command_contract_tests {
             return HashSet::new();
         }
 
-        let invoke_re = Regex::new(r#"invoke(?:<[^>]*>)?\("([a-z_][a-z0-9_]*)"\s*,"#)
+        let invoke_re = Regex::new(r#"invoke(?:<[^>]*>)?\("([a-z_][a-z0-9_]*)"\s*(?:,|\))"#)
             .expect("invoke regex should compile");
 
         fn walk(dir: &Path, re: &Regex, found: &mut HashSet<String>) {

@@ -18,7 +18,7 @@ import type {
 export function useGroupsQuery() {
   return useQuery({
     queryKey: queryKeys.groups.all(),
-    queryFn: () => invoke<GroupProfile[]>("list_groups"),
+    queryFn: () => invoke<GroupProfile[]>(COMMANDS.listGroups),
     retry: false,
   });
 }
