@@ -28,6 +28,8 @@ pub async fn list_system_logs(
     since: Option<u64>,
     before: Option<u64>,
     limit: Option<usize>,
+    keyword: Option<String>,
+    levels: Option<Vec<String>>,
 ) -> Result<Vec<SystemLogEntry>, String> {
     let log_dir = app
         .path()
@@ -36,10 +38,12 @@ pub async fn list_system_logs(
         .join("logs");
 
     let limit = limit.unwrap_or(100).min(1000);
+    let levels = levels.unwrap_or_default();
 
-    let values = logging::read_system_logs(&log_dir, since, before, limit)
-        .await
-        .map_err(|e| e.to_string())?;
+    let values =
+        logging::read_system_logs(&log_dir, since, before, limit, keyword.as_deref(), &levels)
+            .await
+            .map_err(|e| e.to_string())?;
 
     let entries: Vec<SystemLogEntry> = values
         .into_iter()

@@ -102,11 +102,20 @@ pub async fn read_system_logs(
     since: Option<u64>,
     before: Option<u64>,
     limit: usize,
+    keyword: Option<&str>,
+    levels: &[String],
 ) -> AppResult<Vec<serde_json::Value>> {
     let log_dir = log_dir.as_ref();
     if !log_dir.exists() {
         return Ok(vec![]);
     }
+
+    let keyword_lower = keyword
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .map(str::to_lowercase);
+    let level_set: std::collections::HashSet<String> =
+        levels.iter().map(|l| l.to_lowercase()).collect();
 
     let since_i64 = since.map(|ts| i64::try_from(ts).unwrap_or(i64::MAX));
     let before_i64 = before.map(|ts| i64::try_from(ts).unwrap_or(i64::MAX));
@@ -189,6 +198,23 @@ pub async fn read_system_logs(
 
                     if let Some(before_ts) = before_i64 {
                         if entry_ts >= before_ts {
+                            continue;
+                        }
+                    }
+
+                    if !level_set.is_empty() {
+                        let level_matches = value
+                            .get("level")
+                            .and_then(|v| v.as_str())
+                            .map(|l| level_set.contains(&l.to_lowercase()))
+                            .unwrap_or(false);
+                        if !level_matches {
+                            continue;
+                        }
+                    }
+
+                    if let Some(needle) = &keyword_lower {
+                        if !value.to_string().to_lowercase().contains(needle) {
                             continue;
                         }
                     }

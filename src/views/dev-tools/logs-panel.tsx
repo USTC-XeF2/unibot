@@ -1,6 +1,5 @@
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Combobox,
   ComboboxChip,
@@ -12,7 +11,7 @@ import {
   useComboboxAnchor,
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
-import { useSystemLogsQuery } from "@/lib/query";
+import { useSystemLogsInfiniteQuery } from "@/lib/query";
 import type { SystemLogEntry } from "@/types/log";
 
 const PAGE_SIZE = 100;
@@ -129,33 +128,49 @@ function LevelCombobox({
 }
 
 export function LogsPanel() {
-  const logsQuery = useSystemLogsQuery({ limit: 500 });
   const [keyword, setKeyword] = useState("");
   const [levels, setLevels] = useState<LevelValue[]>([]);
-  const [page, setPage] = useState(1);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const filtered = useMemo(() => {
-    const entries = logsQuery.data ?? [];
-    const lower = keyword.trim().toLowerCase();
-    return entries.filter((entry) => {
-      if (
-        levels.length > 0 &&
-        !levels.includes(entry.level.toLowerCase() as LevelValue)
-      ) {
-        return false;
-      }
-      if (!lower) return true;
-      const text = JSON.stringify(entry).toLowerCase();
-      return text.includes(lower);
-    });
-  }, [logsQuery.data, keyword, levels]);
+  // Debounce the keyword so each keystroke does not trigger a backend refetch.
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedKeyword(keyword), 300);
+    return () => clearTimeout(id);
+  }, [keyword]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const paginated = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, safePage]);
+  const logsQuery = useSystemLogsInfiniteQuery({
+    pageSize: PAGE_SIZE,
+    keyword: debouncedKeyword,
+    levels,
+  });
+
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = logsQuery;
+
+  // Flatten loaded pages, tracking each entry's absolute position so list keys
+  // stay unique even when identical log lines repeat.
+  const entries = useMemo(() => {
+    const pages = logsQuery.data?.pages ?? [];
+    return pages.flatMap((page, pageIdx) =>
+      page.map((entry, i) => ({ entry, index: pageIdx * PAGE_SIZE + i })),
+    );
+  }, [logsQuery.data]);
+
+  // Auto-load older logs when the sentinel scrolls into view.
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (observed) => {
+        if (observed[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -166,21 +181,12 @@ export function LogsPanel() {
             <Input
               placeholder="搜索关键字..."
               value={keyword}
-              onChange={(e) => {
-                setKeyword(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setKeyword(e.target.value)}
               className="pl-8"
             />
           </div>
           <div className="w-40">
-            <LevelCombobox
-              value={levels}
-              onValueChange={(value) => {
-                setLevels(value);
-                setPage(1);
-              }}
-            />
+            <LevelCombobox value={levels} onValueChange={setLevels} />
           </div>
         </div>
       </div>
@@ -190,13 +196,13 @@ export function LogsPanel() {
           <p className="text-muted-foreground text-sm">读取中...</p>
         ) : logsQuery.isError ? (
           <p className="text-destructive text-sm">读取失败</p>
-        ) : paginated.length === 0 ? (
+        ) : entries.length === 0 ? (
           <p className="text-muted-foreground text-sm">无匹配日志</p>
         ) : (
           <div className="space-y-2">
-            {paginated.map((entry) => (
+            {entries.map(({ entry, index }) => (
               <div
-                key={`${entry.ts}-${entry.target}-${entry.msg}`}
+                key={index}
                 className="rounded-lg border bg-card px-3 py-2 text-xs"
               >
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -217,34 +223,22 @@ export function LogsPanel() {
                 </div>
               </div>
             ))}
+
+            <div ref={sentinelRef} className="h-px" />
+
+            <p className="py-2 text-center text-muted-foreground text-xs">
+              {isFetchingNextPage
+                ? "加载更多..."
+                : hasNextPage
+                  ? "向下滚动加载更多"
+                  : "已到最早的日志"}
+            </p>
           </div>
         )}
       </div>
 
-      <div className="shrink-0 flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">
-          共 {filtered.length} 条 · 第 {safePage} / {totalPages} 页
-        </span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={safePage <= 1}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={safePage >= totalPages}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
+      <div className="shrink-0 text-muted-foreground text-xs">
+        已加载 {entries.length} 条
       </div>
     </div>
   );
