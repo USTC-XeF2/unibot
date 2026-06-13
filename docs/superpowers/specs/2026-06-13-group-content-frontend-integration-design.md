@@ -94,11 +94,17 @@ Rust 命令内部：
 - `index.html#/group-files?userId=xxx&groupId=yyy`
 - `index.html#/group-albums?userId=xxx&groupId=yyy`
 
-在 `App.tsx` 增加：
+在 `App.tsx` 的 `createHashRouter` 配置中增加：
 
-```tsx
-<Route path="/group-files" element={<GroupFilesWindow />} />
-<Route path="/group-albums" element={<GroupAlbumsWindow />} />
+```ts
+{
+  path: "/group-files",
+  element: <GroupFilesWindow />,
+},
+{
+  path: "/group-albums",
+  element: <GroupAlbumsWindow />,
+},
 ```
 
 窗口组件从 URL query 读取 `userId` 和 `groupId`。
@@ -125,13 +131,33 @@ Rust 命令内部：
 
 Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet` 一致的动画和宽度。
 
+## 前后端接口补充
+
+需要在 `src/lib/commands.ts` 补充缺失的命令名（后端已注册但前端未声明）：
+
+```ts
+// group content: folder
+listGroupFolders: "list_group_folders",
+upsertGroupFolder: "upsert_group_folder",
+
+// group content: announcement / essence
+listGroupAnnouncements: "list_group_announcements",
+upsertGroupAnnouncement: "upsert_group_announcement",
+listGroupEssenceMessages: "list_group_essence_messages",
+setGroupEssenceMessage: "set_group_essence_message",
+
+// group content: window
+openGroupFilesWindow: "open_group_files_window",
+openGroupAlbumsWindow: "open_group_albums_window",
+```
+
 ## 群文件浏览器
 
-### 布局
+### 文件浏览器布局
 
 借鉴 QQ 群盘的排版，但使用项目 shadcn/ui 风格（圆角、灰阶、outline 按钮、柔和边框）：
 
-```
+```text
 ┌────────────────────────────────────────────────────┐
 │ [文件] [回收站]     [+ 新建] [上传] [列表]          │
 ├────────────────────────────────────────────────────┤
@@ -182,12 +208,14 @@ Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet
 
 ### 数据
 
-- Query: `useGroupFilesQuery(userId, groupId, parentFolderId)`
-- Query: `useGroupFoldersQuery(userId, groupId)`
-- Mutation: `useUploadGroupFileMutation`
-- Mutation: `useDownloadGroupFileMutation`
-- Mutation: `useDeleteGroupFileMutation`
-- Mutation: `useUpsertGroupFolderMutation`（用于新建文件夹）
+需要新增/使用以下 hooks（`*` 表示当前不存在、需新增）：
+
+- Query: `useGroupFilesQuery(userId, groupId, parentFolderId)`（已存在）
+- Query: `useGroupFoldersQuery(userId, groupId)`（* 需新增）
+- Mutation: `useUploadGroupFileMutation`（已存在）
+- Mutation: `useDownloadGroupFileMutation`（已存在）
+- Mutation: `useDeleteGroupFileMutation`（已存在）
+- Mutation: `useUpsertGroupFolderMutation`（* 需新增，用于新建文件夹）
 
 ## 群相册浏览器
 
@@ -198,9 +226,9 @@ Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet
 1. **相册网格页**：展示所有相册。
 2. **照片网格页**：点入相册后展示该相册的照片缩略图。
 
-### 相册网格页
+### 相册网格布局
 
-```
+```text
 ┌──────────────────────────────────────────────┐
 │ 群相册 · {群名}        [新建相册] [上传] [刷新] [×]│
 ├──────────────────────────────────────────────┤
@@ -214,9 +242,9 @@ Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet
 └──────────────────────────────────────────────┘
 ```
 
-### 照片网格页
+### 照片网格布局
 
-```
+```text
 ┌──────────────────────────────────────────────┐
 │ ← 相册 / 活动照片      [上传照片] [刷新]     [×]│
 ├──────────────────────────────────────────────┤
@@ -239,22 +267,24 @@ Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet
 
 ### 数据
 
-- Query: `useGroupAlbumsQuery(userId, groupId)`
-- Query: `useGroupPhotosQuery(userId, groupId, albumId)`
-- Mutation: `useCreateGroupAlbumMutation`
-- Mutation: `useUploadGroupPhotoMutation`
-- Mutation: `useDeleteGroupAlbumMutation`
-- Mutation: `useDeleteGroupPhotoMutation`
+需要新增/使用以下 hooks：
+
+- Query: `useGroupAlbumsQuery(userId, groupId)`（已存在）
+- Query: `useGroupPhotosQuery(userId, groupId, albumId)`（已存在）
+- Mutation: `useCreateGroupAlbumMutation`（已存在）
+- Mutation: `useUploadGroupPhotoMutation`（已存在）
+- Mutation: `useDeleteGroupAlbumMutation`（已存在）
+- Mutation: `useDeleteGroupPhotoMutation`（已存在）
 
 ## 群公告面板
 
-### 入口
+### 公告面板入口
 
 聊天窗口标题栏九宫格菜单 → 群公告 → 右侧 Sheet。
 
-### 布局
+### 公告面板布局
 
-```
+```text
 ┌──────────────────────────────────────┐
 │ 群公告                           [×] │
 ├──────────────────────────────────────┤
@@ -278,19 +308,21 @@ Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet
 
 ### 数据
 
-- Query: `useGroupAnnouncementsQuery(userId, groupId)`（需新增）
-- Mutation: `useUpsertGroupAnnouncementMutation`（需新增）
+需要新增以下 hooks：
+
+- Query: `useGroupAnnouncementsQuery(userId, groupId)`
+- Mutation: `useUpsertGroupAnnouncementMutation`
 
 ## 精华消息面板
 
-### 入口
+### 精华消息入口
 
 - 列表：聊天窗口标题栏九宫格菜单 → 精华消息 → 右侧 Sheet。
 - 设置/取消：聊天消息右键菜单增加「设为精华」/「取消精华」。
 
-### 布局
+### 精华消息布局
 
-```
+```text
 ┌──────────────────────────────────────┐
 │ 精华消息                         [×] │
 ├──────────────────────────────────────┤
@@ -310,8 +342,10 @@ Sheet 使用项目已有的 shadcn/ui `Sheet` 组件，保持与 `GroupInfoSheet
 
 ### 数据
 
-- Query: `useGroupEssenceMessagesQuery(userId, groupId)`（需新增）
-- Mutation: `useSetGroupEssenceMessageMutation`（需新增）
+需要新增以下 hooks：
+
+- Query: `useGroupEssenceMessagesQuery(userId, groupId)`
+- Mutation: `useSetGroupEssenceMessageMutation`
 
 ## 数据流与实时同步
 
@@ -333,23 +367,22 @@ GroupEssenceUpdated { essence_id, group_id, ... }
 
 ### 推送目标
 
-目前 `core.rs` 只把事件推到 `chat-{user_id}`。新增文件/相册窗口后，同一个用户可能同时打开：
+目前群内容事件通过 `emit_to_group_members` 发送到每个群成员的用户事件通道，聊天窗口的事件循环再将其推到 `chat-{user_id}`。新增文件/相册独立窗口后，同一个用户可能同时打开：
 
 - `chat-{user_id}`
 - `group-files-{user_id}-{group_id}`
 - `group-albums-{user_id}-{group_id}`
 
-需要在 `core.rs` 中把群内容事件同时推到这三个标签（如果窗口存在）。推荐新增一个 helper，使用项目已有的 `emit_to` 模式避免全局广播：
+`chat-{userId}` 已经由现有聊天窗口事件循环接收，因此新增 helper 只需补推独立窗口：
 
 ```rust
-fn emit_group_content_event(
+fn emit_group_content_to_windows(
     app: &tauri::AppHandle,
     user_id: &str,
     group_id: &str,
     event: &InternalEvent,
 ) {
     for label in [
-        format!("chat-{user_id}"),
         format!("group-files-{user_id}-{group_id}"),
         format!("group-albums-{user_id}-{group_id}"),
     ] {
@@ -358,10 +391,58 @@ fn emit_group_content_event(
 }
 ```
 
+调用位置：在 `src-tauri/src/services/group/content.rs` 中，每次调用 `emit_to_group_members` 广播群内容事件后，遍历群成员并对每个成员调用上述 helper，确保已打开的独立窗口也能收到事件。
+
+### Query 失效
+
+收到事件后，由 `handleQueryInvalidation` 统一失效对应 query。当前该函数只处理消息/好友/群成员等事件，**需要新增群内容事件的失效逻辑**：
+
+- `group_folder_upserted` / `group_file_upserted` / `group_file_deleted`
+  - 失效 `queryKeys.groups.files(userId, groupId, *)`
+  - 失效 `queryKeys.groups.folders(userId, groupId)`
+- `group_album_created` / `group_album_deleted`
+  - 失效 `queryKeys.groups.albums(userId, groupId)`
+- `group_photo_uploaded` / `group_photo_deleted`
+  - 失效 `queryKeys.groups.photos(userId, albumId)`
+  - 同时失效对应相册的 `queryKeys.groups.albums(userId, groupId)` 以更新封面/数量
+- `group_announcement_upserted`
+  - 失效 `queryKeys.groups.announcements(userId, groupId)`
+- `group_essence_updated`
+  - 失效 `queryKeys.groups.essence(userId, groupId)`
+
+**注意**：前端 `InternalEventPayload` 类型（`src/types/event.ts`）目前缺少 `group_file_deleted`、`group_album_created`、`group_album_deleted`、`group_photo_uploaded`、`group_photo_deleted` 等 kind，需要先扩展类型定义。
+
+为支持新功能，需要在 `src/lib/query/keys.ts` 增加/扩展以下 key：
+
+```ts
+groups: {
+  // 新增
+  folders: (userId: string, groupId: string) =>
+    ["groups", "folders", userId, groupId] as const,
+  announcements: (userId: string, groupId: string) =>
+    ["groups", "announcements", userId, groupId] as const,
+  essence: (userId: string, groupId: string) =>
+    ["groups", "essence", userId, groupId] as const,
+  // 现有
+  files: (userId: string, groupId: string, parentFolderId?: string) =>
+    ["groups", "files", userId, groupId, parentFolderId ?? "root"] as const,
+  albums: (userId: string, groupId: string) =>
+    ["groups", "albums", userId, groupId] as const,
+  photos: (userId: string, albumId: string) =>
+    ["groups", "photos", userId, albumId] as const,
+}
+```
+
+为支持按前缀失效（如某个群的所有文件、某个群的所有相册），现有 `files`、`albums`、`photos` key 的前缀已经固定，新增 key 也应遵循 `groups.{kind}.{userId}.{groupId}` 模式。
+
 ### 前端监听
 
-- 独立窗口里也挂载 `useChatEventBus(userId)`，事件到达后按类型失效对应 query。
-- Sheet 里的公告/精华面板直接复用 chat 窗口已有的 hook。
+- 独立窗口里也要挂载 `ChatEventBusProvider`，使 `handleQueryInvalidation` 和 `useChatEventBus` 生效。
+- 当前 `ChatEventBusProvider` 硬编码监听 `chat-{userId}`，需要改造为接受 `windowLabel` prop，默认仍为 `chat-{userId}`。例如：
+  - chat 窗口：`chat-{userId}`
+  - 文件窗口：`group-files-{userId}-{groupId}`
+  - 相册窗口：`group-albums-{userId}-{groupId}`
+- Sheet 里的公告/精华面板复用 chat 窗口已有的 provider。
 - 这样所有窗口/query 都能自动刷新，无需轮询。
 
 ## 错误处理
@@ -376,13 +457,13 @@ fn emit_group_content_event(
 
 ### 关键错误场景
 
-| 场景 | 处理 |
-|------|------|
-| 非管理员发公告 | 后端拒绝，前端 toast |
-| 删除他人文件 | 后端校验 uploader/role，拒绝 |
-| 下载文件不存在 | `NotFound` + toast |
-| 相册窗口已存在 | focus 已有窗口，不报错 |
-| 网络/磁盘错误 | `Storage` / `Internal` + toast |
+| 场景             | 处理                              |
+| ---------------- | --------------------------------- |
+| 非管理员发公告   | 后端拒绝，前端 toast              |
+| 删除他人文件     | 后端校验 uploader/role，拒绝      |
+| 下载文件不存在   | `NotFound` + toast                |
+| 相册窗口已存在   | focus 已有窗口，不报错            |
+| 网络/磁盘错误    | `Storage` / `Internal` + toast    |
 
 ## 测试策略
 
