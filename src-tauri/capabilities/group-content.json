@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "group-content",
+  "description": "Capability for group content windows",
+  "windows": ["group-files-*", "group-albums-*"],
+  "permissions": ["core:default"]
+}
