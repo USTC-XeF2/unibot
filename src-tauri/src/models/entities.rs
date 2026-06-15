@@ -312,6 +312,7 @@ pub struct GroupEssenceMessageEntity {
     pub sender_user_id: DbId,
     pub operator_user_id: DbId,
     pub is_set: bool,
+    pub content: Vec<MessageSegment>,
     pub created_at: u64,
 }
 

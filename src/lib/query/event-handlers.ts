@@ -100,7 +100,10 @@ export function handleQueryInvalidation(
     invalidateGroupAlbumsQuery(userId, payload.group_id);
   }
 
-  if (payload.kind === "group_announcement_upserted") {
+  if (
+    payload.kind === "group_announcement_upserted" ||
+    payload.kind === "group_announcement_deleted"
+  ) {
     invalidateGroupAnnouncementsQuery(userId, payload.group_id);
   }
 

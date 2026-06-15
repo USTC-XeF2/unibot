@@ -57,6 +57,21 @@ impl GroupRepo {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    pub async fn delete_announcement(
+        &self,
+        group_id: &str,
+        announcement_id: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "DELETE FROM group_announcements WHERE group_id = ?1 AND announcement_id = ?2",
+        )
+        .bind(group_id)
+        .bind(announcement_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
     pub async fn upsert_group_folder(&self, folder: &GroupFolderEntity) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -410,7 +425,15 @@ impl GroupRepo {
                     sender_user_id = excluded.sender_user_id,
                     operator_user_id = excluded.operator_user_id,
                     created_at = excluded.created_at
-                RETURNING essence_id AS id, group_id, message_id, sender_user_id, operator_user_id, 1 AS is_set, created_at
+                RETURNING
+                    essence_id AS id,
+                    group_id,
+                    message_id,
+                    sender_user_id,
+                    operator_user_id,
+                    1 AS is_set,
+                    created_at,
+                    (SELECT content_json FROM messages WHERE message_id = group_essence_messages.message_id) AS content_json
                 "#,
             )
             .bind(&id)
@@ -442,6 +465,7 @@ impl GroupRepo {
                 sender_user_id: sender_user_id.to_string(),
                 operator_user_id: operator_user_id.to_string(),
                 is_set: false,
+                content: Vec::new(),
                 created_at,
             })
         }
@@ -453,10 +477,19 @@ impl GroupRepo {
     ) -> Result<Vec<GroupEssenceMessageEntity>, sqlx::Error> {
         let rows = sqlx::query_as::<_, GroupEssenceRow>(
             r#"
-            SELECT essence_id AS id, group_id, message_id, sender_user_id, operator_user_id, 1 AS is_set, created_at
-            FROM group_essence_messages
-            WHERE group_id = ?1
-            ORDER BY created_at DESC
+            SELECT
+                e.essence_id AS id,
+                e.group_id,
+                e.message_id,
+                e.sender_user_id,
+                e.operator_user_id,
+                1 AS is_set,
+                e.created_at,
+                m.content_json
+            FROM group_essence_messages e
+            JOIN messages m ON m.message_id = e.message_id
+            WHERE e.group_id = ?1
+            ORDER BY e.created_at DESC
             "#,
         )
         .bind(group_id)

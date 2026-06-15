@@ -132,6 +132,7 @@ pub(super) struct GroupEssenceRow {
     pub operator_user_id: String,
     pub is_set: bool,
     pub created_at: u64,
+    pub content_json: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -332,6 +333,11 @@ impl TryFrom<GroupEssenceRow> for GroupEssenceMessageEntity {
     type Error = sqlx::Error;
 
     fn try_from(row: GroupEssenceRow) -> Result<Self, Self::Error> {
+        let content = row
+            .content_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
         Ok(Self {
             essence_id: row.id,
             group_id: row.group_id,
@@ -339,6 +345,7 @@ impl TryFrom<GroupEssenceRow> for GroupEssenceMessageEntity {
             sender_user_id: row.sender_user_id,
             operator_user_id: row.operator_user_id,
             is_set: row.is_set,
+            content,
             created_at: row.created_at,
         })
     }

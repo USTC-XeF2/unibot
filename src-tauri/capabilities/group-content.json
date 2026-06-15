@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "group-content",
-  "description": "Capability for group content windows",
+  "description": "Capability for group content windows. Currently grants core:default plus dialog:allow-open for basic file/photo selection. If future features need drag-and-drop save, clipboard image paste, or download-to-disk, add the corresponding permissions here.",
   "windows": ["group-files-*", "group-albums-*"],
   "permissions": ["core:default", "dialog:allow-open"]
 }

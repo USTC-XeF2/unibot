@@ -1145,6 +1145,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
                 <GroupEssencePanel
                   userId={currentUserId}
                   groupId={conversation.group_id}
+                  canManage={isAdminOrOwner}
                 />
               )}
             </SheetContent>

@@ -24,6 +24,22 @@ pub async fn upsert_group_announcement(
 }
 
 #[tauri::command]
+pub async fn delete_group_announcement(
+    app: tauri::AppHandle,
+    core: tauri::State<'_, CoreContainer>,
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    group_id: String,
+    announcement_id: String,
+) -> Result<(), String> {
+    services
+        .group
+        .delete_announcement(&app, &core, user_id, group_id, announcement_id)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
 pub async fn list_group_announcements(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
@@ -116,13 +132,22 @@ pub async fn upload_group_file(
     user_id: String,
     group_id: String,
     parent_folder_id: Option<String>,
-    file_name: String,
+    file_name: Option<String>,
     source_path: String,
 ) -> Result<GroupFileEntity, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
+    let file_name = file_name
+        .filter(|name| !name.trim().is_empty())
+        .or_else(|| {
+            std::path::Path::new(&source_path)
+                .file_name()
+                .and_then(|name| name.to_str().map(String::from))
+        })
+        .unwrap_or_else(|| "upload".to_string());
 
     services
         .group

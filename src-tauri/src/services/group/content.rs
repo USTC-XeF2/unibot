@@ -84,6 +84,38 @@ impl GroupService {
             .map_err(Into::into)
     }
 
+    pub async fn delete_announcement(
+        &self,
+        app: &tauri::AppHandle,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        announcement_id: String,
+    ) -> AppResult<()> {
+        core.require_user_context(&user_id)?;
+
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
+        if matches!(operator.role, GroupRole::Member) {
+            return Err(AppError::validation(
+                "only owner/admin can delete group announcements",
+            ));
+        }
+
+        self.repo
+            .delete_announcement(&group_id, &announcement_id)
+            .await?;
+
+        let event = InternalEvent::GroupAnnouncementDeleted {
+            announcement_id: announcement_id.clone(),
+            group_id: group_id.clone(),
+            time: now_ts(),
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
+
+        Ok(())
+    }
+
     pub async fn upsert_group_folder(
         &self,
         app: &tauri::AppHandle,

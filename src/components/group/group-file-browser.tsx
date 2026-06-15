@@ -17,6 +17,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatBytes } from "@/lib/format";
+import { confirmDialog } from "@/lib/modal";
 import {
   useDeleteGroupFileMutation,
   useDownloadGroupFileMutation,
@@ -83,13 +85,10 @@ export default function GroupFileBrowser({
     });
     if (!selected || Array.isArray(selected)) return;
 
-    const fileName =
-      selected.split("/").pop() || selected.split("\\").pop() || "upload";
     await uploadMutation.mutateAsync({
       userId,
       groupId,
       parentFolderId,
-      fileName,
       sourcePath: selected,
     });
   };
@@ -233,14 +232,21 @@ export default function GroupFileBrowser({
                 key={file.file_id}
                 file={file}
                 onDownload={() => handleDownload(file)}
-                onDelete={() =>
+                onDelete={async () => {
+                  const confirmed = await confirmDialog({
+                    title: "确认删除文件",
+                    description: `确定要删除文件 "${file.file_name}" 吗？此操作不可恢复。`,
+                    confirmText: "删除",
+                  });
+                  if (!confirmed) return;
+
                   deleteFileMutation.mutate({
                     userId,
                     groupId,
                     fileId: file.file_id,
                     parentFolderId: parentFolderId ?? "",
-                  })
-                }
+                  });
+                }}
               />
             ))}
           </tbody>
@@ -262,7 +268,7 @@ function GroupFileRow({
 }: {
   file: GroupFile;
   onDownload: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void> | void;
 }) {
   return (
     <tr className="border-b hover:bg-muted/50">
@@ -301,12 +307,4 @@ function GroupFileRow({
       </td>
     </tr>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 }

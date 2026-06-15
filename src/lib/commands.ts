@@ -97,6 +97,7 @@ export const COMMANDS = {
   // group content: announcement / essence
   listGroupAnnouncements: "list_group_announcements",
   upsertGroupAnnouncement: "upsert_group_announcement",
+  deleteGroupAnnouncement: "delete_group_announcement",
   listGroupEssenceMessages: "list_group_essence_messages",
   setGroupEssenceMessage: "set_group_essence_message",
 

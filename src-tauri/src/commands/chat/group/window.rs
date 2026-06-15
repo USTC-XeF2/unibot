@@ -1,6 +1,5 @@
 use tauri::Manager;
 
-use crate::core::CoreContainer;
 use crate::error::AppResult;
 use crate::services::ServiceHub;
 
@@ -26,26 +25,16 @@ fn ensure_or_focus_window(app: tauri::AppHandle, label: &str) -> AppResult<bool>
     Ok(true)
 }
 
-async fn resolve_group_name(
-    services: &ServiceHub,
-    core: &CoreContainer,
-    user_id: &str,
-    group_id: &str,
-) -> AppResult<String> {
-    let groups = services
-        .group
-        .list_user_groups(core, user_id.to_string())
-        .await?;
-    Ok(groups
-        .into_iter()
-        .find(|g| g.group_id == group_id)
-        .map(|g| g.group_name)
-        .unwrap_or_else(|| group_id.to_string()))
+async fn resolve_group_name(services: &ServiceHub, group_id: &str) -> AppResult<String> {
+    services.group.get_group(group_id).await.map(|group| {
+        group
+            .map(|g| g.group_name)
+            .unwrap_or_else(|| group_id.to_string())
+    })
 }
 
 async fn open_group_files_window_impl(
     app: tauri::AppHandle,
-    core: &CoreContainer,
     services: &ServiceHub,
     user_id: String,
     group_id: String,
@@ -55,7 +44,7 @@ async fn open_group_files_window_impl(
         return Ok(false);
     }
 
-    let group_name = resolve_group_name(services, core, &user_id, &group_id).await?;
+    let group_name = resolve_group_name(services, &group_id).await?;
     let title = format!("群文件 · {}", group_name);
 
     let url = tauri::WebviewUrl::App(
@@ -74,7 +63,6 @@ async fn open_group_files_window_impl(
 
 async fn open_group_albums_window_impl(
     app: tauri::AppHandle,
-    core: &CoreContainer,
     services: &ServiceHub,
     user_id: String,
     group_id: String,
@@ -84,7 +72,7 @@ async fn open_group_albums_window_impl(
         return Ok(false);
     }
 
-    let group_name = resolve_group_name(services, core, &user_id, &group_id).await?;
+    let group_name = resolve_group_name(services, &group_id).await?;
     let title = format!("群相册 · {}", group_name);
 
     let url = tauri::WebviewUrl::App(
@@ -104,12 +92,11 @@ async fn open_group_albums_window_impl(
 #[tauri::command]
 pub async fn open_group_files_window(
     app: tauri::AppHandle,
-    core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
 ) -> Result<bool, String> {
-    open_group_files_window_impl(app, &core, &services, user_id, group_id)
+    open_group_files_window_impl(app, &services, user_id, group_id)
         .await
         .into_command_result()
 }
@@ -117,12 +104,11 @@ pub async fn open_group_files_window(
 #[tauri::command]
 pub async fn open_group_albums_window(
     app: tauri::AppHandle,
-    core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
 ) -> Result<bool, String> {
-    open_group_albums_window_impl(app, &core, &services, user_id, group_id)
+    open_group_albums_window_impl(app, &services, user_id, group_id)
         .await
         .into_command_result()
 }

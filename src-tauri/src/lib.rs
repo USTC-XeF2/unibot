@@ -299,6 +299,7 @@ pub fn run() {
             group::leave_group,
             group::dissolve_group,
             group::upsert_group_announcement,
+            group::delete_group_announcement,
             group::list_group_announcements,
             group::upsert_group_folder,
             group::list_group_folders,

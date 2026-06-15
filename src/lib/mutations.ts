@@ -544,14 +544,14 @@ export function useUploadGroupFileMutation() {
       userId: string;
       groupId: string;
       parentFolderId?: string;
-      fileName: string;
+      fileName?: string;
       sourcePath: string;
     }) =>
       invoke(COMMANDS.uploadGroupFile, {
         userId,
         groupId,
         parentFolderId: parentFolderId ?? null,
-        fileName,
+        fileName: fileName ?? null,
         sourcePath,
       }),
     onSuccess: (_, variables) =>
@@ -708,8 +708,30 @@ export function useUpsertGroupFolderMutation() {
     onSuccess: (_, variables) => {
       invalidateGroupFoldersQuery(variables.userId, variables.groupId);
     },
+    onError: (error, variables) => {
+      const action = variables.folderId ? "重命名文件夹" : "创建文件夹";
+      toast.error(`${action}失败：${error}`);
+    },
+  });
+}
+
+export function useDeleteGroupAnnouncementMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      announcementId: string;
+    }) =>
+      invoke(COMMANDS.deleteGroupAnnouncement, {
+        userId: params.userId,
+        groupId: params.groupId,
+        announcementId: params.announcementId,
+      }),
+    onSuccess: (_, params) => {
+      invalidateGroupAnnouncementsQuery(params.userId, params.groupId);
+    },
     onError: (error) => {
-      toast.error(`创建文件夹失败：${error}`);
+      toast.error(`删除公告失败：${error}`);
     },
   });
 }
@@ -739,8 +761,9 @@ export function useUpsertGroupAnnouncementMutation() {
     onSuccess: (_, variables) => {
       invalidateGroupAnnouncementsQuery(variables.userId, variables.groupId);
     },
-    onError: (error) => {
-      toast.error(`发布公告失败：${error}`);
+    onError: (error, variables) => {
+      const action = variables.announcementId ? "编辑公告" : "发布公告";
+      toast.error(`${action}失败：${error}`);
     },
   });
 }

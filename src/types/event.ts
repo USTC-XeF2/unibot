@@ -139,6 +139,12 @@ export type InternalEventPayload =
       time: number;
     }
   | {
+      kind: "group_announcement_deleted";
+      announcement_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
       kind: "group_folder_upserted";
       folder_id: string;
       group_id: string;

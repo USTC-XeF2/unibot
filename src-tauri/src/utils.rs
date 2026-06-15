@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use tauri::Emitter;
+
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{DevToolsEvent, InternalEvent, MessageSource};
@@ -82,7 +84,6 @@ pub async fn recipients_for_source(
     recipients.retain(|user_id| core.user_context(user_id).is_some());
     recipients
 }
-use tauri::Emitter;
 
 fn emit_group_content_to_user_window(
     app: &tauri::AppHandle,

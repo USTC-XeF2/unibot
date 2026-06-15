@@ -16,12 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { confirmDialog } from "@/lib/modal";
 import {
   useCreateGroupAlbumMutation,
   useDeleteGroupAlbumMutation,
@@ -102,13 +97,20 @@ function AlbumGrid({
               key={album.album_id}
               album={album}
               onClick={() => onSelectAlbum(album.album_id)}
-              onDelete={() =>
+              onDelete={async () => {
+                const confirmed = await confirmDialog({
+                  title: "确认删除相册",
+                  description: `确定要删除相册 "${album.name}" 吗？其中的 ${album.photo_count} 张照片也会被删除，此操作不可恢复。`,
+                  confirmText: "删除",
+                });
+                if (!confirmed) return;
+
                 deleteAlbumMutation.mutate({
                   userId,
                   groupId,
                   albumId: album.album_id,
-                })
-              }
+                });
+              }}
             />
           ))}
         </div>
@@ -128,7 +130,7 @@ function AlbumCard({
 }: {
   album: GroupAlbum;
   onClick: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void> | void;
 }) {
   return (
     <div className="group relative overflow-hidden rounded-xl border hover:shadow-sm">
@@ -140,7 +142,7 @@ function AlbumCard({
         <div className="flex aspect-square items-center justify-center bg-muted">
           {album.cover_url ? (
             <img
-              src={album.cover_url}
+              src={convertFileSrc(album.cover_url)}
               alt={album.name}
               className="size-full object-cover"
             />
@@ -155,20 +157,17 @@ function AlbumCard({
           </div>
         </div>
       </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100"
-          >
-            <Trash2 className="size-4 text-destructive" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem onClick={onDelete}>删除相册</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
+        <Trash2 className="size-4 text-destructive" />
+      </Button>
     </div>
   );
 }
@@ -196,6 +195,12 @@ function PhotoGrid({
     const selected = await open({
       multiple: false,
       directory: false,
+      filters: [
+        {
+          name: "图片",
+          extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp"],
+        },
+      ],
     });
     if (!selected || Array.isArray(selected)) return;
 
@@ -234,14 +239,21 @@ function PhotoGrid({
             <PhotoItem
               key={photo.photo_id}
               photo={photo}
-              onDelete={() =>
+              onDelete={async () => {
+                const confirmed = await confirmDialog({
+                  title: "确认删除照片",
+                  description: "确定要删除这张照片吗？此操作不可恢复。",
+                  confirmText: "删除",
+                });
+                if (!confirmed) return;
+
                 deletePhotoMutation.mutate({
                   userId,
                   groupId,
                   albumId,
                   photoId: photo.photo_id,
-                })
-              }
+                });
+              }}
             />
           ))}
         </div>
@@ -259,7 +271,7 @@ function PhotoItem({
   onDelete,
 }: {
   photo: GroupPhoto;
-  onDelete: () => void;
+  onDelete: () => Promise<void> | void;
 }) {
   const src = photo.url ? convertFileSrc(photo.url) : "";
 
