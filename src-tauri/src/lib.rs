@@ -312,7 +312,6 @@ pub fn run() {
             group::upsert_group_folder,
             group::list_group_folders,
             group::delete_group_folder,
-            group::upsert_group_file,
             group::list_group_files,
             group::upload_group_file,
             group::download_group_file,
@@ -462,6 +461,16 @@ mod command_contract_tests {
         assert!(
             missing.is_empty(),
             "raw invoke strings not present in COMMANDS: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn unsafe_entity_upsert_commands_are_not_registered() {
+        let backend = backend_registered_commands();
+
+        assert!(
+            !backend.contains("upsert_group_file"),
+            "upsert_group_file accepts a full entity with server-owned file metadata and must not be exposed as a Tauri command"
         );
     }
 }

@@ -120,8 +120,14 @@ impl GroupService {
         }
 
         self.repo
-            .delete_announcement(&group_id, &announcement_id)
-            .await?;
+            .delete_announcement_or_not_found(&group_id, &announcement_id)
+            .await
+            .map_err(|err| match err {
+                sqlx::Error::RowNotFound => {
+                    AppError::not_found(format!("announcement {} not found", announcement_id))
+                }
+                err => err.into(),
+            })?;
 
         let event = InternalEvent::GroupAnnouncementDeleted {
             announcement_id: announcement_id.clone(),
@@ -134,6 +140,47 @@ impl GroupService {
         Ok(())
     }
 
+    pub async fn validate_group_folder_upsert(
+        &self,
+        core: &CoreContainer,
+        folder: &GroupFolderEntity,
+    ) -> AppResult<()> {
+        core.require_user_context(&folder.creator_user_id)?;
+
+        let operator = self
+            .ensure_group_member(&folder.group_id, &folder.creator_user_id)
+            .await?;
+
+        if let Some(parent_folder_id) = folder.parent_folder_id.as_deref() {
+            let parent = self
+                .repo
+                .get_group_folder_by_id(parent_folder_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::not_found(format!("folder {} not found", parent_folder_id))
+                })?;
+            ensure_parent_folder_belongs_to_group(&parent, &folder.group_id)?;
+        }
+
+        if let Some(existing) = self.repo.get_group_folder_by_id(&folder.folder_id).await? {
+            if existing.group_id != folder.group_id {
+                return Err(AppError::validation(
+                    "folder does not belong to the target group",
+                ));
+            }
+
+            if existing.creator_user_id != folder.creator_user_id
+                && !matches!(operator.role, GroupRole::Owner | GroupRole::Admin)
+            {
+                return Err(AppError::validation(
+                    "only owner/admin or creator can update folder",
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn upsert_group_folder(
         &self,
         app: &tauri::AppHandle,
@@ -142,10 +189,7 @@ impl GroupService {
     ) -> AppResult<GroupFolderEntity> {
         let folder = prepare_folder_for_upsert(folder);
 
-        core.require_user_context(&folder.creator_user_id)?;
-
-        self.ensure_group_member(&folder.group_id, &folder.creator_user_id)
-            .await?;
+        self.validate_group_folder_upsert(core, &folder).await?;
 
         self.repo.upsert_group_folder(&folder).await?;
 
@@ -218,31 +262,6 @@ impl GroupService {
         emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
         Ok(())
-    }
-
-    pub async fn upsert_group_file(
-        &self,
-        app: &tauri::AppHandle,
-        core: &CoreContainer,
-        file: GroupFileEntity,
-    ) -> AppResult<GroupFileEntity> {
-        core.require_user_context(&file.uploader_user_id)?;
-
-        self.ensure_group_member(&file.group_id, &file.uploader_user_id)
-            .await?;
-
-        self.repo.upsert_group_file(&file).await?;
-
-        let event = InternalEvent::GroupFileUpserted {
-            file_id: file.file_id.clone(),
-            group_id: file.group_id.clone(),
-            uploader_user_id: file.uploader_user_id.clone(),
-            time: file.uploaded_at,
-        };
-        emit_to_group_members(core, &self.repo, &file.group_id, event.clone()).await?;
-        emit_group_content_to_windows(app, &self.repo, &file.group_id, &event).await?;
-
-        Ok(file)
     }
 
     pub async fn list_group_files(
@@ -420,7 +439,18 @@ impl GroupService {
             file_path: Some(file_path),
         };
 
-        self.upsert_group_file(app, core, file).await
+        self.repo.upsert_group_file(&file).await?;
+
+        let event = InternalEvent::GroupFileUpserted {
+            file_id: file.file_id.clone(),
+            group_id: file.group_id.clone(),
+            uploader_user_id: file.uploader_user_id.clone(),
+            time: file.uploaded_at,
+        };
+        emit_to_group_members(core, &self.repo, &file.group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &self.repo, &file.group_id, &event).await?;
+
+        Ok(file)
     }
 
     pub async fn delete_group_file(
@@ -706,7 +736,9 @@ impl GroupService {
             storage::delete_group_file_disk(file_path, &app_data_dir).await?;
         }
 
-        self.repo.delete_group_photo(&photo_id).await?;
+        self.repo
+            .delete_group_photo_and_refresh_cover(&photo_id, &group_id)
+            .await?;
 
         let event = InternalEvent::GroupPhotoDeleted {
             photo_id: photo_id.clone(),

@@ -150,20 +150,6 @@ pub async fn delete_group_folder(
 }
 
 #[tauri::command]
-pub async fn upsert_group_file(
-    app: tauri::AppHandle,
-    core: tauri::State<'_, CoreContainer>,
-    services: tauri::State<'_, ServiceHub>,
-    input: GroupFileEntity,
-) -> Result<GroupFileEntity, String> {
-    services
-        .group
-        .upsert_group_file(&app, &core, input)
-        .await
-        .into_command_result()
-}
-
-#[tauri::command]
 pub async fn list_group_files(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
