@@ -17,9 +17,9 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::error::AppResult;
 use crate::models::InternalEvent;
 use crate::persistence::BotRepo;
-use crate::protocol::PacketRecorder;
 use crate::protocol::backend::ProtocolBackend;
 use crate::protocol::types::{ApiRequest, ApiResponse, BotRuntimeContext, ProtocolAdapter};
+use crate::protocol::{EventRecord, PacketRecorder};
 
 /// Server state shared across all request handlers.
 #[derive(Clone)]
@@ -129,12 +129,14 @@ async fn event_handler(
                             };
                             let _ = recorder_bg
                                 .record_event(
-                                    &bot_id_bg,
-                                    Some(&profile_id_bg),
-                                    Some(&session_id_bg),
-                                    &event_type_bg,
-                                    Some("message"),
-                                    None,
+                                    EventRecord {
+                                        bot_id: &bot_id_bg,
+                                        profile_id: Some(&profile_id_bg),
+                                        session_id: Some(&session_id_bg),
+                                        event_type: &event_type_bg,
+                                        related_object_type: Some("message"),
+                                        related_object_id: None,
+                                    },
                                     &event_data_bg,
                                 )
                                 .await;

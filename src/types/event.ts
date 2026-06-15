@@ -117,6 +117,13 @@ export type InternalEventPayload =
       time: number;
     }
   | {
+      kind: "group_member_left";
+      group_id: string;
+      operator_user_id: string | null;
+      target_user_id: string;
+      time: number;
+    }
+  | {
       kind: "group_member_title_updated";
       group_id: string;
       operator_user_id: string;

@@ -1,4 +1,5 @@
 import { type Event, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createContext,
   type ReactNode,
@@ -20,6 +21,27 @@ type ChatEventBusContextValue = {
 const ChatEventBusContext = createContext<ChatEventBusContextValue | null>(
   null,
 );
+
+/**
+ * 当目标用户被移出/离开群（或群解散）时，独立的群文件/相册窗口必须关闭，
+ * 防止已被撤销访问的用户继续操作缓存数据。主聊天窗口（`chat-*`）不受影响。
+ */
+function shouldCloseWindowOnMemberLeft(
+  windowLabel: string,
+  userId: string,
+  payload: InternalEventPayload,
+): boolean {
+  if (
+    payload.kind !== "group_member_left" ||
+    payload.target_user_id !== userId
+  ) {
+    return false;
+  }
+  return (
+    windowLabel === `group-files-${userId}-${payload.group_id}` ||
+    windowLabel === `group-albums-${userId}-${payload.group_id}`
+  );
+}
 
 // Tauri's event listener may be called before `window.__TAURI_INTERNALS__`
 // is injected in a freshly opened webview. Retry on the specific "Tauri
@@ -100,6 +122,16 @@ export function ChatEventBusProvider({
         handleQueryInvalidation(userId, payload);
         for (const subscriber of subscribersRef.current) {
           subscriber(payload);
+        }
+        if (shouldCloseWindowOnMemberLeft(label, userId, payload)) {
+          void getCurrentWindow()
+            .close()
+            .catch((error) => {
+              console.error(
+                `[event-bus] failed to close revoked window ${label}:`,
+                error,
+              );
+            });
         }
       },
       {

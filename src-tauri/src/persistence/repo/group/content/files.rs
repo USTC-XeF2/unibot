@@ -96,4 +96,17 @@ impl GroupRepo {
             .await?;
         Ok(result.rows_affected() > 0)
     }
+
+    pub async fn increment_group_file_download_count(
+        &self,
+        file_id: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE group_files SET download_count = download_count + 1 WHERE file_id = ?1",
+        )
+        .bind(file_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
 }

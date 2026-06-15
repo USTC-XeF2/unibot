@@ -1,4 +1,4 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   Download,
   File,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { GroupContentError } from "@/components/group/group-content-error";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -51,11 +52,12 @@ export default function GroupFileBrowser({
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
 
-  const { data: files = [], refetch: refetchFiles } = useGroupFilesQuery(
-    userId,
-    groupId,
-    parentFolderId,
-  );
+  const {
+    data: files = [],
+    isError: filesError,
+    error: filesErrorValue,
+    refetch: refetchFiles,
+  } = useGroupFilesQuery(userId, groupId, parentFolderId);
   const { data: folders = [], refetch: refetchFolders } = useGroupFoldersQuery(
     userId,
     groupId,
@@ -126,21 +128,35 @@ export default function GroupFileBrowser({
     });
     if (!selected || Array.isArray(selected)) return;
 
-    await uploadMutation.mutateAsync({
-      userId,
-      groupId,
-      parentFolderId,
-      sourcePath: selected,
-    });
+    try {
+      await uploadMutation.mutateAsync({
+        userId,
+        groupId,
+        parentFolderId,
+        sourcePath: selected,
+      });
+    } catch {
+      // Toast is owned by the mutation's onError handler.
+    }
   };
 
   const handleDownload = async (file: GroupFile) => {
-    const path = await downloadMutation.mutateAsync({
-      userId,
-      groupId,
-      fileId: file.file_id,
+    const destinationPath = await save({
+      defaultPath: file.file_name,
     });
-    toast.success(`文件已下载: ${path}`);
+    if (!destinationPath) return;
+
+    try {
+      const path = await downloadMutation.mutateAsync({
+        userId,
+        groupId,
+        fileId: file.file_id,
+        destinationPath,
+      });
+      toast.success(`文件已下载: ${path}`);
+    } catch {
+      // Toast is owned by the mutation's onError handler.
+    }
   };
 
   const handleCreateFolder = () => {
@@ -242,62 +258,69 @@ export default function GroupFileBrowser({
 
       {/* 列表 */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
-            <tr>
-              <th className="w-10 px-4 py-2 text-left">
-                <input type="checkbox" disabled />
-              </th>
-              <th className="px-4 py-2 text-left">名称</th>
-              <th className="px-4 py-2 text-left">大小</th>
-              <th className="px-4 py-2 text-left">修改人</th>
-              <th className="px-4 py-2 text-left">修改时间</th>
-              <th className="px-4 py-2 text-left">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {creatingFolder && (
-              <NewFolderRow
-                onCommit={handleCommitNewFolder}
-                onCancel={() => setCreatingFolder(false)}
-              />
-            )}
-            {currentFolders.map((folder) => (
-              <GroupFolderRow
-                key={folder.folder_id}
-                folder={folder}
-                isEditing={editingFolderId === folder.folder_id}
-                onEnter={() => handleEnterFolder(folder)}
-                onStartRename={() => setEditingFolderId(folder.folder_id)}
-                onCommitRename={(name) => handleRenameFolder(folder, name)}
-                onCancelRename={() => setEditingFolderId(null)}
-                onDelete={() => handleDeleteFolder(folder)}
-              />
-            ))}
-            {files.map((file) => (
-              <GroupFileRow
-                key={file.file_id}
-                file={file}
-                onDownload={() => handleDownload(file)}
-                onDelete={async () => {
-                  const confirmed = await confirmDialog({
-                    title: "确认删除文件",
-                    description: `确定要删除文件 "${file.file_name}" 吗？此操作不可恢复。`,
-                    confirmText: "删除",
-                  });
-                  if (!confirmed) return;
+        {filesError ? (
+          <GroupContentError
+            message={`加载群文件失败：${filesErrorValue}`}
+            onRetry={() => refetchFiles()}
+          />
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="w-10 px-4 py-2 text-left">
+                  <input type="checkbox" disabled />
+                </th>
+                <th className="px-4 py-2 text-left">名称</th>
+                <th className="px-4 py-2 text-left">大小</th>
+                <th className="px-4 py-2 text-left">修改人</th>
+                <th className="px-4 py-2 text-left">修改时间</th>
+                <th className="px-4 py-2 text-left">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {creatingFolder && (
+                <NewFolderRow
+                  onCommit={handleCommitNewFolder}
+                  onCancel={() => setCreatingFolder(false)}
+                />
+              )}
+              {currentFolders.map((folder) => (
+                <GroupFolderRow
+                  key={folder.folder_id}
+                  folder={folder}
+                  isEditing={editingFolderId === folder.folder_id}
+                  onEnter={() => handleEnterFolder(folder)}
+                  onStartRename={() => setEditingFolderId(folder.folder_id)}
+                  onCommitRename={(name) => handleRenameFolder(folder, name)}
+                  onCancelRename={() => setEditingFolderId(null)}
+                  onDelete={() => handleDeleteFolder(folder)}
+                />
+              ))}
+              {files.map((file) => (
+                <GroupFileRow
+                  key={file.file_id}
+                  file={file}
+                  onDownload={() => handleDownload(file)}
+                  onDelete={async () => {
+                    const confirmed = await confirmDialog({
+                      title: "确认删除文件",
+                      description: `确定要删除文件 "${file.file_name}" 吗？此操作不可恢复。`,
+                      confirmText: "删除",
+                    });
+                    if (!confirmed) return;
 
-                  deleteFileMutation.mutate({
-                    userId,
-                    groupId,
-                    fileId: file.file_id,
-                    parentFolderId,
-                  });
-                }}
-              />
-            ))}
-          </tbody>
-        </table>
+                    deleteFileMutation.mutate({
+                      userId,
+                      groupId,
+                      fileId: file.file_id,
+                      parentFolderId,
+                    });
+                  }}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* 底部状态栏 */}

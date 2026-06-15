@@ -7,6 +7,6 @@ pub mod server;
 pub mod tests;
 pub mod types;
 
-pub use recorder::PacketRecorder;
+pub use recorder::{EventRecord, PacketRecorder};
 pub use runtime::ProtocolRuntimeManager;
 pub use types::*;

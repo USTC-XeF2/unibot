@@ -65,6 +65,7 @@ mod group_essence;
 mod group_events;
 mod group_files;
 mod group_folders;
+mod group_membership;
 mod group_requests;
 mod interactions;
 mod smoke;

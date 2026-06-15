@@ -15,6 +15,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 // Mock Tauri dialog plugin.
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
+  save: vi.fn(),
 }));
 
 // jsdom does not implement matchMedia, but sonner and other components use it.

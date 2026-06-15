@@ -38,12 +38,22 @@ impl GroupService {
             .remove_group_member(&group_id, &target_user_id)
             .await?;
 
+        let event_time = now_ts();
+        let member_left = InternalEvent::GroupMemberLeft {
+            group_id: group_id.clone(),
+            operator_user_id: Some(user_id.clone()),
+            target_user_id: target_user_id.clone(),
+            time: event_time,
+        };
+        emit_to_group_members(core, &self.repo, &group_id, member_left.clone()).await?;
+        emit_to_users(core, [&target_user_id], member_left);
+
         let event = InternalEvent::Notice {
             group_id: group_id.clone(),
             actor: user_id.clone(),
             target: target_user_id.clone(),
             notice_type: NoticeType::Kick,
-            time: now_ts(),
+            time: event_time,
         };
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
         emit_to_users(core, [&target_user_id], event);
@@ -175,6 +185,15 @@ impl GroupService {
 
         self.repo.remove_group_member(&group_id, &user_id).await?;
 
+        let event = InternalEvent::GroupMemberLeft {
+            group_id: group_id.clone(),
+            operator_user_id: None,
+            target_user_id: user_id.clone(),
+            time: now_ts(),
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_to_users(core, [&user_id], event);
+
         Ok(())
     }
 
@@ -196,9 +215,22 @@ impl GroupService {
             return Err(AppError::validation("only owner can dissolve group"));
         }
 
+        let members = self.repo.list_group_members(&group_id).await?;
+
         let deleted = self.repo.delete_group(&group_id).await?;
         if !deleted {
             return Err(AppError::not_found(format!("group {} not found", group_id)));
+        }
+
+        let event_time = now_ts();
+        for member in &members {
+            let event = InternalEvent::GroupMemberLeft {
+                group_id: group_id.clone(),
+                operator_user_id: Some(user_id.clone()),
+                target_user_id: member.user_id.clone(),
+                time: event_time,
+            };
+            emit_to_users(core, [&member.user_id], event);
         }
 
         tracing::info!(

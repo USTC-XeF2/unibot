@@ -9,6 +9,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useState } from "react";
+import { GroupContentError } from "@/components/group/group-content-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,7 +65,12 @@ function AlbumGrid({
   groupId: string;
   onSelectAlbum: (albumId: string) => void;
 }) {
-  const { data: albums = [], refetch } = useGroupAlbumsQuery(userId, groupId);
+  const {
+    data: albums = [],
+    isError: albumsError,
+    error: albumsErrorValue,
+    refetch,
+  } = useGroupAlbumsQuery(userId, groupId);
   const createAlbumMutation = useCreateGroupAlbumMutation();
   const deleteAlbumMutation = useDeleteGroupAlbumMutation();
 
@@ -91,29 +97,36 @@ function AlbumGrid({
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        <div className="grid grid-cols-3 gap-4">
-          {albums.map((album) => (
-            <AlbumCard
-              key={album.album_id}
-              album={album}
-              onClick={() => onSelectAlbum(album.album_id)}
-              onDelete={async () => {
-                const confirmed = await confirmDialog({
-                  title: "确认删除相册",
-                  description: `确定要删除相册 "${album.name}" 吗？其中的 ${album.photo_count} 张照片也会被删除，此操作不可恢复。`,
-                  confirmText: "删除",
-                });
-                if (!confirmed) return;
+        {albumsError ? (
+          <GroupContentError
+            message={`加载相册失败：${albumsErrorValue}`}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            {albums.map((album) => (
+              <AlbumCard
+                key={album.album_id}
+                album={album}
+                onClick={() => onSelectAlbum(album.album_id)}
+                onDelete={async () => {
+                  const confirmed = await confirmDialog({
+                    title: "确认删除相册",
+                    description: `确定要删除相册 "${album.name}" 吗？其中的 ${album.photo_count} 张照片也会被删除，此操作不可恢复。`,
+                    confirmText: "删除",
+                  });
+                  if (!confirmed) return;
 
-                deleteAlbumMutation.mutate({
-                  userId,
-                  groupId,
-                  albumId: album.album_id,
-                });
-              }}
-            />
-          ))}
-        </div>
+                  deleteAlbumMutation.mutate({
+                    userId,
+                    groupId,
+                    albumId: album.album_id,
+                  });
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border-t bg-muted/30 px-4 py-2 text-muted-foreground text-xs">
@@ -183,11 +196,12 @@ function PhotoGrid({
   albumId: string;
   onBack: () => void;
 }) {
-  const { data: photos = [], refetch } = useGroupPhotosQuery(
-    userId,
-    groupId,
-    albumId,
-  );
+  const {
+    data: photos = [],
+    isError: photosError,
+    error: photosErrorValue,
+    refetch,
+  } = useGroupPhotosQuery(userId, groupId, albumId);
   const uploadMutation = useUploadGroupPhotoMutation();
   const deletePhotoMutation = useDeleteGroupPhotoMutation();
 
@@ -204,12 +218,16 @@ function PhotoGrid({
     });
     if (!selected || Array.isArray(selected)) return;
 
-    await uploadMutation.mutateAsync({
-      userId,
-      groupId,
-      albumId,
-      sourcePath: selected,
-    });
+    try {
+      await uploadMutation.mutateAsync({
+        userId,
+        groupId,
+        albumId,
+        sourcePath: selected,
+      });
+    } catch {
+      // Toast is owned by the mutation's onError handler.
+    }
   };
 
   return (
@@ -234,29 +252,36 @@ function PhotoGrid({
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        <div className="grid grid-cols-4 gap-2">
-          {photos.map((photo) => (
-            <PhotoItem
-              key={photo.photo_id}
-              photo={photo}
-              onDelete={async () => {
-                const confirmed = await confirmDialog({
-                  title: "确认删除照片",
-                  description: "确定要删除这张照片吗？此操作不可恢复。",
-                  confirmText: "删除",
-                });
-                if (!confirmed) return;
+        {photosError ? (
+          <GroupContentError
+            message={`加载照片失败：${photosErrorValue}`}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <div className="grid grid-cols-4 gap-2">
+            {photos.map((photo) => (
+              <PhotoItem
+                key={photo.photo_id}
+                photo={photo}
+                onDelete={async () => {
+                  const confirmed = await confirmDialog({
+                    title: "确认删除照片",
+                    description: "确定要删除这张照片吗？此操作不可恢复。",
+                    confirmText: "删除",
+                  });
+                  if (!confirmed) return;
 
-                deletePhotoMutation.mutate({
-                  userId,
-                  groupId,
-                  albumId,
-                  photoId: photo.photo_id,
-                });
-              }}
-            />
-          ))}
-        </div>
+                  deletePhotoMutation.mutate({
+                    userId,
+                    groupId,
+                    albumId,
+                    photoId: photo.photo_id,
+                  });
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border-t bg-muted/30 px-4 py-2 text-muted-foreground text-xs">

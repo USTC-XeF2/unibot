@@ -5,10 +5,10 @@ use tauri::Manager;
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupFileEntity,
-    GroupFolderEntity, GroupPhotoEntity,
+    EssenceUpdate, GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity,
+    GroupFileEntity, GroupFolderEntity, GroupPhotoEntity,
 };
-use crate::services::ServiceHub;
+use crate::services::{ServiceHub, UploadGroupFileInput, UploadGroupPhotoInput};
 
 use super::super::super::IntoCommandResult;
 
@@ -170,36 +170,45 @@ pub async fn set_group_essence_message(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
-    message_id: String,
-    is_set: bool,
+    update: EssenceUpdate,
 ) -> Result<GroupEssenceMessageEntity, String> {
     services
         .group
-        .set_group_essence_message(&app, &core, user_id, group_id, message_id, is_set)
+        .set_group_essence_message(&app, &core, user_id, group_id, update)
         .await
         .into_command_result()
 }
 
+/// Wire request for [`upload_group_file`]. Nested under a single `input`
+/// object so the command stays within a readable argument count; the command
+/// resolves `app_data_dir` and the file-name fallback before handing a
+/// [`UploadGroupFileInput`] to the service.
+#[derive(serde::Deserialize)]
+pub struct UploadGroupFileRequest {
+    pub user_id: String,
+    pub group_id: String,
+    pub parent_folder_id: Option<String>,
+    pub file_name: Option<String>,
+    pub source_path: String,
+}
+
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub async fn upload_group_file(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     app: tauri::AppHandle,
-    user_id: String,
-    group_id: String,
-    parent_folder_id: Option<String>,
-    file_name: Option<String>,
-    source_path: String,
+    input: UploadGroupFileRequest,
 ) -> Result<GroupFileEntity, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("failed to get app data dir: {e}"))?;
 
-    let source_path = validate_source_path(&source_path, &app_data_dir).into_command_result()?;
+    let source_path =
+        validate_source_path(&input.source_path, &app_data_dir).into_command_result()?;
 
-    let file_name = file_name
+    let file_name = input
+        .file_name
         .filter(|name| !name.trim().is_empty())
         .or_else(|| {
             source_path
@@ -218,12 +227,14 @@ pub async fn upload_group_file(
         .upload_group_file(
             &app,
             &core,
-            user_id,
-            group_id,
-            parent_folder_id,
-            file_name,
-            source_path_str,
-            app_data_dir,
+            UploadGroupFileInput {
+                user_id: input.user_id,
+                group_id: input.group_id,
+                parent_folder_id: input.parent_folder_id,
+                file_name,
+                source_path: source_path_str,
+                app_data_dir,
+            },
         )
         .await
         .into_command_result()
@@ -236,6 +247,7 @@ pub async fn download_group_file(
     user_id: String,
     group_id: String,
     file_id: String,
+    destination_path: String,
 ) -> Result<String, String> {
     let app_data_dir = app
         .path()
@@ -244,7 +256,13 @@ pub async fn download_group_file(
 
     services
         .group
-        .download_group_file(user_id, group_id, file_id, app_data_dir)
+        .download_group_file(
+            user_id,
+            group_id,
+            file_id,
+            PathBuf::from(destination_path),
+            app_data_dir,
+        )
         .await
         .into_command_result()
 }
@@ -339,24 +357,31 @@ pub async fn delete_group_album(
         .into_command_result()
 }
 
+/// Wire request for [`upload_group_photo`], nested under a single `input`
+/// object for the same reason as [`UploadGroupFileRequest`].
+#[derive(serde::Deserialize)]
+pub struct UploadGroupPhotoRequest {
+    pub user_id: String,
+    pub group_id: String,
+    pub album_id: String,
+    pub source_path: String,
+    pub description: Option<String>,
+}
+
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub async fn upload_group_photo(
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     app: tauri::AppHandle,
-    user_id: String,
-    group_id: String,
-    album_id: String,
-    source_path: String,
-    description: Option<String>,
+    input: UploadGroupPhotoRequest,
 ) -> Result<GroupPhotoEntity, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("failed to get app data dir: {e}"))?;
 
-    let source_path = validate_source_path(&source_path, &app_data_dir).into_command_result()?;
+    let source_path =
+        validate_source_path(&input.source_path, &app_data_dir).into_command_result()?;
     let source_path_str = source_path
         .to_str()
         .ok_or_else(|| "source path contains invalid UTF-8".to_string())?
@@ -367,12 +392,14 @@ pub async fn upload_group_photo(
         .upload_group_photo(
             &app,
             &core,
-            user_id,
-            group_id,
-            album_id,
-            source_path_str,
-            description,
-            app_data_dir,
+            UploadGroupPhotoInput {
+                user_id: input.user_id,
+                group_id: input.group_id,
+                album_id: input.album_id,
+                source_path: source_path_str,
+                description: input.description,
+                app_data_dir,
+            },
         )
         .await
         .into_command_result()

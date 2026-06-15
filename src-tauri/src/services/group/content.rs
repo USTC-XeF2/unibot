@@ -3,15 +3,37 @@ use std::path::PathBuf;
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity, GroupEventEntity,
-    GroupEventPayload, GroupFileEntity, GroupFolderEntity, GroupPhotoEntity, GroupRole,
-    InternalEvent,
+    EssenceUpdate, GroupAlbumEntity, GroupAnnouncementEntity, GroupEssenceMessageEntity,
+    GroupEventEntity, GroupEventPayload, GroupFileEntity, GroupFolderEntity, GroupPhotoEntity,
+    GroupRole, InternalEvent,
 };
 use crate::persistence::{GroupEventRecord, NewGroupEventRecord};
 use crate::utils::{emit_group_content_to_windows, emit_to_group_members, now_ts};
 
 use super::GroupService;
 use super::storage;
+
+/// Resolved inputs for [`GroupService::upload_group_file`]. The command layer
+/// validates and normalizes the raw request (source path, file name fallback,
+/// app data dir) before constructing this.
+pub struct UploadGroupFileInput {
+    pub user_id: String,
+    pub group_id: String,
+    pub parent_folder_id: Option<String>,
+    pub file_name: String,
+    pub source_path: String,
+    pub app_data_dir: PathBuf,
+}
+
+/// Resolved inputs for [`GroupService::upload_group_photo`].
+pub struct UploadGroupPhotoInput {
+    pub user_id: String,
+    pub group_id: String,
+    pub album_id: String,
+    pub source_path: String,
+    pub description: Option<String>,
+    pub app_data_dir: PathBuf,
+}
 
 fn prepare_announcement_for_upsert(
     mut announcement: GroupAnnouncementEntity,
@@ -298,8 +320,7 @@ impl GroupService {
         core: &CoreContainer,
         user_id: String,
         group_id: String,
-        message_id: String,
-        is_set: bool,
+        update: EssenceUpdate,
     ) -> AppResult<GroupEssenceMessageEntity> {
         core.require_user_context(&user_id)?;
 
@@ -311,35 +332,45 @@ impl GroupService {
             ));
         }
 
-        let message = self
-            .message_repo
-            .get_message_by_id(&message_id)
-            .await?
-            .ok_or_else(|| AppError::not_found(format!("message {} not found", message_id)))?;
+        let essence = match update {
+            EssenceUpdate::Set { message_id } => {
+                let message = self
+                    .message_repo
+                    .get_message_by_id(&message_id)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::not_found(format!("message {} not found", message_id))
+                    })?;
 
-        if message.source_type != "group" || message.source_id != group_id {
-            return Err(AppError::validation(
-                "message does not belong to the target group",
-            ));
-        }
+                if message.source_type != "group" || message.source_id != group_id {
+                    return Err(AppError::validation(
+                        "message does not belong to the target group",
+                    ));
+                }
 
-        if message.is_recalled {
-            return Err(AppError::validation(
-                "recalled message cannot be set as essence",
-            ));
-        }
+                if message.is_recalled {
+                    return Err(AppError::validation(
+                        "recalled message cannot be set as essence",
+                    ));
+                }
 
-        let essence = self
-            .repo
-            .create_group_essence_message(
-                &group_id,
-                &message_id,
-                &message.sender_user_id,
-                &user_id,
-                is_set,
-                now_ts(),
-            )
-            .await?;
+                self.repo
+                    .create_group_essence_message(
+                        &group_id,
+                        &message_id,
+                        &message.sender_user_id,
+                        &user_id,
+                        true,
+                        now_ts(),
+                    )
+                    .await?
+            }
+            EssenceUpdate::Unset { essence_id } => self
+                .repo
+                .delete_group_essence_message(&group_id, &essence_id)
+                .await?
+                .ok_or_else(|| AppError::not_found(format!("essence {} not found", essence_id)))?,
+        };
 
         if essence.is_set {
             self.save_group_event(
@@ -374,6 +405,7 @@ impl GroupService {
         user_id: String,
         group_id: String,
         file_id: String,
+        destination_path: PathBuf,
         app_data_dir: PathBuf,
     ) -> AppResult<String> {
         self.ensure_group_member(&group_id, &user_id).await?;
@@ -394,25 +426,35 @@ impl GroupService {
             .file_path
             .ok_or_else(|| AppError::not_found("file has no local path"))?;
 
-        // Validate path is within allowed directory, then return the relative path
-        // so the frontend can use convertFileSrc() to build an asset:// URL.
-        storage::validate_group_file_path(&file_path, &app_data_dir).await?;
+        let downloaded_path =
+            storage::copy_group_file_to_destination(&file_path, &destination_path, &app_data_dir)
+                .await?;
 
-        Ok(file_path)
+        let incremented = self
+            .repo
+            .increment_group_file_download_count(&file_id)
+            .await?;
+        if !incremented {
+            return Err(AppError::not_found(format!("file {} not found", file_id)));
+        }
+
+        Ok(downloaded_path.to_string_lossy().to_string())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn upload_group_file(
         &self,
         app: &tauri::AppHandle,
         core: &CoreContainer,
-        user_id: String,
-        group_id: String,
-        parent_folder_id: Option<String>,
-        file_name: String,
-        source_path: String,
-        app_data_dir: PathBuf,
+        input: UploadGroupFileInput,
     ) -> AppResult<GroupFileEntity> {
+        let UploadGroupFileInput {
+            user_id,
+            group_id,
+            parent_folder_id,
+            file_name,
+            source_path,
+            app_data_dir,
+        } = input;
         core.require_user_context(&user_id)?;
         self.ensure_group_member(&group_id, &user_id).await?;
 
@@ -623,18 +665,20 @@ impl GroupService {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn upload_group_photo(
         &self,
         app: &tauri::AppHandle,
         core: &CoreContainer,
-        user_id: String,
-        group_id: String,
-        album_id: String,
-        source_path: String,
-        description: Option<String>,
-        app_data_dir: PathBuf,
+        input: UploadGroupPhotoInput,
     ) -> AppResult<GroupPhotoEntity> {
+        let UploadGroupPhotoInput {
+            user_id,
+            group_id,
+            album_id,
+            source_path,
+            description,
+            app_data_dir,
+        } = input;
         core.require_user_context(&user_id)?;
         self.ensure_group_member(&group_id, &user_id).await?;
 

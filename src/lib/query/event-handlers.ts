@@ -15,6 +15,7 @@ import {
   invalidateGroupFoldersQuery,
   invalidateGroupPhotosQuery,
   invalidateGroupsQuery,
+  removeGroupContentQueries,
 } from "@/lib/query/groups";
 import {
   invalidateFriendRequestsQuery,
@@ -73,6 +74,14 @@ export function handleQueryInvalidation(
     payload.target_user_id === userId
   ) {
     invalidateGroupsQuery();
+  }
+
+  if (
+    payload.kind === "group_member_left" &&
+    payload.target_user_id === userId
+  ) {
+    invalidateGroupsQuery();
+    removeGroupContentQueries(userId, payload.group_id);
   }
 
   // Group content events

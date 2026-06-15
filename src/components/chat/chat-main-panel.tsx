@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { File, Image, LayoutGrid, MoreHorizontal, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +32,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useChatEventBus } from "@/hooks/use-chat-event-bus";
+import {
+  openGroupAlbumsWindow,
+  openGroupFilesWindow,
+} from "@/lib/group-content-window";
 import { segmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
@@ -873,8 +876,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
           setGroupEssenceMessageMutation.mutate({
             userId: currentUserId,
             groupId: conversation.group_id,
-            messageId: message.id,
-            isSet: true,
+            update: { kind: "set", messageId: message.id },
           }),
       });
     }
@@ -961,20 +963,17 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() =>
-                      invoke("open_group_files_window", {
-                        userId: currentUserId,
-                        groupId: conversation.group_id,
-                      })
+                      openGroupFilesWindow(currentUserId, conversation.group_id)
                     }
                   >
                     群文件
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() =>
-                      invoke("open_group_albums_window", {
-                        userId: currentUserId,
-                        groupId: conversation.group_id,
-                      })
+                      openGroupAlbumsWindow(
+                        currentUserId,
+                        conversation.group_id,
+                      )
                     }
                   >
                     群相册

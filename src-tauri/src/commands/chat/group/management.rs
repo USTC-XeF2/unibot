@@ -3,20 +3,26 @@ use crate::models::{GroupMemberProfile, GroupProfile};
 use crate::services::ServiceHub;
 
 use super::super::super::IntoCommandResult;
+use super::window::close_group_content_windows;
 
 #[tauri::command]
 pub async fn kick_group_member(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
     target_user_id: String,
 ) -> Result<(), String> {
-    services
+    let result = services
         .group
-        .kick_group_member(&core, user_id, group_id, target_user_id)
+        .kick_group_member(&core, user_id, group_id.clone(), target_user_id.clone())
         .await
-        .into_command_result()
+        .into_command_result();
+    if result.is_ok() {
+        close_group_content_windows(&app, &target_user_id, &group_id);
+    }
+    result
 }
 
 #[tauri::command]
@@ -68,28 +74,46 @@ pub async fn rename_group(
 
 #[tauri::command]
 pub async fn leave_group(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
 ) -> Result<(), String> {
-    services
+    let result = services
         .group
-        .leave_group(&core, user_id, group_id)
+        .leave_group(&core, user_id.clone(), group_id.clone())
         .await
-        .into_command_result()
+        .into_command_result();
+    if result.is_ok() {
+        close_group_content_windows(&app, &user_id, &group_id);
+    }
+    result
 }
 
 #[tauri::command]
 pub async fn dissolve_group(
+    app: tauri::AppHandle,
     core: tauri::State<'_, CoreContainer>,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
 ) -> Result<(), String> {
-    services
+    let members = services
         .group
-        .dissolve_group(&core, user_id, group_id)
+        .list_group_members(user_id.clone(), group_id.clone())
         .await
-        .into_command_result()
+        .into_command_result()?;
+
+    let result = services
+        .group
+        .dissolve_group(&core, user_id, group_id.clone())
+        .await
+        .into_command_result();
+    if result.is_ok() {
+        for member in members {
+            close_group_content_windows(&app, &member.user_id, &group_id);
+        }
+    }
+    result
 }

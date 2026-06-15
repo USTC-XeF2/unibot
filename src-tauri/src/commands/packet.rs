@@ -1,35 +1,17 @@
 use crate::commands::IntoCommandResult;
-use crate::persistence::ProtocolPacketRecord;
+use crate::persistence::{PacketFilters, ProtocolPacketRecord};
 use crate::services::ServiceHub;
 
 use tauri::Manager;
 
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub async fn list_protocol_packets(
     services: tauri::State<'_, ServiceHub>,
-    bot_id: Option<String>,
-    direction: Option<String>,
-    action_name: Option<String>,
-    since: Option<u64>,
-    until: Option<u64>,
-    is_error: Option<bool>,
-    before: Option<u64>,
-    limit: Option<i64>,
+    filters: PacketFilters,
 ) -> Result<Vec<ProtocolPacketRecord>, String> {
-    let limit = limit.unwrap_or(100);
     services
         .packet
-        .list_packets(
-            bot_id,
-            direction,
-            action_name,
-            since,
-            until,
-            is_error,
-            before,
-            limit,
-        )
+        .list_packets(filters)
         .await
         .into_command_result()
 }

@@ -72,8 +72,7 @@ function EssenceItem({
     unsetMutation.mutate({
       userId,
       groupId,
-      messageId: essence.message_id,
-      isSet: false,
+      update: { kind: "unset", essenceId: essence.essence_id },
     });
   };
 

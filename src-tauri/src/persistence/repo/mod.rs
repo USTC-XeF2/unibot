@@ -16,6 +16,6 @@ pub use conversation::ConversationRepo;
 pub use group::{GroupEventRecord, GroupRepo, NewGroupEventRecord, NewGroupRequestRecord};
 pub use interaction::{InteractionRepo, NewMessageReactionRecord, NewPokeRecord};
 pub use message::{MessageRecord, MessageRepo, NewMessageRecord};
-pub use packet::{PacketRepo, ProtocolPacketRecord};
+pub use packet::{PacketFilters, PacketRepo, ProtocolPacketRecord};
 pub use settings::{SettingRecord, SettingsRepo};
 pub use user::{NewFriendRequestRecord, UserRepo};

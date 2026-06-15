@@ -97,4 +97,52 @@ impl GroupRepo {
 
         rows.into_iter().map(TryInto::try_into).collect()
     }
+
+    pub async fn delete_group_essence_message(
+        &self,
+        group_id: &str,
+        essence_id: &str,
+    ) -> Result<Option<GroupEssenceMessageEntity>, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let row = sqlx::query_as::<_, GroupEssenceRow>(
+            r#"
+            SELECT
+                e.essence_id AS id,
+                e.group_id,
+                e.message_id,
+                e.sender_user_id,
+                e.operator_user_id,
+                0 AS is_set,
+                e.created_at,
+                m.content_json
+            FROM group_essence_messages e
+            LEFT JOIN messages m ON m.message_id = e.message_id
+            WHERE e.group_id = ?1
+              AND e.essence_id = ?2
+            "#,
+        )
+        .bind(group_id)
+        .bind(essence_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        sqlx::query(
+            r#"
+            DELETE FROM group_essence_messages
+            WHERE group_id = ?1 AND essence_id = ?2
+            "#,
+        )
+        .bind(group_id)
+        .bind(essence_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        row.try_into().map(Some)
+    }
 }

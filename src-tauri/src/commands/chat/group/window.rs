@@ -1,7 +1,7 @@
 use tauri::Manager;
 
 use crate::error::{AppError, AppResult};
-use crate::services::ServiceHub;
+use crate::services::{GroupService, ServiceHub};
 
 use super::super::super::IntoCommandResult;
 
@@ -28,6 +28,39 @@ fn validate_id_component(id: &str) -> AppResult<()> {
 
 fn group_content_window_label(kind: &str, user_id: &str, group_id: &str) -> String {
     format!("{kind}-{user_id}-{group_id}")
+}
+
+pub(crate) fn group_content_window_labels(user_id: &str, group_id: &str) -> [String; 2] {
+    [
+        group_content_window_label("group-files", user_id, group_id),
+        group_content_window_label("group-albums", user_id, group_id),
+    ]
+}
+
+pub(crate) fn close_group_content_windows(app: &tauri::AppHandle, user_id: &str, group_id: &str) {
+    for label in group_content_window_labels(user_id, group_id) {
+        if let Some(window) = app.get_webview_window(&label)
+            && let Err(error) = window.close()
+        {
+            tracing::warn!(
+                target: "group_content",
+                window_label = %label,
+                %error,
+                "failed to close revoked group content window"
+            );
+        }
+    }
+}
+
+async fn ensure_group_content_window_access(
+    group_service: &GroupService,
+    user_id: &str,
+    group_id: &str,
+) -> AppResult<()> {
+    group_service
+        .ensure_group_member(group_id, user_id)
+        .await
+        .map(|_| ())
 }
 
 fn ensure_or_focus_window(app: tauri::AppHandle, label: &str) -> AppResult<bool> {
@@ -62,6 +95,7 @@ async fn open_group_files_window_impl(
 ) -> AppResult<bool> {
     validate_id_component(&user_id)?;
     validate_id_component(&group_id)?;
+    ensure_group_content_window_access(&services.group, &user_id, &group_id).await?;
 
     let label = group_content_window_label("group-files", &user_id, &group_id);
     if !ensure_or_focus_window(app.clone(), &label)? {
@@ -98,6 +132,7 @@ async fn open_group_albums_window_impl(
 ) -> AppResult<bool> {
     validate_id_component(&user_id)?;
     validate_id_component(&group_id)?;
+    ensure_group_content_window_access(&services.group, &user_id, &group_id).await?;
 
     let label = group_content_window_label("group-albums", &user_id, &group_id);
     if !ensure_or_focus_window(app.clone(), &label)? {
@@ -153,6 +188,9 @@ pub async fn open_group_albums_window(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{GroupMemberProfile, GroupProfile, GroupRole, UserProfile};
+    use crate::persistence::{GroupRepo, MessageRepo, UserRepo, migrator};
+    use crate::services::GroupService;
 
     #[test]
     fn group_content_window_label_format() {
@@ -163,6 +201,17 @@ mod tests {
         assert_eq!(
             group_content_window_label("group-albums", "u1", "g1"),
             "group-albums-u1-g1"
+        );
+    }
+
+    #[test]
+    fn group_content_window_labels_include_files_and_albums() {
+        assert_eq!(
+            group_content_window_labels("u1", "g1"),
+            [
+                "group-files-u1-g1".to_string(),
+                "group-albums-u1-g1".to_string(),
+            ]
         );
     }
 
@@ -190,5 +239,66 @@ mod tests {
     fn validate_id_component_rejects_too_long() {
         let long_id = "a".repeat(129);
         assert!(validate_id_component(&long_id).is_err());
+    }
+
+    #[sqlx::test]
+    async fn group_content_window_access_rejects_non_member(pool: sqlx::SqlitePool) {
+        migrator::run_migrations(&pool).await.unwrap();
+
+        let user_repo = UserRepo::new(pool.clone());
+        user_repo
+            .upsert_user(&UserProfile {
+                user_id: "10001".to_string(),
+                nickname: "Owner".to_string(),
+                avatar: String::new(),
+                signature: String::new(),
+                account_status: Default::default(),
+            })
+            .await
+            .unwrap();
+        user_repo
+            .upsert_user(&UserProfile {
+                user_id: "10002".to_string(),
+                nickname: "Removed".to_string(),
+                avatar: String::new(),
+                signature: String::new(),
+                account_status: Default::default(),
+            })
+            .await
+            .unwrap();
+
+        let group_repo = GroupRepo::new(pool.clone());
+        group_repo
+            .upsert_group(&GroupProfile {
+                group_id: "20001".to_string(),
+                group_name: "Test".to_string(),
+                owner_user_id: "10001".to_string(),
+                member_count: 1,
+                max_member_count: 500,
+                group_status: Default::default(),
+                category_id: None,
+            })
+            .await
+            .unwrap();
+        group_repo
+            .upsert_group_member(&GroupMemberProfile {
+                group_id: "20001".to_string(),
+                user_id: "10001".to_string(),
+                card: String::new(),
+                title: String::new(),
+                role: GroupRole::Owner,
+                joined_at: 1,
+                last_sent_at: 0,
+                mute_until: None,
+            })
+            .await
+            .unwrap();
+
+        let service = GroupService::new(group_repo, MessageRepo::new(pool));
+        assert!(
+            ensure_group_content_window_access(&service, "10002", "20001")
+                .await
+                .is_err()
+        );
     }
 }

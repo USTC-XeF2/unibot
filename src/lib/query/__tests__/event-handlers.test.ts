@@ -35,4 +35,46 @@ describe("handleQueryInvalidation", () => {
       queryKey: ["groups", "folders", "10001", "20001"],
     });
   });
+
+  it("removes group content queries for the target user on member-left", () => {
+    const removeSpy = vi
+      .spyOn(queryClient, "removeQueries")
+      .mockReturnValue(undefined);
+    vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined);
+
+    handleQueryInvalidation("10002", {
+      kind: "group_member_left",
+      group_id: "20001",
+      operator_user_id: "10001",
+      target_user_id: "10002",
+      time: 100,
+    });
+
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: ["groups", "files", "10002", "20001"],
+    });
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: ["groups", "albums", "10002", "20001"],
+    });
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: ["groups", "essence", "10002", "20001"],
+    });
+  });
+
+  it("ignores member-left for other users", () => {
+    const removeSpy = vi
+      .spyOn(queryClient, "removeQueries")
+      .mockReturnValue(undefined);
+    vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined);
+
+    handleQueryInvalidation("10001", {
+      kind: "group_member_left",
+      group_id: "20001",
+      operator_user_id: "10001",
+      target_user_id: "10002",
+      time: 100,
+    });
+
+    expect(removeSpy).not.toHaveBeenCalled();
+  });
 });

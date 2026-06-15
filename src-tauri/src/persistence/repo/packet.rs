@@ -21,37 +21,46 @@ pub struct PacketRepo {
     pool: SqlitePool,
 }
 
+/// Filter criteria for [`PacketRepo::list_packets`].
+///
+/// Grouping these into one struct keeps the query API readable as filters
+/// grow, and lets the command layer deserialize the frontend's filter object
+/// directly. All fields are optional; absent fields are not constrained.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct PacketFilters {
+    pub bot_id: Option<String>,
+    pub direction: Option<String>,
+    pub action_name: Option<String>,
+    pub since: Option<u64>,
+    pub until: Option<u64>,
+    pub is_error: Option<bool>,
+    pub before: Option<u64>,
+    pub limit: Option<i64>,
+}
+
 impl PacketRepo {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn list_packets(
         &self,
-        bot_id: Option<&str>,
-        direction: Option<&str>,
-        action_name: Option<&str>,
-        since: Option<u64>,
-        until: Option<u64>,
-        is_error: Option<bool>,
-        before: Option<u64>,
-        limit: i64,
+        filters: &PacketFilters,
     ) -> Result<Vec<ProtocolPacketRecord>, sqlx::Error> {
-        let limit = limit.min(1000);
+        let limit = filters.limit.unwrap_or(100).clamp(1, 1000);
 
         let mut builder: QueryBuilder<'_, sqlx::Sqlite> =
             QueryBuilder::new("SELECT * FROM protocol_packets");
 
         let mut has_where = false;
 
-        if let Some(bot_id) = bot_id {
+        if let Some(bot_id) = filters.bot_id.as_deref() {
             builder.push(" WHERE bot_id = ");
             builder.push_bind(bot_id);
             has_where = true;
         }
 
-        if let Some(direction) = direction {
+        if let Some(direction) = filters.direction.as_deref() {
             if has_where {
                 builder.push(" AND direction = ");
             } else {
@@ -61,7 +70,7 @@ impl PacketRepo {
             builder.push_bind(direction);
         }
 
-        if let Some(action_name) = action_name {
+        if let Some(action_name) = filters.action_name.as_deref() {
             if has_where {
                 builder.push(" AND action_name = ");
             } else {
@@ -71,7 +80,7 @@ impl PacketRepo {
             builder.push_bind(action_name);
         }
 
-        if let Some(since) = since {
+        if let Some(since) = filters.since {
             if has_where {
                 builder.push(" AND created_at >= ");
             } else {
@@ -81,7 +90,7 @@ impl PacketRepo {
             builder.push_bind(since as i64);
         }
 
-        if let Some(until) = until {
+        if let Some(until) = filters.until {
             if has_where {
                 builder.push(" AND created_at <= ");
             } else {
@@ -91,7 +100,7 @@ impl PacketRepo {
             builder.push_bind(until as i64);
         }
 
-        if let Some(is_error) = is_error {
+        if let Some(is_error) = filters.is_error {
             if has_where {
                 builder.push(" AND is_error = ");
             } else {
@@ -101,7 +110,7 @@ impl PacketRepo {
             builder.push_bind(if is_error { 1 } else { 0 });
         }
 
-        if let Some(before) = before {
+        if let Some(before) = filters.before {
             if has_where {
                 builder.push(" AND created_at < ");
             } else {

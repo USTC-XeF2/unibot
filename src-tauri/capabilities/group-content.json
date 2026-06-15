@@ -6,6 +6,7 @@
   "permissions": [
     "core:window:default",
     "core:event:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

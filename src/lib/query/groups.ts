@@ -276,3 +276,29 @@ export function invalidateGroupEssenceMessagesQuery(
     queryKey: queryKeys.groups.essence(userId, groupId),
   });
 }
+
+/**
+ * 当用户离开/被移出群（或群被解散）时，移除该用户在该群下所有群内容
+ * 缓存，避免被撤销访问后仍能读到陈旧数据。照片以 albumId 为键，故按
+ * `["groups", "photos", userId]` 前缀整体清除该用户的相册照片缓存。
+ */
+export function removeGroupContentQueries(userId: string, groupId: string) {
+  queryClient.removeQueries({
+    queryKey: ["groups", "files", userId, groupId],
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.folders(userId, groupId),
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.albums(userId, groupId),
+  });
+  queryClient.removeQueries({
+    queryKey: ["groups", "photos", userId],
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.announcements(userId, groupId),
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.essence(userId, groupId),
+  });
+}
