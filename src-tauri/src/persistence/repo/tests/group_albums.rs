@@ -102,7 +102,7 @@ async fn delete_group_photo_refreshes_album_cover(
         created_at: 200,
     })
     .await?;
-    repo.update_album_cover_url("album-a", "/tmp/photo-1.png")
+    repo.set_album_cover_if_unset("album-a", "/tmp/photo-1.png")
         .await?;
 
     let deleted = repo

@@ -114,16 +114,20 @@ impl GroupRepo {
     }
 
     pub async fn delete_group_folder(&self, folder_id: &str) -> Result<bool, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
         // Prevent deleting folders that still contain files or child folders.
+        // Counts and the delete run in one transaction so a concurrent upload
+        // cannot slip a file in between the check and the delete (TOCTOU).
         let file_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM group_files WHERE parent_folder_id = ?1")
                 .bind(folder_id)
-                .fetch_one(&self.pool)
+                .fetch_one(&mut *tx)
                 .await?;
         let child_folder_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM group_folders WHERE parent_folder_id = ?1")
                 .bind(folder_id)
-                .fetch_one(&self.pool)
+                .fetch_one(&mut *tx)
                 .await?;
         if file_count > 0 || child_folder_count > 0 {
             return Ok(false);
@@ -131,8 +135,10 @@ impl GroupRepo {
 
         let result = sqlx::query("DELETE FROM group_folders WHERE folder_id = ?1")
             .bind(folder_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+
+        tx.commit().await?;
         Ok(result.rows_affected() > 0)
     }
 

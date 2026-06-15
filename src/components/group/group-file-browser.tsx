@@ -10,7 +10,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -401,8 +401,9 @@ function FolderNameInput({
   onCancel: () => void;
 }) {
   // Guard against the blur that fires when Enter/Escape unmounts the input,
-  // so a single edit never commits twice.
-  let settled = false;
+  // so a single edit never commits twice. A ref (not a render-local variable)
+  // survives any re-render that happens mid-edit.
+  const settled = useRef(false);
   return (
     <Input
       autoFocus
@@ -412,16 +413,16 @@ function FolderNameInput({
       onFocus={(e) => e.currentTarget.select()}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
-          settled = true;
+          settled.current = true;
           onCommit(e.currentTarget.value);
         } else if (e.key === "Escape") {
-          settled = true;
+          settled.current = true;
           onCancel();
         }
       }}
       onBlur={(e) => {
-        if (settled) return;
-        settled = true;
+        if (settled.current) return;
+        settled.current = true;
         onCommit(e.currentTarget.value);
       }}
     />

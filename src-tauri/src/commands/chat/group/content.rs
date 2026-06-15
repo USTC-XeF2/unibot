@@ -301,13 +301,19 @@ pub async fn create_group_album(
 
 #[tauri::command]
 pub async fn list_group_albums(
+    app: tauri::AppHandle,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
 ) -> Result<Vec<GroupAlbumEntity>, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
     services
         .group
-        .list_group_albums(user_id, group_id)
+        .list_group_albums(user_id, group_id, &app_data_dir)
         .await
         .into_command_result()
 }
@@ -374,14 +380,20 @@ pub async fn upload_group_photo(
 
 #[tauri::command]
 pub async fn list_group_photos(
+    app: tauri::AppHandle,
     services: tauri::State<'_, ServiceHub>,
     user_id: String,
     group_id: String,
     album_id: String,
 ) -> Result<Vec<GroupPhotoEntity>, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {e}"))?;
+
     services
         .group
-        .list_group_photos(user_id, group_id, album_id)
+        .list_group_photos(user_id, group_id, album_id, &app_data_dir)
         .await
         .into_command_result()
 }

@@ -109,16 +109,18 @@ impl GroupRepo {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn update_album_cover_url(
+    pub async fn set_album_cover_if_unset(
         &self,
         album_id: &str,
         cover_url: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query("UPDATE group_albums SET cover_url = ?1 WHERE album_id = ?2")
-            .bind(cover_url)
-            .bind(album_id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE group_albums SET cover_url = ?1 WHERE album_id = ?2 AND cover_url IS NULL",
+        )
+        .bind(cover_url)
+        .bind(album_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }

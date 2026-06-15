@@ -35,6 +35,22 @@ fn prepare_folder_for_upsert(mut folder: GroupFolderEntity) -> GroupFolderEntity
     folder
 }
 
+/// Resolve a stored relative media path (e.g. `groups/<gid>/files/<name>`) into
+/// an absolute path string for the frontend's `convertFileSrc`. Returns `None`
+/// when the input is `None` or empty. Absolute paths are passed through so we
+/// stay tolerant of any legacy rows that still hold an absolute path.
+fn resolve_relative_url(stored: Option<&str>, app_data_dir: &std::path::Path) -> Option<String> {
+    let value = stored?;
+    if value.is_empty() {
+        return None;
+    }
+    let path = std::path::Path::new(value);
+    if path.is_absolute() {
+        return Some(value.to_string());
+    }
+    Some(app_data_dir.join(path).to_string_lossy().to_string())
+}
+
 fn ensure_album_belongs_to_group(album: &GroupAlbumEntity, group_id: &str) -> AppResult<()> {
     if album.group_id != group_id {
         return Err(AppError::validation(
@@ -226,7 +242,7 @@ impl GroupService {
         folder_id: String,
     ) -> AppResult<()> {
         core.require_user_context(&user_id)?;
-        self.ensure_group_member(&group_id, &user_id).await?;
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
 
         let folder = self
             .repo
@@ -241,7 +257,6 @@ impl GroupService {
         }
 
         // Only the creator or owner/admin can delete a folder.
-        let operator = self.ensure_group_member(&group_id, &user_id).await?;
         if folder.creator_user_id != user_id && matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(
                 "only owner/admin or creator can delete folder",
@@ -543,12 +558,14 @@ impl GroupService {
         &self,
         user_id: String,
         group_id: String,
+        app_data_dir: &std::path::Path,
     ) -> AppResult<Vec<GroupAlbumEntity>> {
         self.ensure_group_member(&group_id, &user_id).await?;
-        self.repo
-            .list_group_albums(&group_id)
-            .await
-            .map_err(Into::into)
+        let mut albums = self.repo.list_group_albums(&group_id).await?;
+        for album in &mut albums {
+            album.cover_url = resolve_relative_url(album.cover_url.as_deref(), app_data_dir);
+        }
+        Ok(albums)
     }
 
     pub async fn delete_group_album(
@@ -652,11 +669,14 @@ impl GroupService {
             .await
             .map_err(|e| AppError::storage(format!("failed to get photo metadata: {e}")))?;
 
-        let photo = GroupPhotoEntity {
+        // Store the relative path in the database so records stay portable when
+        // the app data directory moves. Absolute paths are resolved only at the
+        // read boundary (see `resolve_photo_url` / `resolve_album_cover_url`).
+        let mut photo = GroupPhotoEntity {
             photo_id,
             album_id: album_id.clone(),
             group_id: group_id.clone(),
-            url: absolute_path.to_string_lossy().to_string(),
+            url: file_path.clone(),
             file_path: Some(file_path),
             description,
             uploader_user_id: user_id.clone(),
@@ -666,12 +686,12 @@ impl GroupService {
 
         self.repo.create_group_photo(&photo).await?;
 
-        // Set album cover if this is the first uploaded photo.
-        if album.cover_url.is_none() {
-            self.repo
-                .update_album_cover_url(&album_id, &photo.url)
-                .await?;
-        }
+        // Set album cover if this is the first uploaded photo. The conditional
+        // UPDATE (cover_url IS NULL) makes concurrent first-uploads safe: only
+        // the first writer wins, instead of last-write-wins on a stale snapshot.
+        self.repo
+            .set_album_cover_if_unset(&album_id, &photo.url)
+            .await?;
 
         let event = InternalEvent::GroupPhotoUploaded {
             photo_id: photo.photo_id.clone(),
@@ -682,6 +702,8 @@ impl GroupService {
         emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
         emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
 
+        // Return an absolute URL to the caller for immediate rendering.
+        photo.url = absolute_path.to_string_lossy().to_string();
         Ok(photo)
     }
 
@@ -690,12 +712,16 @@ impl GroupService {
         user_id: String,
         group_id: String,
         album_id: String,
+        app_data_dir: &std::path::Path,
     ) -> AppResult<Vec<GroupPhotoEntity>> {
         self.ensure_group_member(&group_id, &user_id).await?;
-        self.repo
-            .list_group_photos(&album_id, &group_id)
-            .await
-            .map_err(Into::into)
+        let mut photos = self.repo.list_group_photos(&album_id, &group_id).await?;
+        for photo in &mut photos {
+            if let Some(resolved) = resolve_relative_url(Some(&photo.url), app_data_dir) {
+                photo.url = resolved;
+            }
+        }
+        Ok(photos)
     }
 
     pub async fn delete_group_photo(
@@ -951,5 +977,29 @@ mod tests {
         folder.group_id = "20002".to_string();
 
         assert!(ensure_parent_folder_belongs_to_group(&folder, "20001").is_err());
+    }
+
+    #[test]
+    fn resolve_relative_url_joins_relative_path() {
+        let base = std::path::Path::new("/data/app");
+        let resolved = resolve_relative_url(Some("groups/20001/files/a.png"), base);
+        assert_eq!(
+            resolved.as_deref(),
+            Some("/data/app/groups/20001/files/a.png")
+        );
+    }
+
+    #[test]
+    fn resolve_relative_url_passes_through_absolute_path() {
+        let base = std::path::Path::new("/data/app");
+        let resolved = resolve_relative_url(Some("/legacy/abs/a.png"), base);
+        assert_eq!(resolved.as_deref(), Some("/legacy/abs/a.png"));
+    }
+
+    #[test]
+    fn resolve_relative_url_handles_none_and_empty() {
+        let base = std::path::Path::new("/data/app");
+        assert_eq!(resolve_relative_url(None, base), None);
+        assert_eq!(resolve_relative_url(Some(""), base), None);
     }
 }

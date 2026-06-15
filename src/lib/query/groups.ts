@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { COMMANDS } from "@/lib/commands";
-import { isValidUserId } from "@/lib/query/common";
+import { isValidGroupId, isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 import type { GroupEvent } from "@/types/event";
@@ -48,7 +48,7 @@ export function useGroupMembersQuery(
         groupId,
       }),
     retry: false,
-    enabled: enabled && isValidUserId(userId) && groupId.length > 0,
+    enabled: enabled && isValidUserId(userId) && isValidGroupId(groupId),
   });
 }
 
@@ -136,7 +136,7 @@ export function useGroupFilesQuery(
 ) {
   return useQuery({
     queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupFile[]>(COMMANDS.listGroupFiles, {
         userId,
@@ -165,7 +165,7 @@ export function invalidateGroupFilesQuery(
 export function useGroupAlbumsQuery(userId: string, groupId: string) {
   return useQuery({
     queryKey: queryKeys.groups.albums(userId, groupId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupAlbum[]>(COMMANDS.listGroupAlbums, {
         userId,
@@ -190,7 +190,8 @@ export function useGroupPhotosQuery(
 ) {
   return useQuery({
     queryKey: queryKeys.groups.photos(userId, albumId),
-    enabled: isValidUserId(userId) && groupId.length > 0 && albumId.length > 0,
+    enabled:
+      isValidUserId(userId) && isValidGroupId(groupId) && albumId.length > 0,
     queryFn: () =>
       invoke<GroupPhoto[]>(COMMANDS.listGroupPhotos, {
         userId,
@@ -212,7 +213,7 @@ export function invalidateGroupPhotosQuery(userId: string, albumId: string) {
 export function useGroupFoldersQuery(userId: string, groupId: string) {
   return useQuery({
     queryKey: queryKeys.groups.folders(userId, groupId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupFolder[]>(COMMANDS.listGroupFolders, {
         userId,
@@ -233,7 +234,7 @@ export function invalidateGroupFoldersQuery(userId: string, groupId: string) {
 export function useGroupAnnouncementsQuery(userId: string, groupId: string) {
   return useQuery({
     queryKey: queryKeys.groups.announcements(userId, groupId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupAnnouncement[]>(COMMANDS.listGroupAnnouncements, {
         userId,
@@ -257,7 +258,7 @@ export function invalidateGroupAnnouncementsQuery(
 export function useGroupEssenceMessagesQuery(userId: string, groupId: string) {
   return useQuery({
     queryKey: queryKeys.groups.essence(userId, groupId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupEssenceMessage[]>(COMMANDS.listGroupEssenceMessages, {
         userId,
