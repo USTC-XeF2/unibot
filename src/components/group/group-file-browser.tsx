@@ -4,8 +4,10 @@ import {
   File,
   Folder,
   MoreHorizontal,
+  Pencil,
   Plus,
   RefreshCw,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +19,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatBytes } from "@/lib/format";
 import { confirmDialog } from "@/lib/modal";
 import {
@@ -40,6 +48,8 @@ export default function GroupFileBrowser({
     undefined,
   );
   const [folderStack, setFolderStack] = useState<GroupFolder[]>([]);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const { data: files = [], refetch: refetchFiles } = useGroupFilesQuery(
     userId,
@@ -81,15 +91,16 @@ export default function GroupFileBrowser({
     setParentFolderId(undefined);
   };
 
-  const handleRenameFolder = (folder: GroupFolder) => {
-    const newName = window.prompt("重命名文件夹", folder.folder_name);
-    if (!newName || newName.trim() === folder.folder_name) return;
+  const handleRenameFolder = (folder: GroupFolder, newName: string) => {
+    setEditingFolderId(null);
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === folder.folder_name) return;
     renameFolderMutation.mutate({
       userId,
       groupId,
       folderId: folder.folder_id,
       parentFolderId: folder.parent_folder_id ?? undefined,
-      folderName: newName.trim(),
+      folderName: trimmed,
     });
   };
 
@@ -133,11 +144,21 @@ export default function GroupFileBrowser({
   };
 
   const handleCreateFolder = () => {
+    // Show a draft row first; only persist once the user commits a name,
+    // so cancelling never leaves an empty "新建文件夹" behind.
+    setEditingFolderId(null);
+    setCreatingFolder(true);
+  };
+
+  const handleCommitNewFolder = (name: string) => {
+    setCreatingFolder(false);
+    const trimmed = name.trim();
+    if (!trimmed) return;
     createFolderMutation.mutate({
       userId,
       groupId,
       parentFolderId,
-      folderName: "新建文件夹",
+      folderName: trimmed,
     });
   };
 
@@ -163,6 +184,7 @@ export default function GroupFileBrowser({
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={handleCreateFolder}>
+                <Folder className="mr-2 size-4 text-yellow-500" />
                 新建文件夹
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -234,51 +256,23 @@ export default function GroupFileBrowser({
             </tr>
           </thead>
           <tbody>
+            {creatingFolder && (
+              <NewFolderRow
+                onCommit={handleCommitNewFolder}
+                onCancel={() => setCreatingFolder(false)}
+              />
+            )}
             {currentFolders.map((folder) => (
-              <tr
+              <GroupFolderRow
                 key={folder.folder_id}
-                className="cursor-pointer border-b hover:bg-muted/50"
-                onClick={() => handleEnterFolder(folder)}
-              >
-                <td className="px-4 py-3">
-                  <input type="checkbox" disabled />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Folder className="size-5 text-yellow-500" />
-                    {folder.folder_name}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">-</td>
-                <td className="px-4 py-3">{folder.creator_user_id}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(folder.updated_at).toLocaleString()}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRenameFolder(folder);
-                      }}
-                    >
-                      重命名
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteFolder(folder);
-                      }}
-                    >
-                      删除
-                    </Button>
-                  </div>
-                </td>
-              </tr>
+                folder={folder}
+                isEditing={editingFolderId === folder.folder_id}
+                onEnter={() => handleEnterFolder(folder)}
+                onStartRename={() => setEditingFolderId(folder.folder_id)}
+                onCommitRename={(name) => handleRenameFolder(folder, name)}
+                onCancelRename={() => setEditingFolderId(null)}
+                onDelete={() => handleDeleteFolder(folder)}
+              />
             ))}
             {files.map((file) => (
               <GroupFileRow
@@ -314,6 +308,156 @@ export default function GroupFileBrowser({
   );
 }
 
+function GroupFolderRow({
+  folder,
+  isEditing,
+  onEnter,
+  onStartRename,
+  onCommitRename,
+  onCancelRename,
+  onDelete,
+}: {
+  folder: GroupFolder;
+  isEditing: boolean;
+  onEnter: () => void;
+  onStartRename: () => void;
+  onCommitRename: (name: string) => void;
+  onCancelRename: () => void;
+  onDelete: () => Promise<void> | void;
+}) {
+  return (
+    <tr
+      className="border-b hover:bg-muted/50 data-[editing=false]:cursor-pointer"
+      data-editing={isEditing}
+      onClick={isEditing ? undefined : onEnter}
+    >
+      <td className="px-4 py-3">
+        <input type="checkbox" disabled />
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Folder className="size-5 shrink-0 text-yellow-500" />
+          {isEditing ? (
+            <FolderNameInput
+              defaultValue={folder.folder_name}
+              onCommit={onCommitRename}
+              onCancel={onCancelRename}
+            />
+          ) : (
+            folder.folder_name
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-muted-foreground">-</td>
+      <td className="px-4 py-3">{folder.creator_user_id}</td>
+      <td className="px-4 py-3 text-muted-foreground">
+        {new Date(folder.updated_at).toLocaleString()}
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartRename();
+                }}
+              >
+                <Pencil className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>重命名</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>删除</TooltipContent>
+          </Tooltip>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function FolderNameInput({
+  defaultValue,
+  onCommit,
+  onCancel,
+}: {
+  defaultValue: string;
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  // Guard against the blur that fires when Enter/Escape unmounts the input,
+  // so a single edit never commits twice.
+  let settled = false;
+  return (
+    <Input
+      autoFocus
+      defaultValue={defaultValue}
+      className="h-7 max-w-56"
+      onClick={(e) => e.stopPropagation()}
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          settled = true;
+          onCommit(e.currentTarget.value);
+        } else if (e.key === "Escape") {
+          settled = true;
+          onCancel();
+        }
+      }}
+      onBlur={(e) => {
+        if (settled) return;
+        settled = true;
+        onCommit(e.currentTarget.value);
+      }}
+    />
+  );
+}
+
+function NewFolderRow({
+  onCommit,
+  onCancel,
+}: {
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <tr className="border-b">
+      <td className="px-4 py-3">
+        <input type="checkbox" disabled />
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Folder className="size-5 shrink-0 text-yellow-500" />
+          <FolderNameInput
+            defaultValue="新建文件夹"
+            onCommit={onCommit}
+            onCancel={onCancel}
+          />
+        </div>
+      </td>
+      <td className="px-4 py-3 text-muted-foreground">-</td>
+      <td className="px-4 py-3 text-muted-foreground">-</td>
+      <td className="px-4 py-3 text-muted-foreground">-</td>
+      <td className="px-4 py-3" />
+    </tr>
+  );
+}
+
 function GroupFileRow({
   file,
   onDownload,
@@ -343,9 +487,14 @@ function GroupFileRow({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={onDownload}>
-            <Download className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={onDownload}>
+                <Download className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>下载</TooltipContent>
+          </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
@@ -353,7 +502,10 @@ function GroupFileRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete}>
+                <Trash2 className="mr-2 size-4 text-destructive" />
+                删除
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
