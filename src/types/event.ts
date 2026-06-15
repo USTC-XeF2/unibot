@@ -152,6 +152,12 @@ export type InternalEventPayload =
       time: number;
     }
   | {
+      kind: "group_folder_deleted";
+      folder_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
       kind: "group_file_upserted";
       file_id: string;
       group_id: string;

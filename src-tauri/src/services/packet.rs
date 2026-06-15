@@ -25,7 +25,7 @@ impl PacketService {
         before: Option<u64>,
         limit: i64,
     ) -> AppResult<Vec<ProtocolPacketRecord>> {
-        let limit = limit.max(1).min(1000);
+        let limit = limit.clamp(1, 1000);
         self.repo
             .list_packets(
                 bot_id.as_deref(),

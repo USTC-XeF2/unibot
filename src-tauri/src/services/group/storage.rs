@@ -13,8 +13,7 @@ pub fn sanitize_file_name(name: &str, file_id: &str) -> String {
     let mut sanitized = name
         .replace(['/', '\\', '\0'], "_")
         .replace("..", "_")
-        .replace('\n', "_")
-        .replace('\r', "_");
+        .replace(['\n', '\r'], "_");
 
     // Replace other control characters (0x01-0x1F and 0x7F)
     sanitized = sanitized
@@ -45,6 +44,27 @@ pub async fn copy_file_to_groups_dir(
     file_name: &str,
     app_data_dir: &Path,
 ) -> AppResult<String> {
+    // Defense in depth: ensure the source is a regular file and not inside the
+    // application's own data directory. Callers are expected to have already
+    // validated the path, but this guards against future command additions.
+    let metadata = tokio::fs::metadata(src)
+        .await
+        .map_err(|e| AppError::validation(format!("source file is not accessible: {e}")))?;
+    if !metadata.is_file() {
+        return Err(AppError::validation("source path is not a regular file"));
+    }
+
+    let canonical_app_data = tokio::fs::canonicalize(app_data_dir)
+        .await
+        .unwrap_or_else(|_| app_data_dir.to_path_buf());
+    if let Ok(canonical_src) = tokio::fs::canonicalize(src).await
+        && canonical_src.starts_with(&canonical_app_data)
+    {
+        return Err(AppError::validation(
+            "source file cannot be inside the application data directory",
+        ));
+    }
+
     let safe_name = sanitize_file_name(file_name, file_id);
     let dest_dir = app_data_dir.join("groups").join(group_id).join("files");
     tokio::fs::create_dir_all(&dest_dir)

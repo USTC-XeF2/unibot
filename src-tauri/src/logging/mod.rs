@@ -151,19 +151,17 @@ pub async fn read_system_logs(
             .and_then(|s| s.strip_suffix(".log"))
             .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
-        if let Some(min_date) = min_file_date {
-            if let Some(date) = file_date {
-                if date < min_date {
-                    continue;
-                }
-            }
+        if let Some(min_date) = min_file_date
+            && let Some(date) = file_date
+            && date < min_date
+        {
+            continue;
         }
-        if let Some(max_date) = max_file_date {
-            if let Some(date) = file_date {
-                if date > max_date {
-                    continue;
-                }
-            }
+        if let Some(max_date) = max_file_date
+            && let Some(date) = file_date
+            && date > max_date
+        {
+            continue;
         }
 
         paths.push(path);
@@ -226,24 +224,24 @@ pub async fn read_system_logs(
                 continue;
             };
 
-            if value.get("ts").is_none() {
-                if let Some(date) = file_date {
-                    let ts = date
-                        .and_hms_opt(0, 0, 0)
-                        .unwrap_or_default()
-                        .and_utc()
-                        .timestamp_millis();
-                    value["ts"] = ts.into();
-                }
+            if value.get("ts").is_none()
+                && let Some(date) = file_date
+            {
+                let ts = date
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap_or_default()
+                    .and_utc()
+                    .timestamp_millis();
+                value["ts"] = ts.into();
             }
 
             let entry_ts = value.get("ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
             value["seq"] = line_start.into();
 
-            if let Some(since_ts) = since_i64 {
-                if entry_ts < since_ts {
-                    continue;
-                }
+            if let Some(since_ts) = since_i64
+                && entry_ts < since_ts
+            {
+                continue;
             }
 
             if let Some(before_ts) = before_i64 {
@@ -272,10 +270,10 @@ pub async fn read_system_logs(
                 }
             }
 
-            if let Some(needle) = &keyword_lower {
-                if !value.to_string().to_lowercase().contains(needle) {
-                    continue;
-                }
+            if let Some(needle) = &keyword_lower
+                && !value.to_string().to_lowercase().contains(needle)
+            {
+                continue;
             }
 
             entries.push(value);

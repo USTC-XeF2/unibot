@@ -21,6 +21,7 @@ import { formatBytes } from "@/lib/format";
 import { confirmDialog } from "@/lib/modal";
 import {
   useDeleteGroupFileMutation,
+  useDeleteGroupFolderMutation,
   useDownloadGroupFileMutation,
   useUploadGroupFileMutation,
   useUpsertGroupFolderMutation,
@@ -54,6 +55,8 @@ export default function GroupFileBrowser({
   const downloadMutation = useDownloadGroupFileMutation();
   const deleteFileMutation = useDeleteGroupFileMutation();
   const createFolderMutation = useUpsertGroupFolderMutation();
+  const deleteFolderMutation = useDeleteGroupFolderMutation();
+  const renameFolderMutation = useUpsertGroupFolderMutation();
 
   const currentFolders = folders.filter(
     (f) => f.parent_folder_id === (parentFolderId ?? null),
@@ -76,6 +79,33 @@ export default function GroupFileBrowser({
   const handleGoRoot = () => {
     setFolderStack([]);
     setParentFolderId(undefined);
+  };
+
+  const handleRenameFolder = (folder: GroupFolder) => {
+    const newName = window.prompt("重命名文件夹", folder.folder_name);
+    if (!newName || newName.trim() === folder.folder_name) return;
+    renameFolderMutation.mutate({
+      userId,
+      groupId,
+      folderId: folder.folder_id,
+      parentFolderId: folder.parent_folder_id ?? undefined,
+      folderName: newName.trim(),
+    });
+  };
+
+  const handleDeleteFolder = async (folder: GroupFolder) => {
+    const confirmed = await confirmDialog({
+      title: "确认删除文件夹",
+      description: `确定要删除文件夹 "${folder.folder_name}" 吗？其中的文件需要先清空。`,
+      confirmText: "删除",
+    });
+    if (!confirmed) return;
+    deleteFolderMutation.mutate({
+      userId,
+      groupId,
+      folderId: folder.folder_id,
+      parentFolderId: folder.parent_folder_id ?? undefined,
+    });
   };
 
   const handleUpload = async () => {
@@ -224,7 +254,30 @@ export default function GroupFileBrowser({
                 <td className="px-4 py-3 text-muted-foreground">
                   {new Date(folder.updated_at).toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-primary">进入</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRenameFolder(folder);
+                      }}
+                    >
+                      重命名
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFolder(folder);
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
             {files.map((file) => (
@@ -244,7 +297,7 @@ export default function GroupFileBrowser({
                     userId,
                     groupId,
                     fileId: file.file_id,
-                    parentFolderId: parentFolderId ?? "",
+                    parentFolderId,
                   });
                 }}
               />

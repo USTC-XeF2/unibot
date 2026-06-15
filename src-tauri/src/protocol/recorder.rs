@@ -62,7 +62,7 @@ struct BatchItem {
 }
 
 enum BatchOp {
-    Item(BatchItem),
+    Item(Box<BatchItem>),
     Flush(tokio::sync::oneshot::Sender<()>),
 }
 
@@ -112,7 +112,7 @@ impl PacketRecorder {
                         Some(op) = batch_rx.recv() => {
                             match op {
                                 BatchOp::Item(item) => {
-                                    buffer.push(item);
+                                    buffer.push(*item);
                                     if buffer.len() >= 50 {
                                         Self::flush_buffer(&pool_clone, &mut buffer).await;
                                     }
@@ -137,7 +137,7 @@ impl PacketRecorder {
                 // Drain remaining items on channel close
                 while let Ok(op) = batch_rx.try_recv() {
                     if let BatchOp::Item(item) = op {
-                        buffer.push(item);
+                        buffer.push(*item);
                     }
                 }
                 if !buffer.is_empty() {
@@ -206,6 +206,7 @@ impl PacketRecorder {
     }
 
     /// Record a protocol event.
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_event(
         &self,
         bot_id: &str,
@@ -232,6 +233,7 @@ impl PacketRecorder {
     }
 
     /// Core recording logic: atomic file write + tiered database indexing.
+    #[allow(clippy::too_many_arguments)]
     async fn record(
         &self,
         bot_id: &str,
@@ -308,7 +310,7 @@ impl PacketRecorder {
                     session_id: session_id.map(|s| s.to_string()),
                     created_at: utils::now_ts() as i64,
                 };
-                let _ = self.ensure_batch_tx().send(BatchOp::Item(item));
+                let _ = self.ensure_batch_tx().send(BatchOp::Item(Box::new(item)));
             }
             Tier::Low => {
                 // File only; no database indexing.
@@ -318,6 +320,7 @@ impl PacketRecorder {
         Ok(packet_id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_db(
         &self,
         packet_id: &str,

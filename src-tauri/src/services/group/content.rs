@@ -16,16 +16,22 @@ use super::storage;
 fn prepare_announcement_for_upsert(
     mut announcement: GroupAnnouncementEntity,
 ) -> GroupAnnouncementEntity {
+    let now = crate::utils::now_ts();
     if announcement.announcement_id.trim().is_empty() {
         announcement.announcement_id = crate::utils::new_db_id();
+        announcement.created_at = now;
     }
+    announcement.updated_at = now;
     announcement
 }
 
 fn prepare_folder_for_upsert(mut folder: GroupFolderEntity) -> GroupFolderEntity {
+    let now = crate::utils::now_ts();
     if folder.folder_id.trim().is_empty() {
         folder.folder_id = crate::utils::new_db_id();
+        folder.created_at = now;
     }
+    folder.updated_at = now;
     folder
 }
 
@@ -33,6 +39,18 @@ fn ensure_album_belongs_to_group(album: &GroupAlbumEntity, group_id: &str) -> Ap
     if album.group_id != group_id {
         return Err(AppError::validation(
             "album does not belong to the target group",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_parent_folder_belongs_to_group(
+    folder: &GroupFolderEntity,
+    group_id: &str,
+) -> AppResult<()> {
+    if folder.group_id != group_id {
+        return Err(AppError::validation(
+            "parent folder does not belong to the target group",
         ));
     }
     Ok(())
@@ -153,6 +171,53 @@ impl GroupService {
             .list_group_folders(&group_id)
             .await
             .map_err(Into::into)
+    }
+
+    pub async fn delete_group_folder(
+        &self,
+        app: &tauri::AppHandle,
+        core: &CoreContainer,
+        user_id: String,
+        group_id: String,
+        folder_id: String,
+    ) -> AppResult<()> {
+        core.require_user_context(&user_id)?;
+        self.ensure_group_member(&group_id, &user_id).await?;
+
+        let folder = self
+            .repo
+            .get_group_folder_by_id(&folder_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("folder {} not found", folder_id)))?;
+
+        if folder.group_id != group_id {
+            return Err(AppError::validation(
+                "folder does not belong to the target group",
+            ));
+        }
+
+        // Only the creator or owner/admin can delete a folder.
+        let operator = self.ensure_group_member(&group_id, &user_id).await?;
+        if folder.creator_user_id != user_id && matches!(operator.role, GroupRole::Member) {
+            return Err(AppError::validation(
+                "only owner/admin or creator can delete folder",
+            ));
+        }
+
+        let deleted = self.repo.delete_group_folder(&folder_id).await?;
+        if !deleted {
+            return Err(AppError::validation("folder not found or contains files"));
+        }
+
+        let event = InternalEvent::GroupFolderDeleted {
+            folder_id: folder_id.clone(),
+            group_id: group_id.clone(),
+            time: now_ts(),
+        };
+        emit_to_group_members(core, &self.repo, &group_id, event.clone()).await?;
+        emit_group_content_to_windows(app, &self.repo, &group_id, &event).await?;
+
+        Ok(())
     }
 
     pub async fn upsert_group_file(
@@ -302,6 +367,7 @@ impl GroupService {
         Ok(file_path)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upload_group_file(
         &self,
         app: &tauri::AppHandle,
@@ -315,6 +381,17 @@ impl GroupService {
     ) -> AppResult<GroupFileEntity> {
         core.require_user_context(&user_id)?;
         self.ensure_group_member(&group_id, &user_id).await?;
+
+        if let Some(parent_folder_id) = parent_folder_id.as_deref() {
+            let folder = self
+                .repo
+                .get_group_folder_by_id(parent_folder_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::not_found(format!("folder {} not found", parent_folder_id))
+                })?;
+            ensure_parent_folder_belongs_to_group(&folder, &group_id)?;
+        }
 
         let file_id = crate::utils::new_db_id();
         let src = std::path::Path::new(&source_path);
@@ -474,17 +551,17 @@ impl GroupService {
         self.repo.delete_group_album(&album_id, &group_id).await?;
 
         for photo in &photos {
-            if let Some(ref file_path) = photo.file_path {
-                if let Err(e) = storage::delete_group_file_disk(file_path, &app_data_dir).await {
-                    tracing::warn!(
-                        target: "group_content",
-                        album_id = %album_id,
-                        group_id = %group_id,
-                        file_path = %file_path,
-                        error = %e,
-                        "failed to delete album photo file from disk after DB cleanup"
-                    );
-                }
+            if let Some(ref file_path) = photo.file_path
+                && let Err(e) = storage::delete_group_file_disk(file_path, &app_data_dir).await
+            {
+                tracing::warn!(
+                    target: "group_content",
+                    album_id = %album_id,
+                    group_id = %group_id,
+                    file_path = %file_path,
+                    error = %e,
+                    "failed to delete album photo file from disk after DB cleanup"
+                );
             }
         }
 
@@ -499,6 +576,7 @@ impl GroupService {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upload_group_photo(
         &self,
         app: &tauri::AppHandle,
@@ -539,15 +617,16 @@ impl GroupService {
             storage::copy_file_to_groups_dir(src, &group_id, &photo_id, &file_name, &app_data_dir)
                 .await?;
 
-        let metadata = tokio::fs::metadata(&app_data_dir.join(&file_path))
+        let absolute_path = app_data_dir.join(&file_path);
+        let metadata = tokio::fs::metadata(&absolute_path)
             .await
             .map_err(|e| AppError::storage(format!("failed to get photo metadata: {e}")))?;
 
         let photo = GroupPhotoEntity {
             photo_id,
-            album_id,
+            album_id: album_id.clone(),
             group_id: group_id.clone(),
-            url: file_path.clone(),
+            url: absolute_path.to_string_lossy().to_string(),
             file_path: Some(file_path),
             description,
             uploader_user_id: user_id.clone(),
@@ -556,6 +635,13 @@ impl GroupService {
         };
 
         self.repo.create_group_photo(&photo).await?;
+
+        // Set album cover if this is the first uploaded photo.
+        if album.cover_url.is_none() {
+            self.repo
+                .update_album_cover_url(&album_id, &photo.url)
+                .await?;
+        }
 
         let event = InternalEvent::GroupPhotoUploaded {
             photo_id: photo.photo_id.clone(),
@@ -751,6 +837,46 @@ mod tests {
     }
 
     #[test]
+    fn prepares_new_announcement_with_current_timestamps() {
+        let before = crate::utils::now_ts();
+        let prepared = prepare_announcement_for_upsert(announcement(""));
+        let after = crate::utils::now_ts();
+
+        assert!(prepared.created_at >= before && prepared.created_at <= after);
+        assert!(prepared.updated_at >= before && prepared.updated_at <= after);
+    }
+
+    #[test]
+    fn updates_existing_announcement_updated_at() {
+        let before = crate::utils::now_ts();
+        let prepared = prepare_announcement_for_upsert(announcement("ann-1"));
+        let after = crate::utils::now_ts();
+
+        assert_eq!(prepared.created_at, 100);
+        assert!(prepared.updated_at >= before && prepared.updated_at <= after);
+    }
+
+    #[test]
+    fn prepares_new_folder_with_current_timestamps() {
+        let before = crate::utils::now_ts();
+        let prepared = prepare_folder_for_upsert(folder(""));
+        let after = crate::utils::now_ts();
+
+        assert!(prepared.created_at >= before && prepared.created_at <= after);
+        assert!(prepared.updated_at >= before && prepared.updated_at <= after);
+    }
+
+    #[test]
+    fn updates_existing_folder_updated_at() {
+        let before = crate::utils::now_ts();
+        let prepared = prepare_folder_for_upsert(folder("folder-1"));
+        let after = crate::utils::now_ts();
+
+        assert_eq!(prepared.created_at, 100);
+        assert!(prepared.updated_at >= before && prepared.updated_at <= after);
+    }
+
+    #[test]
     fn accepts_album_in_target_group() {
         let album = GroupAlbumEntity {
             album_id: "album-1".to_string(),
@@ -778,5 +904,20 @@ mod tests {
         };
 
         assert!(ensure_album_belongs_to_group(&album, "20001").is_err());
+    }
+
+    #[test]
+    fn accepts_parent_folder_in_target_group() {
+        let folder = folder("folder-1");
+
+        assert!(ensure_parent_folder_belongs_to_group(&folder, "20001").is_ok());
+    }
+
+    #[test]
+    fn rejects_parent_folder_from_other_group() {
+        let mut folder = folder("folder-1");
+        folder.group_id = "20002".to_string();
+
+        assert!(ensure_parent_folder_belongs_to_group(&folder, "20001").is_err());
     }
 }

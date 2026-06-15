@@ -135,6 +135,11 @@ pub enum InternalEvent {
         creator_user_id: DbId,
         time: u64,
     },
+    GroupFolderDeleted {
+        folder_id: String,
+        group_id: DbId,
+        time: u64,
+    },
     GroupFileUpserted {
         file_id: String,
         group_id: DbId,

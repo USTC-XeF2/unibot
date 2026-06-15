@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
 } from "react";
 import { handleQueryInvalidation } from "@/lib/query";
 import type { InternalEventPayload } from "@/types/event";
@@ -70,6 +71,7 @@ export function ChatEventBusProvider({
   children: ReactNode;
 }) {
   const subscribersRef = useRef<Set<ChatEventSubscriber>>(new Set());
+  const [listenError, setListenError] = useState<string | null>(null);
 
   const subscribe = useCallback((callback: ChatEventSubscriber) => {
     subscribersRef.current.add(callback);
@@ -112,11 +114,14 @@ export function ChatEventBusProvider({
         unlisten = fn;
       })
       .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
         console.error(`[event-bus] failed for ${label}:`, error);
+        setListenError(message);
       });
 
     return () => {
       cancelled = true;
+      setListenError(null);
       if (unlisten) {
         unlisten();
         unlisten = null;
@@ -126,6 +131,11 @@ export function ChatEventBusProvider({
 
   return (
     <ChatEventBusContext.Provider value={{ subscribe }}>
+      {listenError && (
+        <div className="border-destructive/20 border-b bg-destructive/10 px-4 py-2 text-destructive text-sm">
+          实时连接断开：{listenError}。请关闭窗口重新打开。
+        </div>
+      )}
       {children}
     </ChatEventBusContext.Provider>
   );

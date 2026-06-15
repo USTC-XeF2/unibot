@@ -23,6 +23,7 @@ impl GroupRepo {
                 content = excluded.content,
                 image_url = excluded.image_url,
                 updated_at = excluded.updated_at
+                WHERE group_announcements.group_id = excluded.group_id
             "#,
         )
         .bind(&announcement.announcement_id)
@@ -82,6 +83,7 @@ impl GroupRepo {
                 parent_folder_id = excluded.parent_folder_id,
                 folder_name = excluded.folder_name,
                 updated_at = excluded.updated_at
+                WHERE group_folders.group_id = excluded.group_id
             "#,
         )
         .bind(&folder.folder_id)
@@ -127,6 +129,55 @@ impl GroupRepo {
         .await?;
 
         rows.into_iter().map(TryInto::try_into).collect()
+    }
+
+    pub async fn delete_group_folder(&self, folder_id: &str) -> Result<bool, sqlx::Error> {
+        // Prevent deleting folders that still contain files.
+        let file_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM group_files WHERE parent_folder_id = ?1")
+                .bind(folder_id)
+                .fetch_one(&self.pool)
+                .await?;
+        if file_count > 0 {
+            return Ok(false);
+        }
+
+        let result = sqlx::query("DELETE FROM group_folders WHERE folder_id = ?1")
+            .bind(folder_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn get_group_folder_by_id(
+        &self,
+        folder_id: &str,
+    ) -> Result<Option<GroupFolderEntity>, sqlx::Error> {
+        let row = sqlx::query_as::<_, GroupFolderRow>(
+            r#"
+            SELECT
+                gf.folder_id,
+                gf.group_id,
+                gf.parent_folder_id,
+                gf.folder_name,
+                gf.creator_user_id,
+                gf.created_at,
+                gf.updated_at,
+                (
+                    SELECT COUNT(*)
+                    FROM group_files f
+                    WHERE f.group_id = gf.group_id
+                      AND f.parent_folder_id = gf.folder_id
+                ) AS file_count
+            FROM group_folders gf
+            WHERE gf.folder_id = ?1
+            "#,
+        )
+        .bind(folder_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
     }
 
     pub async fn upsert_group_file(&self, file: &GroupFileEntity) -> Result<(), sqlx::Error> {
@@ -315,6 +366,19 @@ impl GroupRepo {
         Ok(result.rows_affected() > 0)
     }
 
+    pub async fn update_album_cover_url(
+        &self,
+        album_id: &str,
+        cover_url: &str,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE group_albums SET cover_url = ?1 WHERE album_id = ?2")
+            .bind(cover_url)
+            .bind(album_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn create_group_photo(&self, photo: &GroupPhotoEntity) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -487,7 +551,7 @@ impl GroupRepo {
                 e.created_at,
                 m.content_json
             FROM group_essence_messages e
-            JOIN messages m ON m.message_id = e.message_id
+            LEFT JOIN messages m ON m.message_id = e.message_id
             WHERE e.group_id = ?1
             ORDER BY e.created_at DESC
             "#,

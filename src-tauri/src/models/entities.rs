@@ -4,33 +4,23 @@ use super::internal::MessageSegment;
 
 pub type DbId = String;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountStatus {
+    #[default]
     Active,
     Disabled,
     Unavailable,
     Deleted,
 }
 
-impl Default for AccountStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GroupStatus {
+    #[default]
     Active,
     Dissolved,
     Unavailable,
-}
-
-impl Default for GroupStatus {
-    fn default() -> Self {
-        Self::Active
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -199,7 +189,9 @@ pub struct GroupAnnouncementEntity {
     pub sender_user_id: DbId,
     pub content: String,
     pub image_url: Option<String>,
+    #[serde(default)]
     pub created_at: u64,
+    #[serde(default)]
     pub updated_at: u64,
 }
 
@@ -249,7 +241,9 @@ pub struct GroupFolderEntity {
     pub parent_folder_id: Option<String>,
     pub folder_name: String,
     pub creator_user_id: DbId,
+    #[serde(default)]
     pub created_at: u64,
+    #[serde(default)]
     pub updated_at: u64,
     pub file_count: u32,
 }

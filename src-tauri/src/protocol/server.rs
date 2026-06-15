@@ -43,12 +43,11 @@ struct AuthQuery {
 
 /// Extract Bearer token from Authorization header or query param.
 fn extract_token(headers: &axum::http::HeaderMap, query: &AuthQuery) -> Option<String> {
-    if let Some(auth) = headers.get(axum::http::header::AUTHORIZATION) {
-        if let Ok(auth_str) = auth.to_str() {
-            if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                return Some(token.to_string());
-            }
-        }
+    if let Some(auth) = headers.get(axum::http::header::AUTHORIZATION)
+        && let Ok(auth_str) = auth.to_str()
+        && let Some(token) = auth_str.strip_prefix("Bearer ")
+    {
+        return Some(token.to_string());
     }
     query.access_token.clone()
 }
@@ -105,10 +104,10 @@ async fn event_handler(
                 match result {
                     Ok(event) => {
                         // Filter out echo messages where origin_bot_id == current_bot_id
-                        if let InternalEvent::Message { origin_bot_id, .. } = &event {
-                            if origin_bot_id.as_ref() == Some(&bot_id) {
-                                return None;
-                            }
+                        if let InternalEvent::Message { origin_bot_id, .. } = &event
+                            && origin_bot_id.as_ref() == Some(&bot_id)
+                        {
+                            return None;
                         }
 
                         let protocol_event = adapter.adapt_event(&event, &context)?;

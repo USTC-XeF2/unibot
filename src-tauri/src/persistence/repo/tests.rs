@@ -1,5 +1,6 @@
 use crate::models::{
-    GroupAlbumEntity, GroupMemberProfile, GroupProfile, GroupRequestType, GroupRole, RequestState,
+    GroupAlbumEntity, GroupAnnouncementEntity, GroupFileEntity, GroupFolderEntity,
+    GroupMemberProfile, GroupProfile, GroupRequestType, GroupRole, RequestState,
 };
 use crate::persistence::{
     BotRepo, GroupRepo, InteractionRepo, MessageRepo, NewFriendRequestRecord, NewGroupEventRecord,
@@ -279,6 +280,221 @@ async fn smoke_crud_messages(pool: sqlx::SqlitePool) -> Result<(), sqlx::Error> 
         .await?;
     assert!(recalled.is_some());
     assert!(recalled.unwrap().is_recalled);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn upsert_announcement_does_not_update_other_group(
+    pool: sqlx::SqlitePool,
+) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+    user_repo.upsert_user(&make_profile("10002", "Bob")).await?;
+
+    let repo = GroupRepo::new(pool);
+    repo.upsert_group(&make_group("20001", "Group A", "10001"))
+        .await?;
+    repo.upsert_group(&make_group("20002", "Group B", "10002"))
+        .await?;
+    repo.upsert_group_member(&make_member("20001", "10001", GroupRole::Owner))
+        .await?;
+    repo.upsert_group_member(&make_member("20002", "10002", GroupRole::Owner))
+        .await?;
+
+    repo.upsert_announcement(&GroupAnnouncementEntity {
+        announcement_id: "ann-shared".to_string(),
+        group_id: "20002".to_string(),
+        sender_user_id: "10002".to_string(),
+        content: "original".to_string(),
+        image_url: None,
+        created_at: 100,
+        updated_at: 100,
+    })
+    .await?;
+
+    repo.upsert_announcement(&GroupAnnouncementEntity {
+        announcement_id: "ann-shared".to_string(),
+        group_id: "20001".to_string(),
+        sender_user_id: "10001".to_string(),
+        content: "cross-group overwrite".to_string(),
+        image_url: None,
+        created_at: 200,
+        updated_at: 200,
+    })
+    .await?;
+
+    let group_b_announcements = repo.list_announcements("20002").await?;
+    assert_eq!(group_b_announcements.len(), 1);
+    assert_eq!(group_b_announcements[0].content, "original");
+    assert!(repo.list_announcements("20001").await?.is_empty());
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn upsert_group_folder_does_not_update_other_group(
+    pool: sqlx::SqlitePool,
+) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+    user_repo.upsert_user(&make_profile("10002", "Bob")).await?;
+
+    let repo = GroupRepo::new(pool);
+    repo.upsert_group(&make_group("20001", "Group A", "10001"))
+        .await?;
+    repo.upsert_group(&make_group("20002", "Group B", "10002"))
+        .await?;
+    repo.upsert_group_member(&make_member("20001", "10001", GroupRole::Owner))
+        .await?;
+    repo.upsert_group_member(&make_member("20002", "10002", GroupRole::Owner))
+        .await?;
+
+    repo.upsert_group_folder(&GroupFolderEntity {
+        folder_id: "folder-shared".to_string(),
+        group_id: "20002".to_string(),
+        parent_folder_id: None,
+        folder_name: "original".to_string(),
+        creator_user_id: "10002".to_string(),
+        created_at: 100,
+        updated_at: 100,
+        file_count: 0,
+    })
+    .await?;
+
+    repo.upsert_group_folder(&GroupFolderEntity {
+        folder_id: "folder-shared".to_string(),
+        group_id: "20001".to_string(),
+        parent_folder_id: None,
+        folder_name: "cross-group overwrite".to_string(),
+        creator_user_id: "10001".to_string(),
+        created_at: 200,
+        updated_at: 200,
+        file_count: 0,
+    })
+    .await?;
+
+    let group_b_folders = repo.list_group_folders("20002").await?;
+    assert_eq!(group_b_folders.len(), 1);
+    assert_eq!(group_b_folders[0].folder_name, "original");
+    assert!(repo.list_group_folders("20001").await?.is_empty());
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn group_file_parent_folder_must_belong_to_same_group(
+    pool: sqlx::SqlitePool,
+) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+    user_repo.upsert_user(&make_profile("10002", "Bob")).await?;
+
+    let repo = GroupRepo::new(pool);
+    repo.upsert_group(&make_group("20001", "Group A", "10001"))
+        .await?;
+    repo.upsert_group(&make_group("20002", "Group B", "10002"))
+        .await?;
+    repo.upsert_group_member(&make_member("20001", "10001", GroupRole::Owner))
+        .await?;
+    repo.upsert_group_member(&make_member("20002", "10002", GroupRole::Owner))
+        .await?;
+    repo.upsert_group_folder(&GroupFolderEntity {
+        folder_id: "folder-b".to_string(),
+        group_id: "20002".to_string(),
+        parent_folder_id: None,
+        folder_name: "Group B Folder".to_string(),
+        creator_user_id: "10002".to_string(),
+        created_at: 100,
+        updated_at: 100,
+        file_count: 0,
+    })
+    .await?;
+
+    let result = repo
+        .upsert_group_file(&GroupFileEntity {
+            file_id: "file-a".to_string(),
+            group_id: "20001".to_string(),
+            parent_folder_id: Some("folder-b".to_string()),
+            file_name: "cross.txt".to_string(),
+            file_size: 1,
+            file_hash: None,
+            uploader_user_id: "10001".to_string(),
+            uploaded_at: 200,
+            expire_at: None,
+            download_count: 0,
+            file_path: Some("groups/20001/files/file-a_cross.txt".to_string()),
+        })
+        .await;
+
+    assert!(result.is_err());
+    assert!(
+        repo.list_group_files("20001", Some("folder-b"))
+            .await?
+            .is_empty()
+    );
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn list_group_essence_messages_keeps_record_after_message_delete(
+    pool: sqlx::SqlitePool,
+) -> Result<(), sqlx::Error> {
+    setup(&pool).await;
+
+    let user_repo = UserRepo::new(pool.clone());
+    user_repo
+        .upsert_user(&make_profile("10001", "Alice"))
+        .await?;
+
+    let group_repo = GroupRepo::new(pool.clone());
+    group_repo
+        .upsert_group(&make_group("20001", "Test", "10001"))
+        .await?;
+    group_repo
+        .upsert_group_member(&make_member("20001", "10001", GroupRole::Owner))
+        .await?;
+
+    let msg_repo = MessageRepo::new(pool.clone());
+    let message = msg_repo
+        .insert_message(NewMessageRecord {
+            owner_user_id: "10001".to_string(),
+            sender_user_id: "10001".to_string(),
+            source_type: "group".to_string(),
+            source_id: "20001".to_string(),
+            content_json: r#"[{"type":"text","data":{"text":"important"}}]"#.to_string(),
+            quoted_message_id: None,
+            created_at: 100,
+            bot_id: None,
+        })
+        .await?;
+
+    group_repo
+        .create_group_essence_message("20001", &message.id, "10001", "10001", true, 200)
+        .await?;
+
+    sqlx::query("DELETE FROM messages WHERE message_id = ?1")
+        .bind(&message.id)
+        .execute(&pool)
+        .await?;
+
+    let essences = group_repo.list_group_essence_messages("20001").await?;
+    assert_eq!(essences.len(), 1);
+    assert_eq!(essences[0].sender_user_id, "10001");
+    assert!(essences[0].content.is_empty());
 
     Ok(())
 }

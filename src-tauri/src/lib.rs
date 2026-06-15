@@ -140,13 +140,13 @@ pub fn run() {
                         .timestamp_millis();
 
                     // If never cleaned, or last cleanup was before today's 4:00 AM
-                    if last_cleanup == 0 || last_cleanup < today_4am {
-                        if run_cleanup(&cleanup_app, &cleanup_hub).await {
-                            let _ = cleanup_hub
-                                .settings
-                                .set_log_last_cleanup_at(crate::utils::now_ts() as i64)
-                                .await;
-                        }
+                    if (last_cleanup == 0 || last_cleanup < today_4am)
+                        && run_cleanup(&cleanup_app, &cleanup_hub).await
+                    {
+                        let _ = cleanup_hub
+                            .settings
+                            .set_log_last_cleanup_at(crate::utils::now_ts() as i64)
+                            .await;
                     }
 
                     let mut next_run = tokio::time::Instant::now();
@@ -238,6 +238,14 @@ pub fn run() {
                         if let Some(devtools_window) = app_handle.get_webview_window("developer-tools") {
                             let _ = devtools_window.close();
                         }
+
+                        // Close any standalone group content windows so they do
+                        // not outlive the main window and prevent a clean exit.
+                        for (label, window) in app_handle.webview_windows() {
+                            if label.starts_with("group-files-") || label.starts_with("group-albums-") {
+                                let _ = window.close();
+                            }
+                        }
                     }
                 });
             }
@@ -303,6 +311,7 @@ pub fn run() {
             group::list_group_announcements,
             group::upsert_group_folder,
             group::list_group_folders,
+            group::delete_group_folder,
             group::upsert_group_file,
             group::list_group_files,
             group::upload_group_file,

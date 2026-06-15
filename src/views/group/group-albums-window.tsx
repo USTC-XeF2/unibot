@@ -2,16 +2,22 @@ import { useSearchParams } from "react-router";
 import { ChatEventBusProvider } from "@/components/chat/chat-event-bus-provider";
 import GroupAlbumBrowser from "@/components/group/group-album-browser";
 import { Toaster } from "@/components/ui/sonner";
+import { isValidGroupId, isValidUserId } from "@/lib/query/common";
 
 export default function GroupAlbumsWindow() {
   const [searchParams] = useSearchParams();
   const userId = searchParams.get("userId") || "";
   const groupId = searchParams.get("groupId") || "";
-  const windowLabel = `group-albums-${userId}-${groupId}`;
 
-  if (!userId || !groupId) {
-    return <div>缺少 userId 或 groupId</div>;
+  if (!isValidUserId(userId) || !isValidGroupId(groupId)) {
+    return (
+      <div className="flex h-screen items-center justify-center text-muted-foreground">
+        缺少有效的 userId 或 groupId
+      </div>
+    );
   }
+
+  const windowLabel = `group-albums-${userId}-${groupId}`;
 
   return (
     <ChatEventBusProvider userId={userId} windowLabel={windowLabel}>

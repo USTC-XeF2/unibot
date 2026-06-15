@@ -127,7 +127,7 @@ pub(super) struct GroupFolderRow {
 pub(super) struct GroupEssenceRow {
     pub id: String,
     pub group_id: String,
-    pub message_id: String,
+    pub message_id: Option<String>,
     pub sender_user_id: String,
     pub operator_user_id: String,
     pub is_set: bool,
@@ -341,7 +341,7 @@ impl TryFrom<GroupEssenceRow> for GroupEssenceMessageEntity {
         Ok(Self {
             essence_id: row.id,
             group_id: row.group_id,
-            message_id: row.message_id,
+            message_id: row.message_id.unwrap_or_default(),
             sender_user_id: row.sender_user_id,
             operator_user_id: row.operator_user_id,
             is_set: row.is_set,

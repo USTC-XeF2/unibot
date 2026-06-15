@@ -72,7 +72,7 @@ pub async fn list_group_event_history(
     group_id: String,
     limit: Option<i64>,
 ) -> Result<Vec<GroupEventEntity>, String> {
-    let limit = limit.unwrap_or(50).max(1).min(1000);
+    let limit = limit.unwrap_or(50).clamp(1, 1000);
     services
         .group
         .list_group_event_history(user_id, group_id, limit)

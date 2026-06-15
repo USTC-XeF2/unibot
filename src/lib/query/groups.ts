@@ -153,7 +153,10 @@ export function invalidateGroupFilesQuery(
   parentFolderId?: string,
 ) {
   return queryClient.invalidateQueries({
-    queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
+    queryKey:
+      parentFolderId === undefined
+        ? ["groups", "files", userId, groupId]
+        : queryKeys.groups.files(userId, groupId, parentFolderId),
   });
 }
 

@@ -93,6 +93,7 @@ export const COMMANDS = {
   // group content: folder
   listGroupFolders: "list_group_folders",
   upsertGroupFolder: "upsert_group_folder",
+  deleteGroupFolder: "delete_group_folder",
 
   // group content: announcement / essence
   listGroupAnnouncements: "list_group_announcements",

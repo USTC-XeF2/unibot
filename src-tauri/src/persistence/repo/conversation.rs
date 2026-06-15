@@ -54,6 +54,7 @@ impl ConversationRepo {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn upsert_conversation_flag(
         &self,
         owner_user_id: &str,

@@ -78,6 +78,7 @@ export function handleQueryInvalidation(
   // Group content events
   if (
     payload.kind === "group_folder_upserted" ||
+    payload.kind === "group_folder_deleted" ||
     payload.kind === "group_file_upserted" ||
     payload.kind === "group_file_deleted"
   ) {
