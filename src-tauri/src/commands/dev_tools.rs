@@ -907,7 +907,7 @@ mod tests {
 
         execute_sql_query(
             &pool,
-            "INSERT INTO test_types VALUES (42, 3.14, 'hello', X'010203')",
+            "INSERT INTO test_types VALUES (42, 2.5, 'hello', X'010203')",
             true,
         )
         .await
@@ -941,7 +941,7 @@ mod tests {
         assert_eq!(result.rows[1][0], serde_json::Value::Number(42.into()));
         assert_eq!(
             result.rows[1][1],
-            serde_json::Value::Number(serde_json::Number::from_f64(3.14).unwrap())
+            serde_json::Value::Number(serde_json::Number::from_f64(2.5).unwrap())
         );
         assert_eq!(result.rows[1][2], serde_json::Value::String("hello".into()));
         assert_eq!(

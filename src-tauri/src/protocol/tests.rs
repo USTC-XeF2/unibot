@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod adapter {
     use crate::models::{InternalEvent, MessageSegment, MessageSource};
     use crate::protocol::adapter::{internal_to_milky_segment, milky_to_internal_segment};
     use crate::protocol::types::{
