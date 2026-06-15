@@ -104,5 +104,6 @@ export type GroupEssenceMessage = {
   sender_user_id: string;
   operator_user_id: string;
   is_set: boolean;
+  content: import("./chat").MessageSegment[];
   created_at: number;
 };

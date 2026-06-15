@@ -117,6 +117,13 @@ export type InternalEventPayload =
       time: number;
     }
   | {
+      kind: "group_member_left";
+      group_id: string;
+      operator_user_id: string | null;
+      target_user_id: string;
+      time: number;
+    }
+  | {
       kind: "group_member_title_updated";
       group_id: string;
       operator_user_id: string;
@@ -139,10 +146,22 @@ export type InternalEventPayload =
       time: number;
     }
   | {
+      kind: "group_announcement_deleted";
+      announcement_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
       kind: "group_folder_upserted";
       folder_id: string;
       group_id: string;
       creator_user_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_folder_deleted";
+      folder_id: string;
+      group_id: string;
       time: number;
     }
   | {
@@ -160,6 +179,39 @@ export type InternalEventPayload =
       sender_user_id: string;
       operator_user_id: string;
       is_set: boolean;
+      time: number;
+    }
+  | {
+      kind: "group_file_deleted";
+      file_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_album_created";
+      album_id: string;
+      group_id: string;
+      name: string;
+      time: number;
+    }
+  | {
+      kind: "group_album_deleted";
+      album_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_photo_uploaded";
+      photo_id: string;
+      album_id: string;
+      group_id: string;
+      time: number;
+    }
+  | {
+      kind: "group_photo_deleted";
+      photo_id: string;
+      album_id: string;
+      group_id: string;
       time: number;
     }
   | {

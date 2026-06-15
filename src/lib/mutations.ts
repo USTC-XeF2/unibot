@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { COMMANDS } from "@/lib/commands";
 import {
   invalidateBotStatsQuery,
@@ -8,8 +9,11 @@ import {
   invalidateFriendRequestsQuery,
   invalidateFriendsQuery,
   invalidateGroupAlbumsQuery,
+  invalidateGroupAnnouncementsQuery,
   invalidateGroupCategoriesQuery,
+  invalidateGroupEssenceMessagesQuery,
   invalidateGroupFilesQuery,
+  invalidateGroupFoldersQuery,
   invalidateGroupPhotosQuery,
   invalidateGroupRequestsQueries,
   invalidateGroupsQuery,
@@ -19,6 +23,11 @@ import {
 } from "@/lib/query";
 import type { BotProfile, DebugSession } from "@/types/bot";
 import type { MessageSegment, MessageSource } from "@/types/chat";
+import type {
+  GroupAnnouncement,
+  GroupEssenceMessage,
+  GroupFolder,
+} from "@/types/group";
 import type { RequestState } from "@/types/request";
 
 type RequestActionState = Extract<RequestState, "accepted" | "rejected">;
@@ -535,15 +544,17 @@ export function useUploadGroupFileMutation() {
       userId: string;
       groupId: string;
       parentFolderId?: string;
-      fileName: string;
+      fileName?: string;
       sourcePath: string;
     }) =>
       invoke(COMMANDS.uploadGroupFile, {
-        userId,
-        groupId,
-        parentFolderId: parentFolderId ?? null,
-        fileName,
-        sourcePath,
+        input: {
+          user_id: userId,
+          group_id: groupId,
+          parent_folder_id: parentFolderId ?? null,
+          file_name: fileName ?? null,
+          source_path: sourcePath,
+        },
       }),
     onSuccess: (_, variables) =>
       invalidateGroupFilesQuery(
@@ -551,6 +562,9 @@ export function useUploadGroupFileMutation() {
         variables.groupId,
         variables.parentFolderId,
       ),
+    onError: (error) => {
+      toast.error(`上传文件失败：${error}`);
+    },
   });
 }
 
@@ -560,16 +574,22 @@ export function useDownloadGroupFileMutation() {
       userId,
       groupId,
       fileId,
+      destinationPath,
     }: {
       userId: string;
       groupId: string;
       fileId: string;
+      destinationPath: string;
     }) =>
       invoke<string>(COMMANDS.downloadGroupFile, {
         userId,
         groupId,
         fileId,
+        destinationPath,
       }),
+    onError: (error) => {
+      toast.error(`下载文件失败：${error}`);
+    },
   });
 }
 
@@ -579,7 +599,7 @@ export function useDeleteGroupFileMutation() {
       userId: string;
       groupId: string;
       fileId: string;
-      parentFolderId: string;
+      parentFolderId?: string;
     }) =>
       invoke(COMMANDS.deleteGroupFile, {
         userId: params.userId,
@@ -608,6 +628,9 @@ export function useCreateGroupAlbumMutation() {
     }) => invoke(COMMANDS.createGroupAlbum, { userId, groupId, name }),
     onSuccess: (_, variables) =>
       invalidateGroupAlbumsQuery(variables.userId, variables.groupId),
+    onError: (error) => {
+      toast.error(`创建相册失败：${error}`);
+    },
   });
 }
 
@@ -624,7 +647,13 @@ export function useDeleteGroupAlbumMutation() {
         albumId: params.albumId,
       }),
     onSuccess: (_, params) =>
-      invalidateGroupAlbumsQuery(params.userId, params.groupId),
+      Promise.all([
+        invalidateGroupAlbumsQuery(params.userId, params.groupId),
+        invalidateGroupPhotosQuery(params.userId, params.albumId),
+      ]),
+    onError: (error) => {
+      toast.error(`删除相册失败：${error}`);
+    },
   });
 }
 
@@ -644,14 +673,22 @@ export function useUploadGroupPhotoMutation() {
       description?: string;
     }) =>
       invoke(COMMANDS.uploadGroupPhoto, {
-        userId,
-        groupId,
-        albumId,
-        sourcePath,
-        description: description ?? null,
+        input: {
+          user_id: userId,
+          group_id: groupId,
+          album_id: albumId,
+          source_path: sourcePath,
+          description: description ?? null,
+        },
       }),
     onSuccess: (_, variables) =>
-      invalidateGroupPhotosQuery(variables.userId, variables.albumId),
+      Promise.all([
+        invalidateGroupPhotosQuery(variables.userId, variables.albumId),
+        invalidateGroupAlbumsQuery(variables.userId, variables.groupId),
+      ]),
+    onError: (error) => {
+      toast.error(`上传照片失败：${error}`);
+    },
   });
 }
 
@@ -669,7 +706,154 @@ export function useDeleteGroupPhotoMutation() {
         photoId: params.photoId,
       }),
     onSuccess: (_, params) =>
-      invalidateGroupPhotosQuery(params.userId, params.albumId),
+      Promise.all([
+        invalidateGroupPhotosQuery(params.userId, params.albumId),
+        invalidateGroupAlbumsQuery(params.userId, params.groupId),
+      ]),
+    onError: (error) => {
+      toast.error(`删除照片失败：${error}`);
+    },
+  });
+}
+
+// === Group Folders ===
+
+export function useUpsertGroupFolderMutation() {
+  return useMutation({
+    mutationFn: (input: {
+      userId: string;
+      groupId: string;
+      folderId?: string;
+      parentFolderId?: string;
+      folderName: string;
+    }) =>
+      invoke<GroupFolder>(COMMANDS.upsertGroupFolder, {
+        input: {
+          folder_id: input.folderId ?? "",
+          group_id: input.groupId,
+          parent_folder_id: input.parentFolderId ?? null,
+          folder_name: input.folderName,
+          creator_user_id: input.userId,
+          file_count: 0,
+        },
+      }),
+    onSuccess: (_, variables) =>
+      Promise.all([
+        invalidateGroupFoldersQuery(variables.userId, variables.groupId),
+        invalidateGroupFilesQuery(
+          variables.userId,
+          variables.groupId,
+          variables.parentFolderId,
+        ),
+      ]),
+    onError: (error, variables) => {
+      const action = variables.folderId ? "重命名文件夹" : "创建文件夹";
+      toast.error(`${action}失败：${error}`);
+    },
+  });
+}
+
+export function useDeleteGroupFolderMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      folderId: string;
+      parentFolderId?: string;
+    }) =>
+      invoke(COMMANDS.deleteGroupFolder, {
+        userId: params.userId,
+        groupId: params.groupId,
+        folderId: params.folderId,
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupFoldersQuery(variables.userId, variables.groupId),
+    onError: (error) => {
+      toast.error(`删除文件夹失败：${error}`);
+    },
+  });
+}
+
+export function useDeleteGroupAnnouncementMutation() {
+  return useMutation({
+    mutationFn: (params: {
+      userId: string;
+      groupId: string;
+      announcementId: string;
+    }) =>
+      invoke(COMMANDS.deleteGroupAnnouncement, {
+        userId: params.userId,
+        groupId: params.groupId,
+        announcementId: params.announcementId,
+      }),
+    onSuccess: (_, params) =>
+      invalidateGroupAnnouncementsQuery(params.userId, params.groupId),
+    onError: (error) => {
+      toast.error(`删除公告失败：${error}`);
+    },
+  });
+}
+
+// === Group Announcements ===
+
+export function useUpsertGroupAnnouncementMutation() {
+  return useMutation({
+    mutationFn: (input: {
+      userId: string;
+      groupId: string;
+      announcementId?: string;
+      content: string;
+      imageUrl?: string;
+    }) =>
+      invoke<GroupAnnouncement>(COMMANDS.upsertGroupAnnouncement, {
+        input: {
+          announcement_id: input.announcementId ?? "",
+          group_id: input.groupId,
+          sender_user_id: input.userId,
+          content: input.content,
+          image_url: input.imageUrl ?? null,
+        },
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupAnnouncementsQuery(variables.userId, variables.groupId),
+    onError: (error, variables) => {
+      const action = variables.announcementId ? "编辑公告" : "发布公告";
+      toast.error(`${action}失败：${error}`);
+    },
+  });
+}
+
+// === Group Essence ===
+
+/**
+ * Mirrors the Rust `EssenceUpdate` tagged enum so set/unset can never carry
+ * the wrong identifier: "set" requires a messageId, "unset" requires an
+ * essenceId, enforced by the type system on both sides of the Tauri boundary.
+ */
+export type EssenceUpdate =
+  | { kind: "set"; messageId: string }
+  | { kind: "unset"; essenceId: string };
+
+export function useSetGroupEssenceMessageMutation() {
+  return useMutation({
+    mutationFn: (input: {
+      userId: string;
+      groupId: string;
+      update: EssenceUpdate;
+    }) =>
+      invoke<GroupEssenceMessage>(COMMANDS.setGroupEssenceMessage, {
+        userId: input.userId,
+        groupId: input.groupId,
+        update:
+          input.update.kind === "set"
+            ? { type: "set", message_id: input.update.messageId }
+            : { type: "unset", essence_id: input.update.essenceId },
+      }),
+    onSuccess: (_, variables) =>
+      invalidateGroupEssenceMessagesQuery(variables.userId, variables.groupId),
+    onError: (error) => {
+      toast.error(`设置精华失败：${error}`);
+    },
   });
 }
 

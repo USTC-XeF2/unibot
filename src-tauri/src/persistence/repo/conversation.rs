@@ -2,6 +2,17 @@ use sqlx::SqlitePool;
 
 use crate::models::ConversationState;
 
+/// Borrowed identity of a single conversation row, shared by the pinned/muted
+/// upsert helpers. Grouping the four locator fields keeps the internal flag
+/// helper from taking a long, error-prone positional argument list.
+#[derive(Clone, Copy)]
+struct ConversationKey<'a> {
+    owner_user_id: &'a str,
+    scene: &'a str,
+    peer_user_id: Option<&'a str>,
+    group_id: Option<&'a str>,
+}
+
 #[derive(Clone)]
 pub struct ConversationRepo {
     pool: SqlitePool,
@@ -22,10 +33,12 @@ impl ConversationRepo {
         updated_at: i64,
     ) -> Result<(), sqlx::Error> {
         self.upsert_conversation_flag(
-            owner_user_id,
-            scene,
-            peer_user_id,
-            group_id,
+            ConversationKey {
+                owner_user_id,
+                scene,
+                peer_user_id,
+                group_id,
+            },
             "is_pinned",
             is_pinned,
             updated_at,
@@ -43,10 +56,12 @@ impl ConversationRepo {
         updated_at: i64,
     ) -> Result<(), sqlx::Error> {
         self.upsert_conversation_flag(
-            owner_user_id,
-            scene,
-            peer_user_id,
-            group_id,
+            ConversationKey {
+                owner_user_id,
+                scene,
+                peer_user_id,
+                group_id,
+            },
             "is_muted",
             is_muted,
             updated_at,
@@ -56,14 +71,17 @@ impl ConversationRepo {
 
     async fn upsert_conversation_flag(
         &self,
-        owner_user_id: &str,
-        scene: &str,
-        peer_user_id: Option<&str>,
-        group_id: Option<&str>,
+        key: ConversationKey<'_>,
         flag_column: &str,
         flag_value: bool,
         updated_at: i64,
     ) -> Result<(), sqlx::Error> {
+        let ConversationKey {
+            owner_user_id,
+            scene,
+            peer_user_id,
+            group_id,
+        } = key;
         let is_private = scene == "private" || scene == "temp";
         let flag_i: i64 = if flag_value { 1 } else { 0 };
 

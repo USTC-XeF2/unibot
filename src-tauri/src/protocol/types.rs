@@ -55,6 +55,12 @@ pub struct BotRuntimeContext {
     pub bot_id: String,
     pub bound_user_id: String,
     pub access_token: String,
+    /// The address this bot's HTTP server is bound to.
+    ///
+    /// Intentionally reserved: it is populated when the runtime starts a bot so
+    /// future features (e.g. surfacing the listen address in the UI or
+    /// multi-instance port management) can read it from the context without a
+    /// signature change. No consumer reads it yet, hence `dead_code`.
     #[allow(dead_code)]
     pub listen_addr: std::net::SocketAddr,
 }

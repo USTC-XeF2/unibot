@@ -30,10 +30,16 @@ export const queryKeys = {
     categories: (userId: string) => ["groups", "categories", userId] as const,
     files: (userId: string, groupId: string, parentFolderId?: string) =>
       ["groups", "files", userId, groupId, parentFolderId ?? "root"] as const,
+    folders: (userId: string, groupId: string) =>
+      ["groups", "folders", userId, groupId] as const,
     albums: (userId: string, groupId: string) =>
       ["groups", "albums", userId, groupId] as const,
     photos: (userId: string, albumId: string) =>
       ["groups", "photos", userId, albumId] as const,
+    announcements: (userId: string, groupId: string) =>
+      ["groups", "announcements", userId, groupId] as const,
+    essence: (userId: string, groupId: string) =>
+      ["groups", "essence", userId, groupId] as const,
   },
   conversation: {
     states: (userId: string) => ["conversation", "states", userId] as const,

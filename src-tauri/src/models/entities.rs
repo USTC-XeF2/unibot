@@ -4,33 +4,23 @@ use super::internal::MessageSegment;
 
 pub type DbId = String;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountStatus {
+    #[default]
     Active,
     Disabled,
     Unavailable,
     Deleted,
 }
 
-impl Default for AccountStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GroupStatus {
+    #[default]
     Active,
     Dissolved,
     Unavailable,
-}
-
-impl Default for GroupStatus {
-    fn default() -> Self {
-        Self::Active
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -199,7 +189,9 @@ pub struct GroupAnnouncementEntity {
     pub sender_user_id: DbId,
     pub content: String,
     pub image_url: Option<String>,
+    #[serde(default)]
     pub created_at: u64,
+    #[serde(default)]
     pub updated_at: u64,
 }
 
@@ -249,7 +241,9 @@ pub struct GroupFolderEntity {
     pub parent_folder_id: Option<String>,
     pub folder_name: String,
     pub creator_user_id: DbId,
+    #[serde(default)]
     pub created_at: u64,
+    #[serde(default)]
     pub updated_at: u64,
     pub file_count: u32,
 }
@@ -312,7 +306,24 @@ pub struct GroupEssenceMessageEntity {
     pub sender_user_id: DbId,
     pub operator_user_id: DbId,
     pub is_set: bool,
+    pub content: Vec<MessageSegment>,
     pub created_at: u64,
+}
+
+/// Discriminated request for the essence set/unset command.
+///
+/// Modeling set/unset as an enum makes the two illegal states from the old
+/// `(Option<message_id>, Option<essence_id>, is_set: bool)` shape
+/// unrepresentable: "set" always carries a `message_id`, "unset" always
+/// carries an `essence_id`, enforced at the type level instead of at runtime.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EssenceUpdate {
+    /// Mark an existing group message as essence.
+    Set { message_id: DbId },
+    /// Remove an essence entry by its stable id, even if the source message
+    /// has since been recalled or deleted.
+    Unset { essence_id: DbId },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

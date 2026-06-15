@@ -9,11 +9,16 @@ export function useProtocolPackets(filters: PacketFilters = {}) {
     queryKey: queryKeys.packets.list(filters),
     queryFn: async () => {
       return invoke<ProtocolPacket[]>(COMMANDS.listProtocolPackets, {
-        botId: filters.bot_id ?? null,
-        direction: filters.direction ?? null,
-        actionName: filters.action_name ?? null,
-        since: filters.since ?? null,
-        limit: filters.limit ?? 100,
+        filters: {
+          bot_id: filters.bot_id ?? null,
+          direction: filters.direction ?? null,
+          action_name: filters.action_name ?? null,
+          since: filters.since ?? null,
+          until: filters.until ?? null,
+          is_error: filters.is_error ?? null,
+          before: filters.before ?? null,
+          limit: filters.limit ?? 100,
+        },
       });
     },
     refetchInterval: 2000,

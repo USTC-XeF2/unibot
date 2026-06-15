@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use tauri::Emitter;
+
 use crate::core::CoreContainer;
 use crate::error::{AppError, AppResult};
 use crate::models::{DevToolsEvent, InternalEvent, MessageSource};
@@ -81,4 +83,42 @@ pub async fn recipients_for_source(
 
     recipients.retain(|user_id| core.user_context(user_id).is_some());
     recipients
+}
+
+fn emit_group_content_to_user_window(
+    app: &tauri::AppHandle,
+    user_id: &str,
+    group_id: &str,
+    event: &InternalEvent,
+) {
+    for label in [
+        format!("group-files-{user_id}-{group_id}"),
+        format!("group-albums-{user_id}-{group_id}"),
+    ] {
+        if let Err(e) = app.emit_to(&label, "chat:event", event) {
+            tracing::debug!(
+                target: "utils",
+                "emit_group_content_to_windows skipped {} (window likely closed): {}",
+                label,
+                e
+            );
+        }
+    }
+}
+
+pub async fn emit_group_content_to_windows(
+    app: &tauri::AppHandle,
+    group_repo: &GroupRepo,
+    group_id: &str,
+    event: &InternalEvent,
+) -> AppResult<()> {
+    let members = group_repo.list_group_members(group_id).await.map_err(|e| {
+        AppError::storage(format!("failed to list group members for {group_id}: {e}"))
+    })?;
+
+    for member in members {
+        emit_group_content_to_user_window(app, &member.user_id, group_id, event);
+    }
+
+    Ok(())
 }

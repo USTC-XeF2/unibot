@@ -62,8 +62,40 @@ struct BatchItem {
 }
 
 enum BatchOp {
-    Item(BatchItem),
+    Item(Box<BatchItem>),
     Flush(tokio::sync::oneshot::Sender<()>),
+}
+
+/// Borrowed fields for a recorded protocol event. Groups the varying inputs to
+/// [`PacketRecorder::record_event`] so the public method stays within a
+/// readable argument count; the fixed protocol/direction/error fields are
+/// filled in by `record_event` itself.
+#[derive(Clone, Copy)]
+pub struct EventRecord<'a> {
+    pub bot_id: &'a str,
+    pub profile_id: Option<&'a str>,
+    pub session_id: Option<&'a str>,
+    pub event_type: &'a str,
+    pub related_object_type: Option<&'a str>,
+    pub related_object_id: Option<&'a str>,
+}
+
+/// Borrowed identity and classification fields shared by every packet write.
+///
+/// Threading these as one struct (instead of 9 positional arguments) keeps the
+/// record/insert call sites readable and removes the same-typed-argument
+/// ordering hazard between the several `Option<&str>` fields.
+#[derive(Clone, Copy)]
+struct PacketMeta<'a> {
+    bot_id: &'a str,
+    profile_id: Option<&'a str>,
+    session_id: Option<&'a str>,
+    protocol_type: &'a str,
+    direction: &'a str,
+    action_name: &'a str,
+    related_object_type: Option<&'a str>,
+    related_object_id: Option<&'a str>,
+    is_error: bool,
 }
 
 struct PacketRecorderInner {
@@ -112,7 +144,7 @@ impl PacketRecorder {
                         Some(op) = batch_rx.recv() => {
                             match op {
                                 BatchOp::Item(item) => {
-                                    buffer.push(item);
+                                    buffer.push(*item);
                                     if buffer.len() >= 50 {
                                         Self::flush_buffer(&pool_clone, &mut buffer).await;
                                     }
@@ -137,7 +169,7 @@ impl PacketRecorder {
                 // Drain remaining items on channel close
                 while let Ok(op) = batch_rx.try_recv() {
                     if let BatchOp::Item(item) = op {
-                        buffer.push(item);
+                        buffer.push(*item);
                     }
                 }
                 if !buffer.is_empty() {
@@ -166,15 +198,17 @@ impl PacketRecorder {
         data: &serde_json::Value,
     ) -> AppResult<String> {
         self.record(
-            bot_id,
-            profile_id,
-            session_id,
-            "milky",
-            "receive",
-            action_name,
-            None,
-            None,
-            false,
+            PacketMeta {
+                bot_id,
+                profile_id,
+                session_id,
+                protocol_type: "milky",
+                direction: "receive",
+                action_name,
+                related_object_type: None,
+                related_object_id: None,
+                is_error: false,
+            },
             data,
         )
         .await
@@ -191,15 +225,17 @@ impl PacketRecorder {
         data: &serde_json::Value,
     ) -> AppResult<String> {
         self.record(
-            bot_id,
-            profile_id,
-            session_id,
-            "milky",
-            "send",
-            action_name,
-            None,
-            None,
-            is_error,
+            PacketMeta {
+                bot_id,
+                profile_id,
+                session_id,
+                protocol_type: "milky",
+                direction: "send",
+                action_name,
+                related_object_type: None,
+                related_object_id: None,
+                is_error,
+            },
             data,
         )
         .await
@@ -208,45 +244,30 @@ impl PacketRecorder {
     /// Record a protocol event.
     pub async fn record_event(
         &self,
-        bot_id: &str,
-        profile_id: Option<&str>,
-        session_id: Option<&str>,
-        event_type: &str,
-        related_object_type: Option<&str>,
-        related_object_id: Option<&str>,
+        event: EventRecord<'_>,
         data: &serde_json::Value,
     ) -> AppResult<String> {
         self.record(
-            bot_id,
-            profile_id,
-            session_id,
-            "milky",
-            "receive",
-            event_type,
-            related_object_type,
-            related_object_id,
-            false,
+            PacketMeta {
+                bot_id: event.bot_id,
+                profile_id: event.profile_id,
+                session_id: event.session_id,
+                protocol_type: "milky",
+                direction: "receive",
+                action_name: event.event_type,
+                related_object_type: event.related_object_type,
+                related_object_id: event.related_object_id,
+                is_error: false,
+            },
             data,
         )
         .await
     }
 
     /// Core recording logic: atomic file write + tiered database indexing.
-    async fn record(
-        &self,
-        bot_id: &str,
-        profile_id: Option<&str>,
-        session_id: Option<&str>,
-        protocol_type: &str,
-        direction: &str,
-        action_name: &str,
-        related_object_type: Option<&str>,
-        related_object_id: Option<&str>,
-        is_error: bool,
-        data: &serde_json::Value,
-    ) -> AppResult<String> {
+    async fn record(&self, meta: PacketMeta<'_>, data: &serde_json::Value) -> AppResult<String> {
         let packet_id = utils::new_db_id();
-        let tier = classify_tier(action_name, is_error);
+        let tier = classify_tier(meta.action_name, meta.is_error);
 
         // Build date-based directory: {app_data_dir}/packets/YYYY-MM-DD/
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -278,37 +299,24 @@ impl PacketRecorder {
         // All tiers persist file. Database indexing depends on tier.
         match tier {
             Tier::Critical => {
-                self.insert_db(
-                    &packet_id,
-                    bot_id,
-                    profile_id,
-                    protocol_type,
-                    direction,
-                    action_name,
-                    &relative_path,
-                    related_object_type,
-                    related_object_id,
-                    is_error,
-                    session_id,
-                )
-                .await?;
+                self.insert_db(&packet_id, meta, &relative_path).await?;
             }
             Tier::Normal => {
                 let item = BatchItem {
                     packet_id: packet_id.clone(),
-                    bot_id: bot_id.to_string(),
-                    profile_id: profile_id.map(|s| s.to_string()),
-                    protocol_type: protocol_type.to_string(),
-                    direction: direction.to_string(),
-                    action_name: action_name.to_string(),
+                    bot_id: meta.bot_id.to_string(),
+                    profile_id: meta.profile_id.map(|s| s.to_string()),
+                    protocol_type: meta.protocol_type.to_string(),
+                    direction: meta.direction.to_string(),
+                    action_name: meta.action_name.to_string(),
                     file_path: relative_path,
-                    related_object_type: related_object_type.map(|s| s.to_string()),
-                    related_object_id: related_object_id.map(|s| s.to_string()),
-                    is_error: if is_error { 1 } else { 0 },
-                    session_id: session_id.map(|s| s.to_string()),
+                    related_object_type: meta.related_object_type.map(|s| s.to_string()),
+                    related_object_id: meta.related_object_id.map(|s| s.to_string()),
+                    is_error: if meta.is_error { 1 } else { 0 },
+                    session_id: meta.session_id.map(|s| s.to_string()),
                     created_at: utils::now_ts() as i64,
                 };
-                let _ = self.ensure_batch_tx().send(BatchOp::Item(item));
+                let _ = self.ensure_batch_tx().send(BatchOp::Item(Box::new(item)));
             }
             Tier::Low => {
                 // File only; no database indexing.
@@ -321,16 +329,8 @@ impl PacketRecorder {
     async fn insert_db(
         &self,
         packet_id: &str,
-        bot_id: &str,
-        profile_id: Option<&str>,
-        protocol_type: &str,
-        direction: &str,
-        action_name: &str,
+        meta: PacketMeta<'_>,
         file_path: &str,
-        related_object_type: Option<&str>,
-        related_object_id: Option<&str>,
-        is_error: bool,
-        session_id: Option<&str>,
     ) -> AppResult<()> {
         let result = sqlx::query(
             r#"
@@ -342,16 +342,16 @@ impl PacketRecorder {
             "#,
         )
         .bind(packet_id)
-        .bind(bot_id)
-        .bind(profile_id)
-        .bind(protocol_type)
-        .bind(direction)
-        .bind(action_name)
+        .bind(meta.bot_id)
+        .bind(meta.profile_id)
+        .bind(meta.protocol_type)
+        .bind(meta.direction)
+        .bind(meta.action_name)
         .bind(file_path)
-        .bind(related_object_type)
-        .bind(related_object_id)
-        .bind(if is_error { 1 } else { 0 })
-        .bind(session_id)
+        .bind(meta.related_object_type)
+        .bind(meta.related_object_id)
+        .bind(if meta.is_error { 1 } else { 0 })
+        .bind(meta.session_id)
         .bind(utils::now_ts() as i64)
         .execute(&self.inner.pool)
         .await;

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "group-content",
+  "description": "Capability for group content windows. Grants only the minimum permissions needed to display/focus the window, listen to chat events, and open file/photo selection dialogs.",
+  "windows": ["group-files-*", "group-albums-*"],
+  "permissions": [
+    "core:window:default",
+    "core:event:default",
+    "dialog:allow-open",
+    "dialog:allow-save"
+  ]
+}

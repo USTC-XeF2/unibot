@@ -26,7 +26,6 @@ pub struct ProtocolRuntimeManager {
 }
 
 /// A running protocol server entry tracked by the runtime manager.
-#[allow(dead_code)]
 pub struct RunningProtocolServer {
     pub bot_id: String,
     pub session_id: String,

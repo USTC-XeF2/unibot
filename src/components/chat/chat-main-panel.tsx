@@ -1,4 +1,4 @@
-import { File, Image, Send, X } from "lucide-react";
+import { File, Image, LayoutGrid, MoreHorizontal, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import ChatComposer, {
@@ -11,13 +11,31 @@ import ChatMessageItem, {
 import FacePicker from "@/components/chat/face-picker";
 import GroupInfoSheet from "@/components/chat/group-info-sheet";
 import GroupMembersPanel from "@/components/chat/group-members-panel";
+import GroupAnnouncementPanel from "@/components/group/group-announcement-panel";
+import GroupEssencePanel from "@/components/group/group-essence-panel";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useChatEventBus } from "@/hooks/use-chat-event-bus";
+import {
+  openGroupAlbumsWindow,
+  openGroupFilesWindow,
+} from "@/lib/group-content-window";
 import { segmentsToPlainText } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
@@ -26,6 +44,7 @@ import {
   usePokeUserMutation,
   useRecallMessageMutation,
   useSendMessageMutation,
+  useSetGroupEssenceMessageMutation,
   useSetGroupMemberRoleMutation,
   useSetGroupMemberTitleMutation,
 } from "@/lib/mutations";
@@ -127,6 +146,9 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   >({});
   const [membersPanelOpen, setMembersPanelOpen] = useState(false);
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
+  const [activeGroupPanel, setActiveGroupPanel] = useState<
+    "announcement" | "essence" | null
+  >(null);
   const [currentUnixTime, setCurrentUnixTime] = useState(Date.now());
   const sendMessageMutation = useSendMessageMutation();
   const recallMessageMutation = useRecallMessageMutation();
@@ -135,6 +157,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
   const kickGroupMemberMutation = useKickGroupMemberMutation();
   const setGroupMemberRoleMutation = useSetGroupMemberRoleMutation();
   const setGroupMemberTitleMutation = useSetGroupMemberTitleMutation();
+  const setGroupEssenceMessageMutation = useSetGroupEssenceMessageMutation();
 
   const groupMembersQuery = useGroupMembersQuery(
     currentUserId,
@@ -341,6 +364,10 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
     }
     return groupMembersById[currentUserId]?.role ?? null;
   }, [conversation, currentUserId, groupMembersById]);
+
+  const isAdminOrOwner =
+    conversation.scene === "group" &&
+    (myGroupRole === "owner" || myGroupRole === "admin");
 
   const currentUserMuteUntil = useMemo(() => {
     if (conversation.scene !== "group") {
@@ -838,6 +865,22 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
       });
     }
 
+    const canSetEssence = conversation.scene === "group" && isAdminOrOwner;
+
+    if (canSetEssence) {
+      messageActions.push({
+        key: "set-essence",
+        label: "设为精华",
+        separatorBefore: true,
+        onSelect: () =>
+          setGroupEssenceMessageMutation.mutate({
+            userId: currentUserId,
+            groupId: conversation.group_id,
+            update: { kind: "set", messageId: message.id },
+          }),
+      });
+    }
+
     return (
       <ChatMessageItem
         key={item.key}
@@ -908,6 +951,55 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
         >
           {conversationTitle}
         </Button>
+        <div className="flex items-center gap-1">
+          {conversation.scene === "group" && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <LayoutGrid className="size-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() =>
+                      openGroupFilesWindow(currentUserId, conversation.group_id)
+                    }
+                  >
+                    群文件
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      openGroupAlbumsWindow(
+                        currentUserId,
+                        conversation.group_id,
+                      )
+                    }
+                  >
+                    群相册
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setActiveGroupPanel("announcement")}
+                  >
+                    群公告
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setActiveGroupPanel("essence")}
+                  >
+                    精华消息
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setInfoSheetOpen(true)}
+              >
+                <MoreHorizontal className="size-5" />
+              </Button>
+            </>
+          )}
+        </div>
       </header>
 
       <ResizablePanelGroup orientation="vertical" className="flex-1">
@@ -1031,6 +1123,32 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
             isPinned={myConversationState?.is_pinned ?? false}
             isMuted={myConversationState?.is_muted ?? false}
           />
+          <Sheet
+            open={activeGroupPanel !== null}
+            onOpenChange={(open) => !open && setActiveGroupPanel(null)}
+          >
+            <SheetContent className="w-[400px] sm:w-[540px]">
+              <SheetHeader>
+                <SheetTitle>
+                  {activeGroupPanel === "announcement" ? "群公告" : "精华消息"}
+                </SheetTitle>
+              </SheetHeader>
+              {activeGroupPanel === "announcement" && (
+                <GroupAnnouncementPanel
+                  userId={currentUserId}
+                  groupId={conversation.group_id}
+                  canManage={isAdminOrOwner}
+                />
+              )}
+              {activeGroupPanel === "essence" && (
+                <GroupEssencePanel
+                  userId={currentUserId}
+                  groupId={conversation.group_id}
+                  canManage={isAdminOrOwner}
+                />
+              )}
+            </SheetContent>
+          </Sheet>
         </>
       )}
     </div>

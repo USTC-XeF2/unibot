@@ -218,10 +218,10 @@ impl BotService {
         let bots = self.repo.list_bots().await?;
         let mut used = HashSet::new();
         for bot in bots {
-            if let Ok(text) = tokio::fs::read_to_string(&bot.config_path).await {
-                if let Ok(cfg) = serde_json::from_str::<BotConfig>(&text) {
-                    used.insert(cfg.http.port);
-                }
+            if let Ok(text) = tokio::fs::read_to_string(&bot.config_path).await
+                && let Ok(cfg) = serde_json::from_str::<BotConfig>(&text)
+            {
+                used.insert(cfg.http.port);
             }
         }
         for port in 3001..=65535 {

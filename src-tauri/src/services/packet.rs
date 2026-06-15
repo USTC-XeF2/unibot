@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::error::{AppError, AppResult};
-use crate::persistence::{PacketRepo, ProtocolPacketRecord};
+use crate::persistence::{PacketFilters, PacketRepo, ProtocolPacketRecord};
 
 #[derive(Clone)]
 pub struct PacketService {
@@ -13,32 +13,11 @@ impl PacketService {
         Self { repo }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn list_packets(
         &self,
-        bot_id: Option<String>,
-        direction: Option<String>,
-        action_name: Option<String>,
-        since: Option<u64>,
-        until: Option<u64>,
-        is_error: Option<bool>,
-        before: Option<u64>,
-        limit: i64,
+        filters: PacketFilters,
     ) -> AppResult<Vec<ProtocolPacketRecord>> {
-        let limit = limit.max(1).min(1000);
-        self.repo
-            .list_packets(
-                bot_id.as_deref(),
-                direction.as_deref(),
-                action_name.as_deref(),
-                since,
-                until,
-                is_error,
-                before,
-                limit,
-            )
-            .await
-            .map_err(Into::into)
+        self.repo.list_packets(&filters).await.map_err(Into::into)
     }
 
     pub async fn read_packet(&self, packet_id: String, app_data_dir: PathBuf) -> AppResult<String> {

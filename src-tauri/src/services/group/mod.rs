@@ -8,6 +8,8 @@ mod management;
 mod requests;
 pub mod storage;
 
+pub use content::{UploadGroupFileInput, UploadGroupPhotoInput};
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MuteGroupMemberResult {
     pub group_id: String,

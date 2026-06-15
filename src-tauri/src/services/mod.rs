@@ -10,7 +10,7 @@ pub mod user;
 
 pub use bot::{BotService, StatsResult};
 pub use conversation::ConversationService;
-pub use group::{GroupService, MuteGroupMemberResult};
+pub use group::{GroupService, MuteGroupMemberResult, UploadGroupFileInput, UploadGroupPhotoInput};
 pub use interaction::InteractionService;
 pub use message::{MessageService, SendMessageResult};
 pub use packet::PacketService;

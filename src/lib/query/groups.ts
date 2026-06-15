@@ -1,15 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { COMMANDS } from "@/lib/commands";
-import { isValidUserId } from "@/lib/query/common";
+import { isValidGroupId, isValidUserId } from "@/lib/query/common";
 import { queryKeys } from "@/lib/query/keys";
 import { queryClient } from "@/lib/query-client";
 import type { GroupEvent } from "@/types/event";
 import type {
   ConversationState,
   GroupAlbum,
+  GroupAnnouncement,
   GroupCategory,
+  GroupEssenceMessage,
   GroupFile,
+  GroupFolder,
   GroupMemberProfile,
   GroupPhoto,
   GroupProfile,
@@ -45,7 +48,7 @@ export function useGroupMembersQuery(
         groupId,
       }),
     retry: false,
-    enabled: enabled && isValidUserId(userId) && groupId.length > 0,
+    enabled: enabled && isValidUserId(userId) && isValidGroupId(groupId),
   });
 }
 
@@ -133,7 +136,7 @@ export function useGroupFilesQuery(
 ) {
   return useQuery({
     queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupFile[]>(COMMANDS.listGroupFiles, {
         userId,
@@ -150,7 +153,10 @@ export function invalidateGroupFilesQuery(
   parentFolderId?: string,
 ) {
   return queryClient.invalidateQueries({
-    queryKey: queryKeys.groups.files(userId, groupId, parentFolderId),
+    queryKey:
+      parentFolderId === undefined
+        ? ["groups", "files", userId, groupId]
+        : queryKeys.groups.files(userId, groupId, parentFolderId),
   });
 }
 
@@ -159,7 +165,7 @@ export function invalidateGroupFilesQuery(
 export function useGroupAlbumsQuery(userId: string, groupId: string) {
   return useQuery({
     queryKey: queryKeys.groups.albums(userId, groupId),
-    enabled: isValidUserId(userId) && groupId.length > 0,
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
     queryFn: () =>
       invoke<GroupAlbum[]>(COMMANDS.listGroupAlbums, {
         userId,
@@ -184,7 +190,8 @@ export function useGroupPhotosQuery(
 ) {
   return useQuery({
     queryKey: queryKeys.groups.photos(userId, albumId),
-    enabled: isValidUserId(userId) && groupId.length > 0 && albumId.length > 0,
+    enabled:
+      isValidUserId(userId) && isValidGroupId(groupId) && albumId.length > 0,
     queryFn: () =>
       invoke<GroupPhoto[]>(COMMANDS.listGroupPhotos, {
         userId,
@@ -198,5 +205,100 @@ export function useGroupPhotosQuery(
 export function invalidateGroupPhotosQuery(userId: string, albumId: string) {
   return queryClient.invalidateQueries({
     queryKey: queryKeys.groups.photos(userId, albumId),
+  });
+}
+
+// === Group Folders ===
+
+export function useGroupFoldersQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.folders(userId, groupId),
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
+    queryFn: () =>
+      invoke<GroupFolder[]>(COMMANDS.listGroupFolders, {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupFoldersQuery(userId: string, groupId: string) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.folders(userId, groupId),
+  });
+}
+
+// === Group Announcements ===
+
+export function useGroupAnnouncementsQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.announcements(userId, groupId),
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
+    queryFn: () =>
+      invoke<GroupAnnouncement[]>(COMMANDS.listGroupAnnouncements, {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupAnnouncementsQuery(
+  userId: string,
+  groupId: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.announcements(userId, groupId),
+  });
+}
+
+// === Group Essence Messages ===
+
+export function useGroupEssenceMessagesQuery(userId: string, groupId: string) {
+  return useQuery({
+    queryKey: queryKeys.groups.essence(userId, groupId),
+    enabled: isValidUserId(userId) && isValidGroupId(groupId),
+    queryFn: () =>
+      invoke<GroupEssenceMessage[]>(COMMANDS.listGroupEssenceMessages, {
+        userId,
+        groupId,
+      }),
+    retry: false,
+  });
+}
+
+export function invalidateGroupEssenceMessagesQuery(
+  userId: string,
+  groupId: string,
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.groups.essence(userId, groupId),
+  });
+}
+
+/**
+ * 当用户离开/被移出群（或群被解散）时，移除该用户在该群下所有群内容
+ * 缓存，避免被撤销访问后仍能读到陈旧数据。照片以 albumId 为键，故按
+ * `["groups", "photos", userId]` 前缀整体清除该用户的相册照片缓存。
+ */
+export function removeGroupContentQueries(userId: string, groupId: string) {
+  queryClient.removeQueries({
+    queryKey: ["groups", "files", userId, groupId],
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.folders(userId, groupId),
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.albums(userId, groupId),
+  });
+  queryClient.removeQueries({
+    queryKey: ["groups", "photos", userId],
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.announcements(userId, groupId),
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.groups.essence(userId, groupId),
   });
 }

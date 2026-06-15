@@ -124,10 +124,20 @@ pub enum InternalEvent {
         sender_user_id: DbId,
         time: u64,
     },
+    GroupAnnouncementDeleted {
+        announcement_id: String,
+        group_id: DbId,
+        time: u64,
+    },
     GroupFolderUpserted {
         folder_id: String,
         group_id: DbId,
         creator_user_id: DbId,
+        time: u64,
+    },
+    GroupFolderDeleted {
+        folder_id: String,
+        group_id: DbId,
         time: u64,
     },
     GroupFileUpserted {
