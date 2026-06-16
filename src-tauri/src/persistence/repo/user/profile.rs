@@ -30,7 +30,7 @@ impl UserRepo {
         sqlx::query(
             r#"
             INSERT OR IGNORE INTO friend_categories (category_id, owner_user_id, name, sort_order)
-            VALUES (?1, ?2, '默认分组', 0)
+            VALUES (?1, ?2, '我的好友', 0)
             "#,
         )
         .bind(&default_friend_category)
@@ -42,7 +42,7 @@ impl UserRepo {
         sqlx::query(
             r#"
             INSERT OR IGNORE INTO group_categories (category_id, owner_user_id, name, sort_order)
-            VALUES (?1, ?2, '默认分组', 0)
+            VALUES (?1, ?2, '我的群聊', 0)
             "#,
         )
         .bind(&default_group_category)

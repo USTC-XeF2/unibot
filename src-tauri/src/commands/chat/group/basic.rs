@@ -150,6 +150,20 @@ pub async fn create_group_category(
 }
 
 #[tauri::command]
+pub async fn rename_group_category(
+    services: tauri::State<'_, ServiceHub>,
+    user_id: String,
+    category_id: String,
+    name: String,
+) -> Result<GroupCategoryEntity, String> {
+    services
+        .group
+        .rename_group_category(user_id, category_id, name)
+        .await
+        .into_command_result()
+}
+
+#[tauri::command]
 pub async fn delete_group_category(
     services: tauri::State<'_, ServiceHub>,
     user_id: String,

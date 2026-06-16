@@ -4,13 +4,24 @@ import {
   Bell,
   BellOff,
   Check,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  Pencil,
   Pin,
   Plus,
   Search,
+  Trash2,
   UserPlus,
   Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import AddFriendDialog from "@/components/chat/add-friend-dialog";
 import CreateGroupDialog from "@/components/chat/create-group-dialog";
@@ -25,6 +36,13 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -35,21 +53,28 @@ import { COMMANDS } from "@/lib/commands";
 import { segmentsToNodes } from "@/lib/message-content";
 import { confirmDialog, promptDialog } from "@/lib/modal";
 import {
+  useCreateFriendCategoryMutation,
   useCreateGroupCategoryMutation,
+  useDeleteFriendCategoryMutation,
   useDeleteFriendMutation,
+  useDeleteGroupCategoryMutation,
   useDissolveGroupMutation,
   useLeaveGroupMutation,
+  useRenameFriendCategoryMutation,
+  useRenameGroupCategoryMutation,
   useRenameGroupMutation,
   useSetConversationMutedMutation,
   useSetConversationPinnedMutation,
+  useSetFriendCategoryMutation,
   useSetGroupCategoryMutation,
   useSetGroupWholeMuteMutation,
 } from "@/lib/mutations";
 import {
   messageHistoryQueryOptions,
   useConversationStatesQuery,
+  useFriendCategoriesQuery,
   useFriendRequestsQuery,
-  useFriendsQuery,
+  useFriendshipsQuery,
   useGroupCategoriesQuery,
   useGroupRequestsQuery,
   useUserGroupsQuery,
@@ -78,9 +103,57 @@ type ConversationSnapshot = {
   lastAt: number;
 };
 
+type ConversationListView = "messages" | "friends" | "groups";
+
+type ConversationSection = {
+  key: string;
+  title: string;
+  items: ConversationItem[];
+};
+
+type CategoryDialogState =
+  | {
+      mode: "friend";
+      peerUserId?: string;
+      selectedCategoryId?: string;
+    }
+  | {
+      mode: "group";
+      groupId?: string;
+      selectedCategoryId?: string;
+    };
+
+type CategoryOption = {
+  id: string;
+  name: string;
+  sortOrder: number;
+};
+
 type ConversationListProps = {
   onSelectedConversationChange: (conversation: MessageSource | null) => void;
 };
+
+const DEFAULT_FRIEND_SECTION_KEY = "friends:default";
+const DEFAULT_GROUP_SECTION_KEY = "groups:default";
+const DEFAULT_FRIEND_CATEGORY_NAME = "我的好友";
+const DEFAULT_GROUP_CATEGORY_NAME = "我的群聊";
+const LEGACY_DEFAULT_CATEGORY_NAME = "默认分组";
+
+function buildCategoryOptions<
+  T extends { category_id: string; name: string; sort_order: number },
+>(categories: T[], defaultCategoryId: string, defaultName: string) {
+  return [...categories]
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+    .map((category) => ({
+      id: category.category_id,
+      name:
+        category.category_id === defaultCategoryId &&
+        category.name === LEGACY_DEFAULT_CATEGORY_NAME
+          ? defaultName
+          : category.name,
+      sortOrder: category.sort_order,
+    }));
+}
 
 function buildConversationPreview(
   latestMessage: ChatMessage | null,
@@ -107,6 +180,300 @@ function buildConversationPreview(
   return segmentsToNodes(latestMessage.content, users);
 }
 
+function buildCategorySections(
+  categories: CategoryOption[],
+  conversations: ConversationItem[],
+  options: {
+    keyPrefix: string;
+    defaultCategoryId: string;
+    defaultSectionKey: string;
+    defaultSectionTitle: string;
+  },
+): ConversationSection[] {
+  const sections = categories.map((category) => ({
+    key: `${options.keyPrefix}:${category.id}`,
+    title: category.name,
+    items: conversations.filter(
+      (conversation) =>
+        conversation.categoryId === category.id ||
+        (category.id === options.defaultCategoryId &&
+          conversation.categoryId === null),
+    ),
+  }));
+
+  const hasDefaultCategory = categories.some(
+    (category) => category.id === options.defaultCategoryId,
+  );
+  if (hasDefaultCategory) {
+    return sections;
+  }
+
+  return [
+    ...sections,
+    {
+      key: options.defaultSectionKey,
+      title: options.defaultSectionTitle,
+      items: conversations.filter(
+        (conversation) => conversation.categoryId === null,
+      ),
+    },
+  ];
+}
+
+type CategoryManageDialogProps = {
+  open: boolean;
+  title: string;
+  categories: CategoryOption[];
+  selectedCategoryId?: string;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (name: string) => Promise<void>;
+  onRename: (categoryId: string, name: string) => Promise<void>;
+  onDelete: (categoryId: string) => Promise<void>;
+  onSelect?: (categoryId: string) => Promise<void>;
+};
+
+function CategoryManageDialog({
+  open,
+  title,
+  categories,
+  selectedCategoryId,
+  onOpenChange,
+  onCreate,
+  onRename,
+  onDelete,
+  onSelect,
+}: CategoryManageDialogProps) {
+  const [newName, setNewName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null,
+  );
+  const [editingName, setEditingName] = useState("");
+  const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(
+    null,
+  );
+  const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setNewName("");
+      setEditingCategoryId(null);
+      setEditingName("");
+      setPendingCategoryId(null);
+      setIsCreating(false);
+    }
+  }, [open]);
+
+  const categoryNameExists = (name: string, exceptCategoryId?: string) =>
+    categories.some(
+      (category) =>
+        category.name === name && category.id !== (exceptCategoryId ?? ""),
+    );
+
+  const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = newName.trim();
+    if (!name) {
+      toast.error("分组名称不能为空");
+      return;
+    }
+    if (categoryNameExists(name)) {
+      toast.error("分组名称不能重复");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await onCreate(name);
+      setNewName("");
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const submitRename = async (
+    event: FormEvent<HTMLFormElement>,
+    category: CategoryOption,
+  ) => {
+    event.preventDefault();
+    const name = editingName.trim();
+    if (!name) {
+      toast.error("分组名称不能为空");
+      return;
+    }
+    if (name === category.name) {
+      setEditingCategoryId(null);
+      setEditingName("");
+      return;
+    }
+    if (categoryNameExists(name, category.id)) {
+      toast.error("分组名称不能重复");
+      return;
+    }
+
+    setPendingCategoryId(category.id);
+    try {
+      await onRename(category.id, name);
+      setEditingCategoryId(null);
+      setEditingName("");
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setPendingCategoryId(null);
+    }
+  };
+
+  const selectCategory = async (categoryId: string) => {
+    if (!onSelect) {
+      return;
+    }
+    if (categoryId === selectedCategoryId) {
+      onOpenChange(false);
+      return;
+    }
+
+    setPendingCategoryId(categoryId);
+    try {
+      await onSelect(categoryId);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setPendingCategoryId(null);
+    }
+  };
+
+  const deleteCategory = async (category: CategoryOption) => {
+    const confirmed = await confirmDialog({
+      title: "删除分组",
+      description: `确认删除「${category.name}」？`,
+      confirmText: "删除",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingCategoryId(category.id);
+    try {
+      await onDelete(category.id);
+      if (selectedCategoryId === category.id) {
+        onOpenChange(false);
+      }
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setPendingCategoryId(null);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">{title}</DialogDescription>
+        </DialogHeader>
+
+        <form className="flex items-center gap-2" onSubmit={submitCreate}>
+          <Input
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="添加分组"
+          />
+          <Button
+            type="submit"
+            size="icon-sm"
+            disabled={isCreating}
+            aria-label="添加分组"
+          >
+            <Plus className="size-4" />
+          </Button>
+        </form>
+
+        <div className="space-y-2">
+          <div className="font-medium text-muted-foreground text-xs">
+            已有分组
+          </div>
+          <div className="max-h-64 space-y-1 overflow-auto">
+            {categories.map((category) => {
+              const isSelected = category.id === selectedCategoryId;
+              const isEditing = editingCategoryId === category.id;
+              const isPending = pendingCategoryId === category.id;
+
+              return (
+                <div
+                  key={category.id}
+                  className="flex min-h-10 items-center gap-1 rounded-md border border-transparent bg-muted/30 px-1.5"
+                >
+                  {isEditing ? (
+                    <form
+                      className="flex min-w-0 flex-1 items-center gap-1"
+                      onSubmit={(event) => submitRename(event, category)}
+                    >
+                      <Input
+                        value={editingName}
+                        autoFocus
+                        onChange={(event) => setEditingName(event.target.value)}
+                        className="h-8"
+                      />
+                      <Button
+                        type="submit"
+                        size="icon-sm"
+                        disabled={isPending}
+                        aria-label="保存分组名称"
+                      >
+                        <Check className="size-4" />
+                      </Button>
+                    </form>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="flex h-9 min-w-0 flex-1 items-center justify-between gap-2 rounded px-2 text-left transition-colors enabled:hover:bg-background disabled:cursor-default"
+                        disabled={!onSelect || isPending}
+                        onClick={() => selectCategory(category.id)}
+                      >
+                        <span className="truncate">{category.name}</span>
+                        {isSelected ? (
+                          <Check className="size-4 shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={isPending}
+                        aria-label={`重命名${category.name}`}
+                        onClick={() => {
+                          setEditingCategoryId(category.id);
+                          setEditingName(category.name);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={isPending}
+                        aria-label={`删除${category.name}`}
+                        onClick={() => deleteCategory(category)}
+                      >
+                        <Trash2 className="size-4 text-destructive" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ConversationList({
   onSelectedConversationChange,
 }: ConversationListProps) {
@@ -119,31 +486,49 @@ function ConversationList({
   const leaveGroupMutation = useLeaveGroupMutation();
   const setConversationPinnedMutation = useSetConversationPinnedMutation();
   const setConversationMutedMutation = useSetConversationMutedMutation();
+  const createFriendCategoryMutation = useCreateFriendCategoryMutation();
   const createGroupCategoryMutation = useCreateGroupCategoryMutation();
+  const deleteFriendCategoryMutation = useDeleteFriendCategoryMutation();
+  const deleteGroupCategoryMutation = useDeleteGroupCategoryMutation();
+  const renameFriendCategoryMutation = useRenameFriendCategoryMutation();
+  const renameGroupCategoryMutation = useRenameGroupCategoryMutation();
+  const setFriendCategoryMutation = useSetFriendCategoryMutation();
   const setGroupCategoryMutation = useSetGroupCategoryMutation();
 
   const [searchText, setSearchText] = useState("");
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<
-    string | null
-  >(null);
+  const [activeView, setActiveView] =
+    useState<ConversationListView>("messages");
+  const [collapsedSections, setCollapsedSections] = useState<
+    Record<string, boolean>
+  >({});
   const [selectedConversationKey, setSelectedConversationKey] = useState<
     string | null
   >(null);
   const [activeDialog, setActiveDialog] = useState<
     "add-friend" | "create-group" | "request-manage" | null
   >(null);
+  const [categoryDialog, setCategoryDialog] =
+    useState<CategoryDialogState | null>(null);
 
   const usersQuery = useUsersQuery();
   const groupsQuery = useUserGroupsQuery(currentUserId);
-  const friendsQuery = useFriendsQuery(currentUserId);
+  const friendshipsQuery = useFriendshipsQuery(currentUserId);
   const conversationStatesQuery = useConversationStatesQuery(currentUserId);
+  const friendCategoriesQuery = useFriendCategoriesQuery(currentUserId);
   const groupCategoriesQuery = useGroupCategoriesQuery(currentUserId);
 
   const users = usersQuery.data ?? [];
   const groups = groupsQuery.data ?? [];
-  const friendIds = friendsQuery.data ?? [];
+  const friendships = friendshipsQuery.data ?? [];
   const conversationStates = conversationStatesQuery.data ?? [];
+  const friendCategories = friendCategoriesQuery.data ?? [];
   const groupCategories = groupCategoriesQuery.data ?? [];
+  const defaultFriendCategoryId = currentUserId
+    ? `${currentUserId}:friend:default`
+    : "";
+  const defaultGroupCategoryId = currentUserId
+    ? `${currentUserId}:group:default`
+    : "";
 
   // Build state lookup map keyed by "{scene}:{id}"
   const stateMap = useMemo(() => {
@@ -167,12 +552,40 @@ function ConversationList({
     return map;
   }, [groups]);
 
+  const friendToCategoryMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const friendship of friendships) {
+      map[friendship.friend_user_id] = friendship.category_id ?? null;
+    }
+    return map;
+  }, [friendships]);
+
+  const friendCategoryOptions = useMemo(
+    () =>
+      buildCategoryOptions(
+        friendCategories,
+        defaultFriendCategoryId,
+        DEFAULT_FRIEND_CATEGORY_NAME,
+      ),
+    [friendCategories, defaultFriendCategoryId],
+  );
+
+  const groupCategoryOptions = useMemo(
+    () =>
+      buildCategoryOptions(
+        groupCategories,
+        defaultGroupCategoryId,
+        DEFAULT_GROUP_CATEGORY_NAME,
+      ),
+    [groupCategories, defaultGroupCategoryId],
+  );
+
   const conversations = useMemo<ConversationItem[]>(() => {
     if (!currentUserId) {
       return [];
     }
 
-    const friendIdSet = new Set(friendIds);
+    const friendIdSet = new Set(friendships.map((item) => item.friend_user_id));
 
     const privateConversations = users
       .filter(
@@ -190,7 +603,7 @@ function ConversationList({
           avatarUrl: user.avatar,
           isPinned: state?.isPinned ?? false,
           isMuted: state?.isMuted ?? false,
-          categoryId: null,
+          categoryId: friendToCategoryMap[user.user_id] ?? null,
         };
       });
 
@@ -209,7 +622,15 @@ function ConversationList({
     });
 
     return [...privateConversations, ...groupConversations];
-  }, [currentUserId, friendIds, groups, users, stateMap, groupToCategoryMap]);
+  }, [
+    currentUserId,
+    friendToCategoryMap,
+    friendships,
+    groups,
+    users,
+    stateMap,
+    groupToCategoryMap,
+  ]);
 
   const resolveMyGroupRole = async (
     groupId: string,
@@ -379,36 +800,74 @@ function ConversationList({
 
   const handleSetGroupCategory = async (
     groupId: string,
-    categoryId: string | null,
+    categoryId: string,
   ) => {
-    try {
-      await setGroupCategoryMutation.mutateAsync({
-        userId: currentUserId,
-        groupId,
-        categoryId,
-      });
-    } catch (error) {
-      toast.error(String(error));
-    }
+    await setGroupCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      groupId,
+      categoryId,
+    });
   };
 
-  const handleCreateCategory = async () => {
-    const name = await promptDialog({
-      title: "新建分类",
-      description: "请输入分类名称",
-      confirmText: "创建",
+  const handleSetFriendCategory = async (
+    friendUserId: string,
+    categoryId: string,
+  ) => {
+    await setFriendCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      friendUserId,
+      categoryId,
     });
-    if (!name || !name.trim()) {
-      return;
-    }
-    try {
-      await createGroupCategoryMutation.mutateAsync({
-        userId: currentUserId,
-        name: name.trim(),
-      });
-    } catch (error) {
-      toast.error(String(error));
-    }
+  };
+
+  const handleCreateFriendCategory = async (name: string) => {
+    await createFriendCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      name,
+    });
+  };
+
+  const handleCreateGroupCategory = async (name: string) => {
+    await createGroupCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      name,
+    });
+  };
+
+  const handleRenameFriendCategory = async (
+    categoryId: string,
+    name: string,
+  ) => {
+    await renameFriendCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      categoryId,
+      name,
+    });
+  };
+
+  const handleRenameGroupCategory = async (
+    categoryId: string,
+    name: string,
+  ) => {
+    await renameGroupCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      categoryId,
+      name,
+    });
+  };
+
+  const handleDeleteFriendCategory = async (categoryId: string) => {
+    await deleteFriendCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      categoryId,
+    });
+  };
+
+  const handleDeleteGroupCategory = async (categoryId: string) => {
+    await deleteGroupCategoryMutation.mutateAsync({
+      userId: currentUserId,
+      categoryId,
+    });
   };
 
   const friendRequestsQuery = useFriendRequestsQuery(currentUserId, true);
@@ -462,26 +921,53 @@ function ConversationList({
     });
   }, [conversations, snapshots]);
 
-  const filteredConversations = useMemo(() => {
-    let result = sortedConversations;
-
-    // Filter by category if selected
-    if (selectedCategoryFilter) {
-      result = result.filter(
-        (c) =>
-          c.source.scene === "group" && c.categoryId === selectedCategoryFilter,
-      );
-    }
-
+  const visibleConversations = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
-    if (keyword) {
-      result = result.filter((conversation) =>
-        conversation.title.toLowerCase().includes(keyword),
-      );
+    if (!keyword) {
+      return sortedConversations;
     }
+    return sortedConversations.filter((conversation) =>
+      conversation.title.toLowerCase().includes(keyword),
+    );
+  }, [sortedConversations, searchText]);
 
-    return result;
-  }, [sortedConversations, searchText, selectedCategoryFilter]);
+  const friendConversations = useMemo(
+    () =>
+      visibleConversations.filter(
+        (conversation) => conversation.source.scene === "private",
+      ),
+    [visibleConversations],
+  );
+
+  const groupConversations = useMemo(
+    () =>
+      visibleConversations.filter(
+        (conversation) => conversation.source.scene === "group",
+      ),
+    [visibleConversations],
+  );
+
+  const friendSections = useMemo<ConversationSection[]>(() => {
+    return buildCategorySections(friendCategoryOptions, friendConversations, {
+      keyPrefix: "friends",
+      defaultCategoryId: defaultFriendCategoryId,
+      defaultSectionKey: DEFAULT_FRIEND_SECTION_KEY,
+      defaultSectionTitle: DEFAULT_FRIEND_CATEGORY_NAME,
+    }).filter((section) => section.items.length > 0);
+  }, [defaultFriendCategoryId, friendCategoryOptions, friendConversations]);
+
+  const groupSections = useMemo<ConversationSection[]>(() => {
+    return buildCategorySections(groupCategoryOptions, groupConversations, {
+      keyPrefix: "groups",
+      defaultCategoryId: defaultGroupCategoryId,
+      defaultSectionKey: DEFAULT_GROUP_SECTION_KEY,
+      defaultSectionTitle: DEFAULT_GROUP_CATEGORY_NAME,
+    }).filter((section) => section.items.length > 0);
+  }, [defaultGroupCategoryId, groupCategoryOptions, groupConversations]);
+
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.key === selectedConversationKey),
@@ -505,6 +991,219 @@ function ConversationList({
       setSelectedConversationKey(null);
     }
   }, [conversations, selectedConversationKey]);
+
+  const renderConversationItem = (conversation: ConversationItem) => {
+    const snapshot = snapshots[conversation.key];
+    const privatePeerId =
+      conversation.source.scene === "private"
+        ? conversation.source.peer_user_id
+        : null;
+    const groupId =
+      conversation.source.scene === "group"
+        ? conversation.source.group_id
+        : null;
+    const itemClassName = `w-full rounded-md px-2.5 py-2 text-left transition-colors ${
+      selectedConversation?.key === conversation.key
+        ? "bg-foreground/25"
+        : "hover:bg-foreground/5"
+    }`;
+
+    return (
+      <ContextMenu key={conversation.key}>
+        <ContextMenuTrigger asChild>
+          <button
+            type="button"
+            className={itemClassName}
+            onClick={() => setSelectedConversationKey(conversation.key)}
+          >
+            <div className="flex items-center gap-2">
+              <Avatar className="size-8">
+                <AvatarImage src={conversation.avatarUrl} />
+                <AvatarFallback>{conversation.avatarText}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <p className="truncate font-medium text-sm">
+                      {conversation.title}
+                    </p>
+                    {conversation.isMuted && (
+                      <BellOff className="size-3 shrink-0 text-muted-foreground" />
+                    )}
+                  </div>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {formatConversationPreviewTime(snapshot?.lastAt ?? 0)}
+                  </span>
+                </div>
+                <p className="truncate text-muted-foreground text-xs">
+                  {snapshot?.lastMessage ?? ""}
+                </p>
+              </div>
+            </div>
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            onSelect={() =>
+              handleTogglePinned(conversation.source, conversation.isPinned)
+            }
+          >
+            {conversation.isPinned ? (
+              <>
+                <Pin className="mr-1.5 size-3.5 rotate-45" /> 取消置顶
+              </>
+            ) : (
+              <>
+                <Pin className="mr-1.5 size-3.5" /> 置顶会话
+              </>
+            )}
+          </ContextMenuItem>
+
+          <ContextMenuItem
+            onSelect={() =>
+              handleToggleMuted(conversation.source, conversation.isMuted)
+            }
+          >
+            {conversation.isMuted ? (
+              <>
+                <Bell className="mr-1.5 size-3.5" /> 开启通知
+              </>
+            ) : (
+              <>
+                <BellOff className="mr-1.5 size-3.5" /> 免打扰
+              </>
+            )}
+          </ContextMenuItem>
+
+          <ContextMenuSeparator />
+
+          {privatePeerId !== null ? (
+            <>
+              <ContextMenuItem
+                onSelect={() =>
+                  setCategoryDialog({
+                    mode: "friend",
+                    peerUserId: privatePeerId,
+                    selectedCategoryId: conversation.categoryId ?? undefined,
+                  })
+                }
+              >
+                <FolderOpen className="mr-1.5 size-3.5" /> 分组
+              </ContextMenuItem>
+
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => handleDeleteFriend(privatePeerId)}
+              >
+                删除好友
+              </ContextMenuItem>
+            </>
+          ) : null}
+
+          {groupId !== null ? (
+            <>
+              <ContextMenuItem
+                onSelect={async () => {
+                  const role = await resolveMyGroupRole(groupId);
+                  if (role !== "owner" && role !== "admin") {
+                    toast.error("仅群主或管理员可设置全体禁言");
+                    return;
+                  }
+                  await handleSetWholeMute(groupId);
+                }}
+              >
+                设置全体禁言
+              </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={async () => {
+                  const role = await resolveMyGroupRole(groupId);
+                  if (role !== "owner" && role !== "admin") {
+                    toast.error("仅群主或管理员可修改群昵称");
+                    return;
+                  }
+                  await handleRenameGroup(groupId);
+                }}
+              >
+                修改群昵称
+              </ContextMenuItem>
+
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onSelect={() =>
+                  setCategoryDialog({
+                    mode: "group",
+                    groupId,
+                    selectedCategoryId: conversation.categoryId ?? undefined,
+                  })
+                }
+              >
+                <FolderOpen className="mr-1.5 size-3.5" /> 分组
+              </ContextMenuItem>
+
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={async () => {
+                  const role = await resolveMyGroupRole(groupId);
+                  if (role === "owner") {
+                    await handleDissolveGroup(groupId);
+                    return;
+                  }
+                  await handleLeaveGroup(groupId);
+                }}
+              >
+                {groups.find((item) => item.group_id === groupId)
+                  ?.owner_user_id === currentUserId
+                  ? "解散群聊"
+                  : "退出群聊"}
+              </ContextMenuItem>
+            </>
+          ) : null}
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  };
+
+  const renderConversationGroup = (items: ConversationItem[]) => {
+    const pinned = items.filter((conversation) => conversation.isPinned);
+    const rest = items.filter((conversation) => !conversation.isPinned);
+    return (
+      <div className="space-y-1">
+        {pinned.length > 0 ? (
+          <div className="space-y-1 rounded-md bg-foreground/5 p-1">
+            {pinned.map((conversation) => renderConversationItem(conversation))}
+          </div>
+        ) : null}
+        {rest.map((conversation) => renderConversationItem(conversation))}
+      </div>
+    );
+  };
+
+  const renderSections = (sections: ConversationSection[]) => (
+    <div className="space-y-2">
+      {sections.map((section) => {
+        const collapsed = collapsedSections[section.key] ?? false;
+        const ChevronIcon = collapsed ? ChevronRight : ChevronDown;
+        return (
+          <section key={section.key} className="space-y-1">
+            <button
+              type="button"
+              className="flex h-8 w-full items-center justify-between px-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
+              onClick={() => toggleSection(section.key)}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <ChevronIcon className="size-3.5 shrink-0" />
+                <span className="truncate font-medium">{section.title}</span>
+              </span>
+              <span className="shrink-0">{section.items.length}</span>
+            </button>
+            {!collapsed ? renderConversationGroup(section.items) : null}
+          </section>
+        );
+      })}
+    </div>
+  );
 
   return (
     <aside className="flex h-full flex-col bg-sidebar">
@@ -556,203 +1255,71 @@ function ConversationList({
         </div>
       </header>
 
-      {/* Category filter bar */}
-      {groupCategories.length > 0 && (
-        <div className="flex items-center gap-1 overflow-x-auto border-b px-3 py-1.5">
+      <div className="grid grid-cols-3 gap-1 border-b p-2">
+        {(
+          [
+            ["messages", "消息"],
+            ["friends", "好友"],
+            ["groups", "群聊"],
+          ] as const
+        ).map(([view, label]) => (
           <button
+            key={view}
             type="button"
-            onClick={() => setSelectedCategoryFilter(null)}
-            className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
-              selectedCategoryFilter === null
+            className={`h-7 rounded-md px-2 text-sm transition-colors ${
+              activeView === view
                 ? "bg-primary/15 font-medium text-primary"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
+            onClick={() => setActiveView(view)}
           >
-            全部
+            {label}
           </button>
-          {groupCategories.map((cat) => (
-            <button
-              key={cat.category_id}
-              type="button"
-              onClick={() => setSelectedCategoryFilter(cat.category_id)}
-              className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
-                selectedCategoryFilter === cat.category_id
-                  ? "bg-primary/15 font-medium text-primary"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-      )}
+        ))}
+      </div>
 
-      <div className="flex-1 space-y-1 overflow-auto p-2">
-        {filteredConversations.map((conversation) => {
-          const snapshot = snapshots[conversation.key];
-          const privatePeerId =
-            conversation.source.scene === "private"
-              ? conversation.source.peer_user_id
-              : null;
-          const groupId =
-            conversation.source.scene === "group"
-              ? conversation.source.group_id
-              : null;
-          return (
-            <ContextMenu key={conversation.key}>
-              <ContextMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                    selectedConversation?.key === conversation.key
-                      ? "border-primary/40 bg-primary/10"
-                      : conversation.isPinned
-                        ? "border-transparent bg-accent/60"
-                        : "border-transparent hover:border-border hover:bg-muted/40"
-                  }`}
-                  onClick={() => setSelectedConversationKey(conversation.key)}
-                >
-                  <div className="flex items-center gap-2">
-                    <Avatar className="size-8">
-                      <AvatarImage src={conversation.avatarUrl} />
-                      <AvatarFallback>{conversation.avatarText}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-1">
-                          <p className="truncate font-medium text-sm">
-                            {conversation.title}
-                          </p>
-                          {conversation.isMuted && (
-                            <BellOff className="size-3 shrink-0 text-muted-foreground" />
-                          )}
-                        </div>
-                        <span className="shrink-0 text-[11px] text-muted-foreground">
-                          {formatConversationPreviewTime(snapshot?.lastAt ?? 0)}
-                        </span>
-                      </div>
-                      <p className="truncate text-muted-foreground text-xs">
-                        {snapshot?.lastMessage ?? ""}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                {/* Pin toggle */}
-                <ContextMenuItem
-                  onSelect={() =>
-                    handleTogglePinned(
-                      conversation.source,
-                      conversation.isPinned,
-                    )
-                  }
-                >
-                  {conversation.isPinned ? (
-                    <>
-                      <Pin className="mr-1.5 size-3.5 rotate-45" /> 取消置顶
-                    </>
-                  ) : (
-                    <>
-                      <Pin className="mr-1.5 size-3.5" /> 置顶会话
-                    </>
-                  )}
-                </ContextMenuItem>
-
-                {/* Mute toggle */}
-                <ContextMenuItem
-                  onSelect={() =>
-                    handleToggleMuted(conversation.source, conversation.isMuted)
-                  }
-                >
-                  {conversation.isMuted ? (
-                    <>
-                      <Bell className="mr-1.5 size-3.5" /> 开启通知
-                    </>
-                  ) : (
-                    <>
-                      <BellOff className="mr-1.5 size-3.5" /> 免打扰
-                    </>
-                  )}
-                </ContextMenuItem>
-
-                <ContextMenuSeparator />
-
-                {privatePeerId !== null ? (
-                  <ContextMenuItem
-                    variant="destructive"
-                    onSelect={() => handleDeleteFriend(privatePeerId)}
-                  >
-                    删除好友
-                  </ContextMenuItem>
-                ) : null}
-
-                {groupId !== null ? (
-                  <>
-                    <ContextMenuItem
-                      onSelect={async () => {
-                        const role = await resolveMyGroupRole(groupId);
-                        if (role !== "owner" && role !== "admin") {
-                          toast.error("仅群主或管理员可设置全体禁言");
-                          return;
-                        }
-                        await handleSetWholeMute(groupId);
-                      }}
-                    >
-                      设置全体禁言
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={async () => {
-                        const role = await resolveMyGroupRole(groupId);
-                        if (role !== "owner" && role !== "admin") {
-                          toast.error("仅群主或管理员可修改群昵称");
-                          return;
-                        }
-                        await handleRenameGroup(groupId);
-                      }}
-                    >
-                      修改群昵称
-                    </ContextMenuItem>
-
-                    {/* Group category submenu */}
-                    {groupCategories.length > 0 && <ContextMenuSeparator />}
-                    {groupCategories.map((cat) => (
-                      <ContextMenuItem
-                        key={cat.category_id}
-                        onSelect={() =>
-                          handleSetGroupCategory(groupId, cat.category_id)
-                        }
-                      >
-                        移动到: {cat.name}
-                      </ContextMenuItem>
-                    ))}
-                    <ContextMenuItem onSelect={handleCreateCategory}>
-                      + 新建分类
-                    </ContextMenuItem>
-
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      variant="destructive"
-                      onSelect={async () => {
-                        const role = await resolveMyGroupRole(groupId);
-                        if (role === "owner") {
-                          await handleDissolveGroup(groupId);
-                          return;
-                        }
-                        await handleLeaveGroup(groupId);
-                      }}
-                    >
-                      {groups.find((item) => item.group_id === groupId)
-                        ?.owner_user_id === currentUserId
-                        ? "解散群聊"
-                        : "退出群聊"}
-                    </ContextMenuItem>
-                  </>
-                ) : null}
-              </ContextMenuContent>
-            </ContextMenu>
-          );
-        })}
+      <div className="flex-1 overflow-auto p-2">
+        {activeView === "messages" ? (
+          renderConversationGroup(visibleConversations)
+        ) : activeView === "friends" ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="font-medium text-muted-foreground text-xs">
+                好友分组
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setCategoryDialog({ mode: "friend" })}
+              >
+                <Plus className="size-3.5" />
+                新建分组
+              </Button>
+            </div>
+            {renderSections(friendSections)}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="font-medium text-muted-foreground text-xs">
+                群聊分组
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setCategoryDialog({ mode: "group" })}
+              >
+                <Plus className="size-3.5" />
+                新建分组
+              </Button>
+            </div>
+            {renderSections(groupSections)}
+          </div>
+        )}
       </div>
 
       <AddFriendDialog
@@ -772,6 +1339,64 @@ function ConversationList({
         users={users}
         groups={groups}
       />
+      {categoryDialog?.mode === "friend" ? (
+        <CategoryManageDialog
+          open
+          title="好友分组"
+          categories={friendCategoryOptions}
+          selectedCategoryId={
+            categoryDialog.peerUserId
+              ? categoryDialog.selectedCategoryId
+              : undefined
+          }
+          onOpenChange={(open) => {
+            if (!open) {
+              setCategoryDialog(null);
+            }
+          }}
+          onCreate={handleCreateFriendCategory}
+          onRename={handleRenameFriendCategory}
+          onDelete={handleDeleteFriendCategory}
+          onSelect={
+            categoryDialog.peerUserId
+              ? (categoryId) =>
+                  handleSetFriendCategory(
+                    categoryDialog.peerUserId ?? "",
+                    categoryId,
+                  )
+              : undefined
+          }
+        />
+      ) : null}
+      {categoryDialog?.mode === "group" ? (
+        <CategoryManageDialog
+          open
+          title="群聊分组"
+          categories={groupCategoryOptions}
+          selectedCategoryId={
+            categoryDialog.groupId
+              ? categoryDialog.selectedCategoryId
+              : undefined
+          }
+          onOpenChange={(open) => {
+            if (!open) {
+              setCategoryDialog(null);
+            }
+          }}
+          onCreate={handleCreateGroupCategory}
+          onRename={handleRenameGroupCategory}
+          onDelete={handleDeleteGroupCategory}
+          onSelect={
+            categoryDialog.groupId
+              ? (categoryId) =>
+                  handleSetGroupCategory(
+                    categoryDialog.groupId ?? "",
+                    categoryId,
+                  )
+              : undefined
+          }
+        />
+      ) : null}
     </aside>
   );
 }

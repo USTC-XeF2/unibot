@@ -70,6 +70,40 @@ impl GroupRepo {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    pub async fn list_group_files_in_folder_tree(
+        &self,
+        group_id: &str,
+        folder_id: &str,
+    ) -> Result<Vec<GroupFileEntity>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, GroupFileRow>(
+            r#"
+            WITH RECURSIVE descendants(folder_id) AS (
+                SELECT folder_id
+                FROM group_folders
+                WHERE group_id = ?1
+                  AND folder_id = ?2
+                UNION
+                SELECT child.folder_id
+                FROM group_folders child
+                JOIN descendants d ON child.parent_folder_id = d.folder_id
+                WHERE child.group_id = ?1
+            )
+            SELECT file_id, group_id, parent_folder_id, file_name, file_size, file_hash,
+                   uploader_user_id, created_at AS uploaded_at, expire_at, file_path, download_count
+            FROM group_files
+            WHERE group_id = ?1
+              AND parent_folder_id IN (SELECT folder_id FROM descendants)
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(group_id)
+        .bind(folder_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
+
     pub async fn get_group_file_by_id(
         &self,
         file_id: &str,

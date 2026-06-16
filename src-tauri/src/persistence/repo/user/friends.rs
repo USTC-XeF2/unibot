@@ -1,7 +1,7 @@
-use crate::models::{FriendRequestEntity, RequestState};
+use crate::models::{FriendCategoryEntity, FriendRequestEntity, FriendshipEntity, RequestState};
 use crate::persistence::repo::codecs;
 
-use super::types::FriendRequestRow;
+use super::types::{FriendCategoryRow, FriendRequestRow, FriendshipDetailRow};
 use super::{FriendshipRow, NewFriendRequestRecord, UserRepo};
 
 impl UserRepo {
@@ -216,5 +216,151 @@ impl UserRepo {
         .bind(user_id)
         .fetch_all(&self.pool)
         .await
+    }
+
+    pub async fn list_friendships(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<FriendshipEntity>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, FriendshipDetailRow>(
+            r#"
+            SELECT friend_user_id, friend_category_id
+            FROM friendships
+            WHERE owner_user_id = ?1
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn list_friend_categories(
+        &self,
+        owner_user_id: &str,
+    ) -> Result<Vec<FriendCategoryEntity>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, FriendCategoryRow>(
+            r#"
+            SELECT category_id, owner_user_id, name, sort_order, created_at, updated_at
+            FROM friend_categories
+            WHERE owner_user_id = ?1
+            ORDER BY sort_order ASC, created_at ASC
+            "#,
+        )
+        .bind(owner_user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
+
+    pub async fn create_friend_category(
+        &self,
+        owner_user_id: &str,
+        name: &str,
+    ) -> Result<FriendCategoryEntity, sqlx::Error> {
+        let category_id = crate::utils::new_db_id();
+        let now = crate::utils::now_ts() as i64;
+
+        sqlx::query(
+            r#"
+            INSERT INTO friend_categories (
+                category_id, owner_user_id, name, sort_order, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, 0, ?4, ?4)
+            "#,
+        )
+        .bind(&category_id)
+        .bind(owner_user_id)
+        .bind(name)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(FriendCategoryEntity {
+            category_id,
+            owner_user_id: owner_user_id.to_string(),
+            name: name.to_string(),
+            sort_order: 0,
+            created_at: now as u64,
+            updated_at: now as u64,
+        })
+    }
+
+    pub async fn get_friend_category_by_id(
+        &self,
+        category_id: &str,
+    ) -> Result<Option<FriendCategoryEntity>, sqlx::Error> {
+        let row = sqlx::query_as::<_, FriendCategoryRow>(
+            r#"
+            SELECT category_id, owner_user_id, name, sort_order, created_at, updated_at
+            FROM friend_categories
+            WHERE category_id = ?1
+            "#,
+        )
+        .bind(category_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(TryInto::try_into).transpose()
+    }
+
+    pub async fn rename_friend_category(
+        &self,
+        owner_user_id: &str,
+        category_id: &str,
+        name: &str,
+    ) -> Result<FriendCategoryEntity, sqlx::Error> {
+        let now = crate::utils::now_ts() as i64;
+        let row = sqlx::query_as::<_, FriendCategoryRow>(
+            r#"
+            UPDATE friend_categories
+            SET name = ?3,
+                updated_at = ?4
+            WHERE owner_user_id = ?1 AND category_id = ?2
+            RETURNING category_id, owner_user_id, name, sort_order, created_at, updated_at
+            "#,
+        )
+        .bind(owner_user_id)
+        .bind(category_id)
+        .bind(name)
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await?;
+
+        row.try_into()
+    }
+
+    pub async fn delete_friend_category(&self, category_id: &str) -> Result<(), sqlx::Error> {
+        // FK ON DELETE SET NULL will clear friendships.friend_category_id
+        sqlx::query("DELETE FROM friend_categories WHERE category_id = ?1")
+            .bind(category_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn set_friend_category(
+        &self,
+        owner_user_id: &str,
+        friend_user_id: &str,
+        category_id: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            r#"
+            UPDATE friendships
+            SET friend_category_id = ?3
+            WHERE owner_user_id = ?1 AND friend_user_id = ?2
+            "#,
+        )
+        .bind(owner_user_id)
+        .bind(friend_user_id)
+        .bind(category_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
     }
 }

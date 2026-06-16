@@ -10,6 +10,24 @@ use crate::utils::{emit_to_group_members, now_ts};
 
 use super::{GroupService, MuteGroupMemberResult};
 
+fn normalize_category_name(name: String) -> AppResult<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::validation("category name cannot be empty"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn group_category_name_exists(
+    categories: &[GroupCategoryEntity],
+    name: &str,
+    except_category_id: Option<&str>,
+) -> bool {
+    categories.iter().any(|category| {
+        category.name == name && Some(category.category_id.as_str()) != except_category_id
+    })
+}
+
 impl GroupService {
     pub async fn upsert_group(
         &self,
@@ -358,11 +376,46 @@ impl GroupService {
         user_id: String,
         name: String,
     ) -> AppResult<GroupCategoryEntity> {
-        if name.trim().is_empty() {
-            return Err(AppError::validation("category name cannot be empty"));
+        let name = normalize_category_name(name)?;
+
+        let categories = self.repo.list_group_categories(&user_id).await?;
+        if group_category_name_exists(&categories, &name, None) {
+            return Err(AppError::conflict("category name already exists"));
         }
+
         self.repo
             .create_group_category(&user_id, &name)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn rename_group_category(
+        &self,
+        user_id: String,
+        category_id: String,
+        name: String,
+    ) -> AppResult<GroupCategoryEntity> {
+        let name = normalize_category_name(name)?;
+
+        let category = self
+            .repo
+            .get_group_category_by_id(&category_id)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("category {} not found", category_id)))?;
+
+        if category.owner_user_id != user_id {
+            return Err(AppError::validation(
+                "cannot rename another user's category",
+            ));
+        }
+
+        let categories = self.repo.list_group_categories(&user_id).await?;
+        if group_category_name_exists(&categories, &name, Some(&category_id)) {
+            return Err(AppError::conflict("category name already exists"));
+        }
+
+        self.repo
+            .rename_group_category(&user_id, &category_id, &name)
             .await
             .map_err(Into::into)
     }

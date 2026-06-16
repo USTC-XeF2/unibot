@@ -194,7 +194,7 @@ async fn group_folder_parent_cannot_create_cycle(
 }
 
 #[sqlx::test]
-async fn delete_group_folder_rejects_folder_with_child_folders(
+async fn delete_group_folder_removes_descendants_and_files(
     pool: sqlx::SqlitePool,
 ) -> Result<(), sqlx::Error> {
     setup(&pool).await;
@@ -231,12 +231,42 @@ async fn delete_group_folder_rejects_folder_with_child_folders(
         file_count: 0,
     })
     .await?;
+    repo.upsert_group_file(&GroupFileEntity {
+        file_id: "file-parent".to_string(),
+        group_id: "20001".to_string(),
+        parent_folder_id: Some("parent".to_string()),
+        file_name: "parent.txt".to_string(),
+        file_size: 7,
+        file_hash: None,
+        uploader_user_id: "10001".to_string(),
+        uploaded_at: 300,
+        expire_at: None,
+        download_count: 0,
+        file_path: Some("groups/20001/files/file-parent_parent.txt".to_string()),
+    })
+    .await?;
+    repo.upsert_group_file(&GroupFileEntity {
+        file_id: "file-child".to_string(),
+        group_id: "20001".to_string(),
+        parent_folder_id: Some("child".to_string()),
+        file_name: "child.txt".to_string(),
+        file_size: 5,
+        file_hash: None,
+        uploader_user_id: "10001".to_string(),
+        uploaded_at: 400,
+        expire_at: None,
+        download_count: 0,
+        file_path: Some("groups/20001/files/file-child_child.txt".to_string()),
+    })
+    .await?;
 
     let deleted = repo.delete_group_folder("parent").await?;
 
-    assert!(!deleted);
-    assert!(repo.get_group_folder_by_id("parent").await?.is_some());
-    assert!(repo.get_group_folder_by_id("child").await?.is_some());
+    assert!(deleted);
+    assert!(repo.get_group_folder_by_id("parent").await?.is_none());
+    assert!(repo.get_group_folder_by_id("child").await?.is_none());
+    assert!(repo.get_group_file_by_id("file-parent").await?.is_none());
+    assert!(repo.get_group_file_by_id("file-child").await?.is_none());
 
     Ok(())
 }

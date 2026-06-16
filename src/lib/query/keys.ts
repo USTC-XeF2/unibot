@@ -16,6 +16,9 @@ export const queryKeys = {
   },
   friends: {
     byUser: (userId: string) => ["friends", userId] as const,
+    friendships: (userId: string) =>
+      ["friends", "friendships", userId] as const,
+    categories: (userId: string) => ["friends", "categories", userId] as const,
   },
   groups: {
     root: () => ["groups"] as const,

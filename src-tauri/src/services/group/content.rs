@@ -9,6 +9,7 @@ use crate::models::{
 };
 use crate::persistence::{GroupEventRecord, NewGroupEventRecord};
 use crate::utils::{emit_group_content_to_windows, emit_to_group_members, now_ts};
+use tauri::Manager;
 
 use super::GroupService;
 use super::storage;
@@ -278,16 +279,29 @@ impl GroupService {
             ));
         }
 
-        // Only the creator or owner/admin can delete a folder.
         if folder.creator_user_id != user_id && matches!(operator.role, GroupRole::Member) {
             return Err(AppError::validation(
                 "only owner/admin or creator can delete folder",
             ));
         }
 
+        let app_data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| AppError::storage(format!("failed to get app data dir: {e}")))?;
+        let files = self
+            .repo
+            .list_group_files_in_folder_tree(&group_id, &folder_id)
+            .await?;
+        for file in &files {
+            if let Some(ref file_path) = file.file_path {
+                storage::delete_group_file_disk(file_path, &app_data_dir).await?;
+            }
+        }
+
         let deleted = self.repo.delete_group_folder(&folder_id).await?;
         if !deleted {
-            return Err(AppError::validation("folder not found or contains files"));
+            return Err(AppError::validation("folder not found"));
         }
 
         let event = InternalEvent::GroupFolderDeleted {

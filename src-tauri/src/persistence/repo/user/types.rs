@@ -1,4 +1,4 @@
-use crate::models::{FriendRequestEntity, UserProfile};
+use crate::models::{FriendCategoryEntity, FriendRequestEntity, FriendshipEntity, UserProfile};
 
 use crate::persistence::repo::codecs;
 
@@ -20,6 +20,22 @@ pub(super) struct FriendRequestRow {
     pub state: String,
     pub created_at: u64,
     pub handled_at: Option<u64>,
+}
+
+#[derive(sqlx::FromRow)]
+pub(super) struct FriendCategoryRow {
+    pub category_id: String,
+    pub owner_user_id: String,
+    pub name: String,
+    pub sort_order: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(sqlx::FromRow)]
+pub(super) struct FriendshipDetailRow {
+    pub friend_user_id: String,
+    pub friend_category_id: Option<String>,
 }
 
 impl TryFrom<UserRow> for UserProfile {
@@ -49,5 +65,29 @@ impl TryFrom<FriendRequestRow> for FriendRequestEntity {
             created_at: row.created_at,
             handled_at: row.handled_at,
         })
+    }
+}
+
+impl TryFrom<FriendCategoryRow> for FriendCategoryEntity {
+    type Error = sqlx::Error;
+
+    fn try_from(row: FriendCategoryRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            category_id: row.category_id,
+            owner_user_id: row.owner_user_id,
+            name: row.name,
+            sort_order: row.sort_order,
+            created_at: row.created_at as u64,
+            updated_at: row.updated_at as u64,
+        })
+    }
+}
+
+impl From<FriendshipDetailRow> for FriendshipEntity {
+    fn from(row: FriendshipDetailRow) -> Self {
+        Self {
+            friend_user_id: row.friend_user_id,
+            category_id: row.friend_category_id,
+        }
     }
 }

@@ -268,6 +268,22 @@ pub struct FriendRequestEntity {
     pub handled_at: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FriendCategoryEntity {
+    pub category_id: DbId,
+    pub owner_user_id: DbId,
+    pub name: String,
+    pub sort_order: i32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FriendshipEntity {
+    pub friend_user_id: DbId,
+    pub category_id: Option<DbId>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GroupRequestType {

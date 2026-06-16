@@ -6,7 +6,9 @@ import {
   invalidateBotStatsQuery,
   invalidateBotsQuery,
   invalidateConversationStatesQuery,
+  invalidateFriendCategoriesQuery,
   invalidateFriendRequestsQuery,
+  invalidateFriendshipsQuery,
   invalidateFriendsQuery,
   invalidateGroupAlbumsQuery,
   invalidateGroupAnnouncementsQuery,
@@ -50,6 +52,7 @@ export function useDeleteFriendMutation() {
         invalidateUsersQuery(),
         invalidateFriendRequestsQuery(variables.userId),
         invalidateFriendsQuery(variables.userId),
+        invalidateFriendshipsQuery(variables.userId),
       ]);
     },
   });
@@ -182,6 +185,7 @@ export function useHandleFriendRequestMutation() {
         invalidateFriendRequestsQuery(variables.userId),
         invalidateGroupRequestsQueries(variables.userId),
         invalidateFriendsQuery(variables.userId),
+        invalidateFriendshipsQuery(variables.userId),
       ]);
     },
   });
@@ -499,6 +503,22 @@ export function useCreateGroupCategoryMutation() {
   });
 }
 
+export function useRenameGroupCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      categoryId,
+      name,
+    }: {
+      userId: string;
+      categoryId: string;
+      name: string;
+    }) => invoke(COMMANDS.renameGroupCategory, { userId, categoryId, name }),
+    onSuccess: (_, variables) =>
+      invalidateGroupCategoriesQuery(variables.userId),
+  });
+}
+
 export function useDeleteGroupCategoryMutation() {
   return useMutation({
     mutationFn: ({
@@ -509,7 +529,10 @@ export function useDeleteGroupCategoryMutation() {
       categoryId: string;
     }) => invoke(COMMANDS.deleteGroupCategory, { userId, categoryId }),
     onSuccess: (_, variables) =>
-      invalidateGroupCategoriesQuery(variables.userId),
+      Promise.all([
+        invalidateGroupCategoriesQuery(variables.userId),
+        invalidateGroupsQuery(),
+      ]),
   });
 }
 
@@ -528,6 +551,72 @@ export function useSetGroupCategoryMutation() {
       Promise.all([
         invalidateGroupCategoriesQuery(variables.userId),
         invalidateGroupsQuery(),
+      ]),
+  });
+}
+
+export function useCreateFriendCategoryMutation() {
+  return useMutation({
+    mutationFn: ({ userId, name }: { userId: string; name: string }) =>
+      invoke(COMMANDS.createFriendCategory, { userId, name }),
+    onSuccess: (_, variables) =>
+      invalidateFriendCategoriesQuery(variables.userId),
+  });
+}
+
+export function useRenameFriendCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      categoryId,
+      name,
+    }: {
+      userId: string;
+      categoryId: string;
+      name: string;
+    }) => invoke(COMMANDS.renameFriendCategory, { userId, categoryId, name }),
+    onSuccess: (_, variables) =>
+      invalidateFriendCategoriesQuery(variables.userId),
+  });
+}
+
+export function useDeleteFriendCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      categoryId,
+    }: {
+      userId: string;
+      categoryId: string;
+    }) => invoke(COMMANDS.deleteFriendCategory, { userId, categoryId }),
+    onSuccess: (_, variables) =>
+      Promise.all([
+        invalidateFriendCategoriesQuery(variables.userId),
+        invalidateFriendshipsQuery(variables.userId),
+      ]),
+  });
+}
+
+export function useSetFriendCategoryMutation() {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      friendUserId,
+      categoryId,
+    }: {
+      userId: string;
+      friendUserId: string;
+      categoryId: string;
+    }) =>
+      invoke(COMMANDS.setFriendCategory, {
+        userId,
+        friendUserId,
+        categoryId,
+      }),
+    onSuccess: (_, variables) =>
+      Promise.all([
+        invalidateFriendCategoriesQuery(variables.userId),
+        invalidateFriendshipsQuery(variables.userId),
       ]),
   });
 }

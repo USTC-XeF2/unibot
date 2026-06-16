@@ -59,6 +59,7 @@ fn register_test_user(core: &CoreContainer, user_id: &str, nickname: &str) {
 
 mod account;
 mod bots;
+mod categories;
 mod group_albums;
 mod group_announcements;
 mod group_essence;

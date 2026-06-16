@@ -1127,7 +1127,7 @@ function ChatMainPanel({ conversation }: ChatMainPanelProps) {
             open={activeGroupPanel !== null}
             onOpenChange={(open) => !open && setActiveGroupPanel(null)}
           >
-            <SheetContent className="w-[400px] sm:w-[540px]">
+            <SheetContent className="w-100 sm:w-135">
               <SheetHeader>
                 <SheetTitle>
                   {activeGroupPanel === "announcement" ? "群公告" : "精华消息"}

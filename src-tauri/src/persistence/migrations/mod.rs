@@ -17,5 +17,9 @@ pub fn all_migrations() -> Vec<Migration> {
             version: "0003",
             sql: include_str!("0003_group_file_photo_paths.sql"),
         },
+        Migration {
+            version: "0004",
+            sql: include_str!("0004_friend_category_delete_set_null.sql"),
+        },
     ]
 }

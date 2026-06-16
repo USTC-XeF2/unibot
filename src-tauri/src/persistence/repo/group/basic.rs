@@ -477,6 +477,32 @@ impl GroupRepo {
         row.map(TryInto::try_into).transpose()
     }
 
+    pub async fn rename_group_category(
+        &self,
+        owner_user_id: &str,
+        category_id: &str,
+        name: &str,
+    ) -> Result<GroupCategoryEntity, sqlx::Error> {
+        let now = crate::utils::now_ts() as i64;
+        let row = sqlx::query_as::<_, GroupCategoryRow>(
+            r#"
+            UPDATE group_categories
+            SET name = ?3,
+                updated_at = ?4
+            WHERE owner_user_id = ?1 AND category_id = ?2
+            RETURNING category_id, owner_user_id, name, sort_order, created_at, updated_at
+            "#,
+        )
+        .bind(owner_user_id)
+        .bind(category_id)
+        .bind(name)
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await?;
+
+        row.try_into()
+    }
+
     pub async fn delete_group_category(&self, category_id: &str) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 

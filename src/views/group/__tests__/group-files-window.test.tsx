@@ -71,6 +71,7 @@ describe("GroupFilesWindow", () => {
     expect(
       screen.queryByText(/缺少有效的 userId 或 groupId/),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText("回收站")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(mockedListen).toHaveBeenCalled();
     });

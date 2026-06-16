@@ -186,9 +186,6 @@ export default function GroupFileBrowser({
           <Button variant="default" size="sm">
             文件
           </Button>
-          <Button variant="ghost" size="sm" disabled>
-            回收站
-          </Button>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>

@@ -116,27 +116,60 @@ impl GroupRepo {
     pub async fn delete_group_folder(&self, folder_id: &str) -> Result<bool, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
-        // Prevent deleting folders that still contain files or child folders.
-        // Counts and the delete run in one transaction so a concurrent upload
-        // cannot slip a file in between the check and the delete (TOCTOU).
-        let file_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM group_files WHERE parent_folder_id = ?1")
+        let group_id: Option<String> =
+            sqlx::query_scalar("SELECT group_id FROM group_folders WHERE folder_id = ?1")
                 .bind(folder_id)
-                .fetch_one(&mut *tx)
+                .fetch_optional(&mut *tx)
                 .await?;
-        let child_folder_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM group_folders WHERE parent_folder_id = ?1")
-                .bind(folder_id)
-                .fetch_one(&mut *tx)
-                .await?;
-        if file_count > 0 || child_folder_count > 0 {
+        let Some(group_id) = group_id else {
             return Ok(false);
-        }
+        };
 
-        let result = sqlx::query("DELETE FROM group_folders WHERE folder_id = ?1")
-            .bind(folder_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            r#"
+            WITH RECURSIVE descendants(folder_id) AS (
+                SELECT folder_id
+                FROM group_folders
+                WHERE group_id = ?1
+                  AND folder_id = ?2
+                UNION
+                SELECT child.folder_id
+                FROM group_folders child
+                JOIN descendants d ON child.parent_folder_id = d.folder_id
+                WHERE child.group_id = ?1
+            )
+            DELETE FROM group_files
+            WHERE group_id = ?1
+              AND parent_folder_id IN (SELECT folder_id FROM descendants)
+            "#,
+        )
+        .bind(&group_id)
+        .bind(folder_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let result = sqlx::query(
+            r#"
+            WITH RECURSIVE descendants(folder_id) AS (
+                SELECT folder_id
+                FROM group_folders
+                WHERE group_id = ?1
+                  AND folder_id = ?2
+                UNION
+                SELECT child.folder_id
+                FROM group_folders child
+                JOIN descendants d ON child.parent_folder_id = d.folder_id
+                WHERE child.group_id = ?1
+            )
+            DELETE FROM group_folders
+            WHERE group_id = ?1
+              AND folder_id IN (SELECT folder_id FROM descendants)
+            "#,
+        )
+        .bind(&group_id)
+        .bind(folder_id)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(result.rows_affected() > 0)

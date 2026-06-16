@@ -41,6 +41,12 @@ export const COMMANDS = {
   // user
   updateUserProfile: "update_user_profile",
   listFriends: "list_friends",
+  listFriendships: "list_friendships",
+  listFriendCategories: "list_friend_categories",
+  createFriendCategory: "create_friend_category",
+  renameFriendCategory: "rename_friend_category",
+  deleteFriendCategory: "delete_friend_category",
+  setFriendCategory: "set_friend_category",
   listUserGroups: "list_user_groups",
 
   // message
@@ -75,6 +81,7 @@ export const COMMANDS = {
   // group category
   listGroupCategories: "list_group_categories",
   createGroupCategory: "create_group_category",
+  renameGroupCategory: "rename_group_category",
   deleteGroupCategory: "delete_group_category",
   setGroupCategory: "set_group_category",
 
